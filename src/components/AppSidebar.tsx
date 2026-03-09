@@ -1,4 +1,4 @@
-import { LayoutDashboard, Bot, Users, FileText, Settings, ChevronDown } from "lucide-react";
+import { LayoutDashboard, Bot, Users, FileText, Settings, ChevronDown, Smartphone, Target, MessageSquare, MessagesSquare, BarChart3 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
