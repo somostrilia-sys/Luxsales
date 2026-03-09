@@ -23,13 +23,12 @@ const items = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const location = useLocation();
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarContent className="pt-6">
+      <SidebarContent className="pt-6 glass-sidebar bg-sidebar/90">
         <div className="px-4 mb-8 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold text-lg shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold text-lg shrink-0 shadow-lg shadow-primary/20">
             IA
           </div>
           {!collapsed && (
@@ -48,7 +47,7 @@ export function AppSidebar() {
                     <NavLink
                       to={item.url}
                       end={item.url === "/"}
-                      className="hover:bg-sidebar-accent"
+                      className="hover:bg-sidebar-accent transition-all duration-200"
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
                     >
                       <item.icon className="mr-2 h-4 w-4" />

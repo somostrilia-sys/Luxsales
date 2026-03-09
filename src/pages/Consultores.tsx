@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Search, Plus, Pencil, Trash2 } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, User } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -51,7 +51,7 @@ export default function Consultores() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
           <div>
             <h1 className="text-2xl font-bold">Consultores</h1>
             <p className="text-muted-foreground text-sm">Gerencie a equipe de consultores</p>
@@ -72,7 +72,7 @@ export default function Consultores() {
             </Select>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Novo</Button>
+                <Button onClick={openNew} className="btn-shimmer"><Plus className="h-4 w-4 mr-1" /> Novo</Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-lg">
                 <DialogHeader><DialogTitle>{editingId ? "Editar" : "Novo"} Consultor</DialogTitle></DialogHeader>
@@ -110,14 +110,14 @@ export default function Consultores() {
                 </div>
                 <DialogFooter>
                   <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-                  <Button onClick={salvar}>Salvar</Button>
+                  <Button onClick={salvar} className="btn-shimmer">Salvar</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
           </div>
         </div>
 
-        <Card className="shadow-sm overflow-hidden">
+        <Card className="shadow-sm overflow-hidden bg-card/80 backdrop-blur-sm" style={{ animation: 'fade-slide-up 0.5s ease-out 0.1s both' }}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
@@ -134,8 +134,15 @@ export default function Consultores() {
               </thead>
               <tbody>
                 {filtrados.map((c) => (
-                  <tr key={c.id} className="border-t hover:bg-muted/30 transition-colors">
-                    <td className="p-3 font-medium">{c.nome}</td>
+                  <tr key={c.id} className="border-t table-row-hover">
+                    <td className="p-3 font-medium">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary">
+                          <User className="h-4 w-4" />
+                        </div>
+                        {c.nome}
+                      </div>
+                    </td>
                     <td className="p-3 text-muted-foreground">{c.email}</td>
                     <td className="p-3 text-muted-foreground">{c.telefone}</td>
                     <td className="p-3">{c.empresa}</td>

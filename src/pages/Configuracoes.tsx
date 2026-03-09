@@ -25,12 +25,12 @@ export default function Configuracoes() {
   return (
     <DashboardLayout>
       <div className="space-y-6 max-w-2xl">
-        <div>
+        <div className="animate-fade-in">
           <h1 className="text-2xl font-bold">Configurações</h1>
           <p className="text-muted-foreground text-sm">Horários de execução e notificações</p>
         </div>
 
-        <Card className="shadow-sm">
+        <Card className="shadow-sm bg-card/80 backdrop-blur-sm" style={{ animation: 'fade-slide-up 0.5s ease-out 0.1s both' }}>
           <CardHeader><CardTitle className="text-lg">Horários de Execução</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -54,7 +54,7 @@ export default function Configuracoes() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
+        <Card className="shadow-sm bg-card/80 backdrop-blur-sm" style={{ animation: 'fade-slide-up 0.5s ease-out 0.2s both' }}>
           <CardHeader><CardTitle className="text-lg">Notificações</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {[
@@ -75,7 +75,7 @@ export default function Configuracoes() {
           </CardContent>
         </Card>
 
-        <Button onClick={salvar} className="w-full sm:w-auto">Salvar Configurações</Button>
+        <Button onClick={salvar} className="w-full sm:w-auto btn-shimmer">Salvar Configurações</Button>
       </div>
     </DashboardLayout>
   );
