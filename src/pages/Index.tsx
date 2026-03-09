@@ -1,23 +1,31 @@
+import { useMemo } from "react";
 import { Bot, FileText, Target, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { agentes, performanceData } from "@/lib/mock-data";
+import { agentes, relatorios, getPerformanceData } from "@/lib/mock-data";
+import { useEmpresa } from "@/contexts/EmpresaContext";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
-const stats = [
-  { label: "Agentes Ativos", value: agentes.filter(a => a.status === "ativo").length, icon: Bot },
-  { label: "Relatórios Hoje", value: 6, icon: FileText },
-  { label: "Leads Gerados", value: 248, icon: Target },
-  { label: "Alertas Pendentes", value: 2, icon: AlertTriangle },
-];
-
 export default function Index() {
+  const { empresa } = useEmpresa();
+
+  const agentesEmpresa = useMemo(() => agentes.filter(a => a.empresa === empresa), [empresa]);
+  const relatoriosEmpresa = useMemo(() => relatorios.filter(r => r.empresa === empresa), [empresa]);
+  const perfData = useMemo(() => getPerformanceData(empresa), [empresa]);
+
+  const stats = [
+    { label: "Agentes Ativos", value: agentesEmpresa.filter(a => a.status === "ativo").length, icon: Bot },
+    { label: "Relatórios Hoje", value: relatoriosEmpresa.filter(r => r.data.startsWith("9/03") || r.data.startsWith("09/03")).length, icon: FileText },
+    { label: "Leads Gerados", value: perfData.reduce((s, d) => s + d.leads, 0), icon: Target },
+    { label: "Alertas Pendentes", value: agentesEmpresa.filter(a => a.status === "erro").length, icon: AlertTriangle },
+  ];
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="animate-fade-in">
           <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground text-sm">Visão geral dos seus agentes de IA</p>
+          <p className="text-muted-foreground text-sm">Visão geral — {empresa}</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-stagger">
@@ -43,12 +51,12 @@ export default function Index() {
 
         <Card className="shadow-sm border bg-card/80 backdrop-blur-sm" style={{ animation: 'fade-slide-up 0.5s ease-out 0.3s both' }}>
           <CardHeader>
-            <CardTitle className="text-lg">Performance dos Agentes — Últimos 7 dias</CardTitle>
+            <CardTitle className="text-lg">Performance — Últimos 7 dias</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={performanceData}>
+                <AreaChart data={perfData}>
                   <defs>
                     <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(204, 93%, 39%)" stopOpacity={0.35} />

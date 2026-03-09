@@ -1,31 +1,36 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Play, Pause, History, Search } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
-import { agentes as initialAgentes, type Agente } from "@/lib/mock-data";
+import { agentes as allAgentes, type Agente } from "@/lib/mock-data";
+import { useEmpresa } from "@/contexts/EmpresaContext";
 import { toast } from "sonner";
 
 export default function Agentes() {
-  const [lista, setLista] = useState<Agente[]>(initialAgentes);
+  const { empresa } = useEmpresa();
+  const [overrides, setOverrides] = useState<Record<string, Agente>>({});
   const [busca, setBusca] = useState("");
 
+  const lista = useMemo(() => {
+    return allAgentes
+      .filter(a => a.empresa === empresa)
+      .map(a => overrides[a.id] || a);
+  }, [empresa, overrides]);
+
   const filtrados = lista.filter(
-    (a) =>
-      a.nome.toLowerCase().includes(busca.toLowerCase()) ||
-      a.empresa.toLowerCase().includes(busca.toLowerCase())
+    (a) => a.nome.toLowerCase().includes(busca.toLowerCase())
   );
 
   const toggleStatus = (id: string) => {
-    setLista((prev) =>
-      prev.map((a) =>
-        a.id === id
-          ? { ...a, status: a.status === "ativo" ? "pausado" : "ativo" }
-          : a
-      )
-    );
+    const ag = lista.find(a => a.id === id);
+    if (!ag) return;
+    setOverrides(prev => ({
+      ...prev,
+      [id]: { ...ag, status: ag.status === "ativo" ? "pausado" : "ativo" },
+    }));
     toast.success("Status do agente atualizado");
   };
 
@@ -39,16 +44,11 @@ export default function Agentes() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
           <div>
             <h1 className="text-2xl font-bold">Agentes</h1>
-            <p className="text-muted-foreground text-sm">Gerencie seus agentes de IA</p>
+            <p className="text-muted-foreground text-sm">Agentes de IA — {empresa}</p>
           </div>
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar agente ou empresa..."
-              className="pl-9"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-            />
+            <Input placeholder="Buscar agente..." className="pl-9" value={busca} onChange={(e) => setBusca(e.target.value)} />
           </div>
         </div>
 
@@ -66,7 +66,6 @@ export default function Agentes() {
                       </div>
                       <p className="text-sm text-muted-foreground">{a.descricao}</p>
                       <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
-                        <span>Empresa: <span className="font-medium text-foreground">{a.empresa}</span></span>
                         <span>Último: {a.ultimoRelatorio}</span>
                         <span>Próximo: {a.proximaExecucao}</span>
                       </div>
@@ -76,12 +75,7 @@ export default function Agentes() {
                     <Button size="sm" variant="outline" className="btn-shimmer" onClick={() => rodarManualmente(a.nome)}>
                       <Play className="h-3 w-3 mr-1" /> Rodar
                     </Button>
-                    <Button
-                      size="sm"
-                      variant={a.status === "ativo" ? "outline" : "default"}
-                      className="btn-shimmer"
-                      onClick={() => toggleStatus(a.id)}
-                    >
+                    <Button size="sm" variant={a.status === "ativo" ? "outline" : "default"} className="btn-shimmer" onClick={() => toggleStatus(a.id)}>
                       <Pause className="h-3 w-3 mr-1" />
                       {a.status === "ativo" ? "Pausar" : "Ativar"}
                     </Button>
