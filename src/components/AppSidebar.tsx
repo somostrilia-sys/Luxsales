@@ -94,12 +94,39 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
+              {adminItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
                       end={item.url === "/"}
+                      className="hover:bg-sidebar-accent transition-all duration-200"
+                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                    >
+                      <item.icon className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Separator */}
+        <div className="px-4 my-2">
+          <div className="h-px bg-sidebar-border/50" />
+          {!collapsed && <p className="text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mt-3 mb-1 px-1">Área do Consultor</p>}
+        </div>
+
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {consultorItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={item.url}
                       className="hover:bg-sidebar-accent transition-all duration-200"
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
                     >
