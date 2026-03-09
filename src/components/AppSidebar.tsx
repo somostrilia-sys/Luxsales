@@ -42,6 +42,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const { empresa, setEmpresa } = useEmpresa();
+  const { user, signOut } = useAuth();
   const empresaInfo = empresas.find((e) => e.id === empresa)!;
 
   return (
