@@ -1,4 +1,4 @@
-import { LayoutDashboard, Bot, Users, FileText, Settings, ChevronDown, Smartphone, Target, MessageSquare, MessagesSquare, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Bot, Users, FileText, Settings, ChevronDown, Smartphone, Target, MessageSquare, MessagesSquare, BarChart3, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -8,10 +8,13 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useEmpresa } from "@/contexts/EmpresaContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { empresas } from "@/lib/mock-data";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +42,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const { empresa, setEmpresa } = useEmpresa();
+  const { user, signOut } = useAuth();
   const empresaInfo = empresas.find((e) => e.id === empresa)!;
 
   return (
@@ -139,6 +143,25 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <SidebarFooter className="mt-auto p-3 border-t border-sidebar-border/30">
+          <div className="flex items-center gap-2">
+            {!collapsed && user && (
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-sidebar-foreground truncate">{user.email}</p>
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={signOut}
+              className="shrink-0 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+            >
+              <LogOut className="h-4 w-4" />
+              {!collapsed && <span className="ml-2">Sair</span>}
+            </Button>
+          </div>
+        </SidebarFooter>
       </SidebarContent>
     </Sidebar>
   );
