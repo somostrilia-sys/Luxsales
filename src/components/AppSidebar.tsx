@@ -19,12 +19,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const items = [
+const adminItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Agentes", url: "/agentes", icon: Bot },
   { title: "Consultores", url: "/consultores", icon: Users },
   { title: "Relatórios", url: "/relatorios", icon: FileText },
   { title: "Configurações", url: "/configuracoes", icon: Settings },
+];
+
+const consultorItems = [
+  { title: "Meus Canais", url: "/meus-canais", icon: Smartphone },
+  { title: "Prospecção", url: "/prospeccao", icon: Target },
+  { title: "Meu Bot", url: "/meu-bot", icon: MessageSquare },
+  { title: "Conversas", url: "/conversas", icon: MessagesSquare },
+  { title: "Minhas Métricas", url: "/minhas-metricas", icon: BarChart3 },
 ];
 
 export function AppSidebar() {

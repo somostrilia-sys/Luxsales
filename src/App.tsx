@@ -9,6 +9,11 @@ import Agentes from "./pages/Agentes";
 import Consultores from "./pages/Consultores";
 import Relatorios from "./pages/Relatorios";
 import Configuracoes from "./pages/Configuracoes";
+import MeusCanais from "./pages/MeusCanais";
+import Prospeccao from "./pages/Prospeccao";
+import MeuBot from "./pages/MeuBot";
+import Conversas from "./pages/Conversas";
+import MinhasMetricas from "./pages/MinhasMetricas";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +31,11 @@ const App = () => (
             <Route path="/consultores" element={<Consultores />} />
             <Route path="/relatorios" element={<Relatorios />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
+            <Route path="/meus-canais" element={<MeusCanais />} />
+            <Route path="/prospeccao" element={<Prospeccao />} />
+            <Route path="/meu-bot" element={<MeuBot />} />
+            <Route path="/conversas" element={<Conversas />} />
+            <Route path="/minhas-metricas" element={<MinhasMetricas />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
