@@ -1,4 +1,4 @@
-import { LayoutDashboard, Bot, Users, FileText, Settings, ChevronDown } from "lucide-react";
+import { LayoutDashboard, Bot, Users, FileText, Settings, ChevronDown, Smartphone, Target, MessageSquare, MessagesSquare, BarChart3 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -19,12 +19,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const items = [
+const adminItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Agentes", url: "/agentes", icon: Bot },
   { title: "Consultores", url: "/consultores", icon: Users },
   { title: "Relatórios", url: "/relatorios", icon: FileText },
   { title: "Configurações", url: "/configuracoes", icon: Settings },
+];
+
+const consultorItems = [
+  { title: "Meus Canais", url: "/meus-canais", icon: Smartphone },
+  { title: "Prospecção", url: "/prospeccao", icon: Target },
+  { title: "Meu Bot", url: "/meu-bot", icon: MessageSquare },
+  { title: "Conversas", url: "/conversas", icon: MessagesSquare },
+  { title: "Minhas Métricas", url: "/minhas-metricas", icon: BarChart3 },
 ];
 
 export function AppSidebar() {
@@ -86,12 +94,39 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
+              {adminItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
                       end={item.url === "/"}
+                      className="hover:bg-sidebar-accent transition-all duration-200"
+                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                    >
+                      <item.icon className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Separator */}
+        <div className="px-4 my-2">
+          <div className="h-px bg-sidebar-border/50" />
+          {!collapsed && <p className="text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mt-3 mb-1 px-1">Área do Consultor</p>}
+        </div>
+
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {consultorItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={item.url}
                       className="hover:bg-sidebar-accent transition-all duration-200"
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
                     >
