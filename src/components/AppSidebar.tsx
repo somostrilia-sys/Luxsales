@@ -1,4 +1,4 @@
-import { LayoutDashboard, Bot, Users, FileText, Settings, ChevronDown, Smartphone, Target, MessageSquare, MessagesSquare, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Bot, Users, FileText, Settings, ChevronDown, Smartphone, Target, MessageSquare, MessagesSquare, BarChart3, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -8,10 +8,13 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useEmpresa } from "@/contexts/EmpresaContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { empresas } from "@/lib/mock-data";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
