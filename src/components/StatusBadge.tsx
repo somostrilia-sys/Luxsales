@@ -21,7 +21,13 @@ const statusLabels: Record<string, string> = {
 
 export function StatusBadge({ status }: { status: string }) {
   return (
-    <Badge className={cn("border-0", statusStyles[status] || "bg-muted text-muted-foreground")}>
+    <Badge
+      className={cn(
+        "border-0",
+        statusStyles[status] || "bg-muted text-muted-foreground",
+        status === "ativo" && "status-glow-ativo"
+      )}
+    >
       {statusLabels[status] || status}
     </Badge>
   );

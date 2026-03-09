@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, FileText } from "lucide-react";
+import { Search } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ export default function Relatorios() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
+        <div className="animate-fade-in">
           <h1 className="text-2xl font-bold">Relatórios</h1>
           <p className="text-muted-foreground text-sm">Todos os relatórios gerados pelos agentes</p>
         </div>
@@ -54,7 +54,7 @@ export default function Relatorios() {
           </Select>
         </div>
 
-        <Card className="shadow-sm overflow-hidden">
+        <Card className="shadow-sm overflow-hidden bg-card/80 backdrop-blur-sm" style={{ animation: 'fade-slide-up 0.5s ease-out 0.1s both' }}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
@@ -69,7 +69,7 @@ export default function Relatorios() {
               </thead>
               <tbody>
                 {filtrados.map((r) => (
-                  <tr key={r.id} className="border-t hover:bg-muted/30 transition-colors">
+                  <tr key={r.id} className="border-t table-row-hover">
                     <td className="p-3">
                       <span className="mr-2">{r.agenteEmoji}</span>
                       <span className="font-medium">{r.agenteNome}</span>

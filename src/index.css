@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 @layer base {
   :root {
@@ -49,6 +49,56 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
+
+    --kpi-from: 204 93% 39%;
+    --kpi-to: 209 52% 23%;
+  }
+
+  .dark {
+    --background: 210 29% 10%;
+    --foreground: 210 14% 90%;
+
+    --card: 210 29% 14%;
+    --card-foreground: 210 14% 90%;
+
+    --popover: 210 29% 14%;
+    --popover-foreground: 210 14% 90%;
+
+    --primary: 204 93% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 29% 18%;
+    --secondary-foreground: 210 14% 90%;
+
+    --muted: 210 29% 18%;
+    --muted-foreground: 210 10% 60%;
+
+    --accent: 204 93% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 29% 22%;
+    --input: 210 29% 22%;
+    --ring: 204 93% 50%;
+
+    --sidebar-background: 210 29% 8%;
+    --sidebar-foreground: 210 14% 80%;
+    --sidebar-primary: 204 93% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 29% 14%;
+    --sidebar-accent-foreground: 210 14% 90%;
+    --sidebar-border: 210 29% 18%;
+    --sidebar-ring: 204 93% 50%;
+
+    --success: 152 60% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --kpi-from: 204 93% 44%;
+    --kpi-to: 209 52% 18%;
   }
 }
 
@@ -57,7 +107,140 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans;
-    font-family: 'Inter', sans-serif;
+    @apply bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', sans-serif;
   }
+}
+
+/* Animated background circles */
+@keyframes float-circle {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -30px) scale(1.05); }
+  66% { transform: translate(-20px, 20px) scale(0.95); }
+}
+
+.animated-bg {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.animated-bg::before,
+.animated-bg::after,
+.animated-bg .circle-3 {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.07;
+}
+
+.animated-bg::before {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, hsl(204 93% 39%) 0%, transparent 70%);
+  top: -100px;
+  right: -100px;
+  animation: float-circle 20s ease-in-out infinite;
+}
+
+.animated-bg::after {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, hsl(209 52% 23%) 0%, transparent 70%);
+  bottom: -50px;
+  left: -50px;
+  animation: float-circle 25s ease-in-out infinite reverse;
+}
+
+/* Shimmer effect for buttons */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsla(0, 0%, 100%, 0.15) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.btn-shimmer:hover::after {
+  opacity: 1;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Glow pulse for active status */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 4px hsl(152 60% 42% / 0.4); }
+  50% { box-shadow: 0 0 12px hsl(152 60% 42% / 0.7); }
+}
+
+.status-glow-ativo {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* KPI card glow on hover */
+.kpi-card {
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.kpi-card:hover {
+  box-shadow: 0 8px 32px hsl(204 93% 39% / 0.25);
+  transform: translateY(-2px);
+}
+
+/* Stagger fade-in */
+@keyframes fade-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-stagger > * {
+  opacity: 0;
+  animation: fade-slide-up 0.5s ease-out forwards;
+}
+
+.animate-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.animate-stagger > *:nth-child(2) { animation-delay: 80ms; }
+.animate-stagger > *:nth-child(3) { animation-delay: 160ms; }
+.animate-stagger > *:nth-child(4) { animation-delay: 240ms; }
+.animate-stagger > *:nth-child(5) { animation-delay: 320ms; }
+.animate-stagger > *:nth-child(6) { animation-delay: 400ms; }
+.animate-stagger > *:nth-child(7) { animation-delay: 480ms; }
+.animate-stagger > *:nth-child(8) { animation-delay: 560ms; }
+
+/* Table row hover */
+.table-row-hover {
+  transition: background-color 0.2s ease, transform 0.15s ease;
+}
+.table-row-hover:hover {
+  background-color: hsl(var(--primary) / 0.05);
+}
+
+/* Glassmorphism sidebar */
+.glass-sidebar {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
