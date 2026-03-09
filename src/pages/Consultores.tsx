@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Search, Plus, Pencil, Trash2, User } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card } from "@/components/ui/card";
@@ -9,44 +9,59 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { consultores as initialConsultores, type Consultor, type Empresa, type ConsultorPerfil } from "@/lib/mock-data";
+import { consultores as allConsultores, type Consultor, type ConsultorPerfil } from "@/lib/mock-data";
+import { useEmpresa } from "@/contexts/EmpresaContext";
 import { toast } from "sonner";
 
-const emptyConsultor: Omit<Consultor, "id"> = {
-  nome: "", telefone: "", email: "", empresa: "Objetivo", perfil: "consultor", regiao: "", ativo: true,
-};
-
 export default function Consultores() {
-  const [lista, setLista] = useState<Consultor[]>(initialConsultores);
+  const { empresa } = useEmpresa();
+  const [extras, setExtras] = useState<Consultor[]>([]);
+  const [edits, setEdits] = useState<Record<string, Consultor>>({});
+  const [deleted, setDeleted] = useState<Set<string>>(new Set());
   const [busca, setBusca] = useState("");
-  const [filtroEmpresa, setFiltroEmpresa] = useState<string>("todas");
-  const [formData, setFormData] = useState<Omit<Consultor, "id">>(emptyConsultor);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  const filtrados = lista.filter((c) => {
-    const matchBusca = c.nome.toLowerCase().includes(busca.toLowerCase()) || c.email.toLowerCase().includes(busca.toLowerCase());
-    const matchEmpresa = filtroEmpresa === "todas" || c.empresa === filtroEmpresa;
-    return matchBusca && matchEmpresa;
-  });
+  const emptyForm = { nome: "", telefone: "", email: "", empresa, perfil: "consultor" as ConsultorPerfil, regiao: "", ativo: true };
+  const [formData, setFormData] = useState(emptyForm);
 
-  const openNew = () => { setFormData(emptyConsultor); setEditingId(null); setDialogOpen(true); };
+  const lista = useMemo(() => {
+    const base = allConsultores
+      .filter(c => c.empresa === empresa && !deleted.has(c.id))
+      .map(c => edits[c.id] || c);
+    return [...base, ...extras.filter(c => c.empresa === empresa)];
+  }, [empresa, edits, deleted, extras]);
+
+  const filtrados = lista.filter(
+    (c) => c.nome.toLowerCase().includes(busca.toLowerCase()) || c.email.toLowerCase().includes(busca.toLowerCase())
+  );
+
+  const openNew = () => { setFormData({ ...emptyForm, empresa }); setEditingId(null); setDialogOpen(true); };
   const openEdit = (c: Consultor) => { setFormData({ nome: c.nome, telefone: c.telefone, email: c.email, empresa: c.empresa, perfil: c.perfil, regiao: c.regiao, ativo: c.ativo }); setEditingId(c.id); setDialogOpen(true); };
 
   const salvar = () => {
     if (!formData.nome || !formData.email) { toast.error("Nome e email são obrigatórios"); return; }
     if (editingId) {
-      setLista((prev) => prev.map((c) => (c.id === editingId ? { ...c, ...formData } : c)));
+      setEdits(prev => ({ ...prev, [editingId]: { id: editingId, ...formData } }));
       toast.success("Consultor atualizado");
     } else {
-      setLista((prev) => [...prev, { ...formData, id: String(Date.now()) }]);
+      setExtras(prev => [...prev, { id: String(Date.now()), ...formData }]);
       toast.success("Consultor adicionado");
     }
     setDialogOpen(false);
   };
 
-  const excluir = (id: string) => { setLista((prev) => prev.filter((c) => c.id !== id)); toast.success("Consultor removido"); };
-  const toggleAtivo = (id: string) => { setLista((prev) => prev.map((c) => (c.id === id ? { ...c, ativo: !c.ativo } : c))); };
+  const excluir = (id: string) => { setDeleted(prev => new Set(prev).add(id)); setExtras(prev => prev.filter(c => c.id !== id)); toast.success("Consultor removido"); };
+  const toggleAtivo = (id: string) => {
+    const c = lista.find(x => x.id === id);
+    if (!c) return;
+    const updated = { ...c, ativo: !c.ativo };
+    if (extras.find(x => x.id === id)) {
+      setExtras(prev => prev.map(x => x.id === id ? updated : x));
+    } else {
+      setEdits(prev => ({ ...prev, [id]: updated }));
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -54,22 +69,13 @@ export default function Consultores() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
           <div>
             <h1 className="text-2xl font-bold">Consultores</h1>
-            <p className="text-muted-foreground text-sm">Gerencie a equipe de consultores</p>
+            <p className="text-muted-foreground text-sm">Equipe — {empresa} ({lista.length})</p>
           </div>
           <div className="flex gap-2">
             <div className="relative w-full sm:w-60">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Buscar..." className="pl-9" value={busca} onChange={(e) => setBusca(e.target.value)} />
             </div>
-            <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas</SelectItem>
-                <SelectItem value="Objetivo">Objetivo</SelectItem>
-                <SelectItem value="Trilia">Trilia</SelectItem>
-                <SelectItem value="WALK">WALK</SelectItem>
-              </SelectContent>
-            </Select>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={openNew} className="btn-shimmer"><Plus className="h-4 w-4 mr-1" /> Novo</Button>
@@ -82,18 +88,7 @@ export default function Consultores() {
                     <div><Label>Telefone</Label><Input value={formData.telefone} onChange={(e) => setFormData({ ...formData, telefone: e.target.value })} /></div>
                   </div>
                   <div><Label>Email</Label><Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label>Empresa</Label>
-                      <Select value={formData.empresa} onValueChange={(v) => setFormData({ ...formData, empresa: v as Empresa })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Objetivo">Objetivo</SelectItem>
-                          <SelectItem value="Trilia">Trilia</SelectItem>
-                          <SelectItem value="WALK">WALK</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label>Perfil</Label>
                       <Select value={formData.perfil} onValueChange={(v) => setFormData({ ...formData, perfil: v as ConsultorPerfil })}>
@@ -125,7 +120,6 @@ export default function Consultores() {
                   <th className="text-left p-3 font-medium">Nome</th>
                   <th className="text-left p-3 font-medium">Email</th>
                   <th className="text-left p-3 font-medium">Telefone</th>
-                  <th className="text-left p-3 font-medium">Empresa</th>
                   <th className="text-left p-3 font-medium">Perfil</th>
                   <th className="text-left p-3 font-medium">Região</th>
                   <th className="text-left p-3 font-medium">Status</th>
@@ -133,7 +127,7 @@ export default function Consultores() {
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map((c) => (
+                {filtrados.slice(0, 50).map((c) => (
                   <tr key={c.id} className="border-t table-row-hover">
                     <td className="p-3 font-medium">
                       <div className="flex items-center gap-2">
@@ -145,7 +139,6 @@ export default function Consultores() {
                     </td>
                     <td className="p-3 text-muted-foreground">{c.email}</td>
                     <td className="p-3 text-muted-foreground">{c.telefone}</td>
-                    <td className="p-3">{c.empresa}</td>
                     <td className="p-3 capitalize">{c.perfil}</td>
                     <td className="p-3">{c.regiao}</td>
                     <td className="p-3">
@@ -164,6 +157,9 @@ export default function Consultores() {
                 ))}
               </tbody>
             </table>
+            {lista.length > 50 && (
+              <p className="text-center text-xs text-muted-foreground py-3">Mostrando 50 de {lista.length} registros</p>
+            )}
           </div>
         </Card>
       </div>

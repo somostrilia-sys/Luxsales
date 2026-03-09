@@ -1,6 +1,5 @@
-import { LayoutDashboard, Bot, Users, FileText, Settings } from "lucide-react";
+import { LayoutDashboard, Bot, Users, FileText, Settings, ChevronDown } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
@@ -11,6 +10,14 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useEmpresa } from "@/contexts/EmpresaContext";
+import { empresas } from "@/lib/mock-data";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -23,11 +30,13 @@ const items = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
+  const { empresa, setEmpresa } = useEmpresa();
+  const empresaInfo = empresas.find((e) => e.id === empresa)!;
 
   return (
     <Sidebar collapsible="icon">
       <SidebarContent className="pt-6 glass-sidebar bg-sidebar/90">
-        <div className="px-4 mb-8 flex items-center gap-3">
+        <div className="px-4 mb-4 flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold text-lg shrink-0 shadow-lg shadow-primary/20">
             IA
           </div>
@@ -38,6 +47,42 @@ export function AppSidebar() {
             </div>
           )}
         </div>
+
+        {/* Company Selector */}
+        <div className="px-3 mb-4">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm bg-sidebar-accent/50 hover:bg-sidebar-accent transition-colors text-sidebar-foreground border border-sidebar-border/30">
+                <span className="text-lg shrink-0">{empresaInfo.emoji}</span>
+                {!collapsed && (
+                  <>
+                    <div className="flex-1 text-left min-w-0">
+                      <p className="font-semibold text-xs truncate">{empresaInfo.nome}</p>
+                      <p className="text-[10px] text-sidebar-foreground/60 truncate">{empresaInfo.descricao}</p>
+                    </div>
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                  </>
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              {empresas.map((e) => (
+                <DropdownMenuItem
+                  key={e.id}
+                  onClick={() => setEmpresa(e.id)}
+                  className={empresa === e.id ? "bg-accent" : ""}
+                >
+                  <span className="mr-2 text-lg">{e.emoji}</span>
+                  <div>
+                    <p className="font-medium text-sm">{e.nome}</p>
+                    <p className="text-xs text-muted-foreground">{e.descricao}</p>
+                  </div>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
