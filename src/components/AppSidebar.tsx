@@ -1,53 +1,61 @@
-import { LayoutDashboard, Bot, Users, FileText, Settings, ChevronDown, Smartphone, Target, MessageSquare, MessagesSquare, BarChart3, LogOut } from "lucide-react";
+import {
+  LayoutDashboard, Building2, Users, Bot, FileSearch, Database,
+  BarChart3, Settings, MessageSquare, Target, TrendingUp, LogOut, ChevronDown
+} from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarFooter,
-  useSidebar,
+  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
+  SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
-import { useEmpresa } from "@/contexts/EmpresaContext";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { empresas } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
-const adminItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Agentes", url: "/agentes", icon: Bot },
-  { title: "Consultores", url: "/consultores", icon: Users },
-  { title: "Relatórios", url: "/relatorios", icon: FileText },
-  { title: "Configurações", url: "/configuracoes", icon: Settings },
-];
-
-const consultorItems = [
-  { title: "Meus Canais", url: "/meus-canais", icon: Smartphone },
-  { title: "Prospecção", url: "/prospeccao", icon: Target },
-  { title: "Meu Bot", url: "/meu-bot", icon: MessageSquare },
-  { title: "Conversas", url: "/conversas", icon: MessagesSquare },
-  { title: "Minhas Métricas", url: "/minhas-metricas", icon: BarChart3 },
-];
+const menuByLevel: Record<number, Array<{ title: string; url: string; icon: any }>> = {
+  0: [ // CEO
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Empresas", url: "/empresas", icon: Building2 },
+    { title: "Colaboradores", url: "/colaboradores", icon: Users },
+    { title: "Agentes", url: "/agentes", icon: Bot },
+    { title: "Extração de Contatos", url: "/extracao", icon: FileSearch },
+    { title: "Base de Dados", url: "/base-dados", icon: Database },
+    { title: "Métricas", url: "/metricas", icon: BarChart3 },
+    { title: "Configurações", url: "/configuracoes", icon: Settings },
+  ],
+  1: [ // Diretor
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Colaboradores", url: "/colaboradores", icon: Users },
+    { title: "Agentes", url: "/agentes", icon: Bot },
+    { title: "Métricas", url: "/metricas", icon: BarChart3 },
+  ],
+  2: [ // Gestor
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Equipe", url: "/colaboradores", icon: Users },
+    { title: "Agentes", url: "/agentes", icon: Bot },
+    { title: "Métricas", url: "/metricas", icon: BarChart3 },
+  ],
+  3: [ // Colaborador
+    { title: "Meus Agentes", url: "/meus-agentes", icon: MessageSquare },
+    { title: "Meus Leads", url: "/meus-leads", icon: Target },
+    { title: "Meu Desempenho", url: "/meu-desempenho", icon: TrendingUp },
+  ],
+};
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const { empresa, setEmpresa } = useEmpresa();
-  const { user, signOut } = useAuth();
-  const empresaInfo = empresas.find((e) => e.id === empresa)!;
+  const { collaborator, roleLevel } = useCollaborator();
+  const { signOut } = useAuth();
+
+  const items = menuByLevel[roleLevel] || menuByLevel[3];
+  const companyName = collaborator?.company?.name || "Sistema";
+  const companyEmoji = collaborator?.company?.emoji || "🏢";
+  const roleName = collaborator?.role?.name || "";
 
   return (
     <Sidebar collapsible="icon">
       <SidebarContent className="pt-6 glass-sidebar bg-sidebar/90">
+        {/* Branding */}
         <div className="px-4 mb-4 flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold text-lg shrink-0 shadow-lg shadow-primary/20">
             IA
@@ -60,45 +68,23 @@ export function AppSidebar() {
           )}
         </div>
 
-        {/* Company Selector */}
+        {/* Company badge */}
         <div className="px-3 mb-4">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm bg-sidebar-accent/50 hover:bg-sidebar-accent transition-colors text-sidebar-foreground border border-sidebar-border/30">
-                <span className="text-lg shrink-0">{empresaInfo.emoji}</span>
-                {!collapsed && (
-                  <>
-                    <div className="flex-1 text-left min-w-0">
-                      <p className="font-semibold text-xs truncate">{empresaInfo.nome}</p>
-                      <p className="text-[10px] text-sidebar-foreground/60 truncate">{empresaInfo.descricao}</p>
-                    </div>
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
-                  </>
-                )}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              {empresas.map((e) => (
-                <DropdownMenuItem
-                  key={e.id}
-                  onClick={() => setEmpresa(e.id)}
-                  className={empresa === e.id ? "bg-accent" : ""}
-                >
-                  <span className="mr-2 text-lg">{e.emoji}</span>
-                  <div>
-                    <p className="font-medium text-sm">{e.nome}</p>
-                    <p className="text-xs text-muted-foreground">{e.descricao}</p>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm bg-sidebar-accent/50 text-sidebar-foreground border border-sidebar-border/30">
+            <span className="text-lg shrink-0">{companyEmoji}</span>
+            {!collapsed && (
+              <div className="flex-1 text-left min-w-0">
+                <p className="font-semibold text-xs truncate">{companyName}</p>
+                <p className="text-[10px] text-sidebar-foreground/60 truncate">{roleName}</p>
+              </div>
+            )}
+          </div>
         </div>
 
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {adminItems.map((item) => (
+              {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink
@@ -117,38 +103,12 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Separator */}
-        <div className="px-4 my-2">
-          <div className="h-px bg-sidebar-border/50" />
-          {!collapsed && <p className="text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mt-3 mb-1 px-1">Área do Consultor</p>}
-        </div>
-
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {consultorItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to={item.url}
-                      className="hover:bg-sidebar-accent transition-all duration-200"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
-                    >
-                      <item.icon className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
         <SidebarFooter className="mt-auto p-3 border-t border-sidebar-border/30">
           <div className="flex items-center gap-2">
-            {!collapsed && user && (
+            {!collapsed && collaborator && (
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-sidebar-foreground truncate">{user.email}</p>
+                <p className="text-xs font-medium text-sidebar-foreground truncate">{collaborator.name}</p>
+                <p className="text-[10px] text-sidebar-foreground/60 truncate">{collaborator.email}</p>
               </div>
             )}
             <Button
