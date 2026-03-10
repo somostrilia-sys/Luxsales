@@ -121,10 +121,13 @@ export default function Colaboradores() {
       return;
     }
 
-    const payload = {
+    const payload: any = {
       name: form.name, email: form.email, phone: form.phone || null,
       whatsapp: form.whatsapp || null, company_id: form.company_id,
-      role_id: form.role_id, unit_id: form.unit_id || null, active: form.active,
+      role_id: form.role_id, active: form.active,
+      unit_id: selectedUnitIds.length > 0 ? selectedUnitIds[0] : null,
+      unit_ids: selectedUnitIds.length > 0 ? selectedUnitIds : null,
+      reports_to: form.reports_to || null,
     };
 
     let collabId: string;
