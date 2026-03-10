@@ -52,13 +52,14 @@ export default function Colaboradores() {
 
     if (selectedCompanyId !== "all") collabQuery = collabQuery.eq("company_id", selectedCompanyId);
 
-    const [collabRes, compRes, roleRes, unitRes, agentRes, raaRes] = await Promise.all([
+    const [collabRes, compRes, roleRes, unitRes, agentRes, raaRes, allCollabRes] = await Promise.all([
       collabQuery,
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("roles").select("id, name, level, company_id").order("level"),
       supabase.from("units").select("id, name, company_id").order("name"),
       supabase.from("agent_definitions").select("id, name, emoji, company_id").eq("active", true).order("name"),
       supabase.from("role_agent_access").select("role_id, agent_id"),
+      supabase.from("collaborators").select("id, name, email, company_id").eq("active", true).order("name"),
     ]);
     setCollaborators(collabRes.data || []);
     setCompanies(compRes.data || []);
@@ -66,6 +67,7 @@ export default function Colaboradores() {
     setUnits(unitRes.data || []);
     setAgents(agentRes.data || []);
     setRoleAgentAccess(raaRes.data || []);
+    setAllCollaborators(allCollabRes.data || []);
     setLoading(false);
   };
 
