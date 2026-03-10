@@ -158,8 +158,7 @@ export default function Registro() {
                   <div className="space-y-1.5">
                     <Label>Unidades</Label>
                     <p className="text-xs text-muted-foreground">Selecione suas unidades (role para ver todas)</p>
-                    <div className="rounded-md border border-border bg-background">
-                      <ScrollArea className="max-h-72">
+                    <div className="rounded-md border border-border bg-background max-h-72 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/30 scrollbar-track-transparent" style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(240 10% 58% / 0.3) transparent' }}>
                         <div className="p-2 space-y-1">
                           {units.map(u => (
                             <label
@@ -174,7 +173,6 @@ export default function Registro() {
                             </label>
                           ))}
                         </div>
-                      </ScrollArea>
                     </div>
                     {selectedUnitIds.length > 0 && (
                       <p className="text-xs text-muted-foreground">{selectedUnitIds.length} unidade(s) selecionada(s)</p>
