@@ -36,6 +36,7 @@ export default function Colaboradores() {
     company_id: "", role_id: "", active: true, reports_to: "",
   });
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
   const [allCollaborators, setAllCollaborators] = useState<any[]>([]);
 
