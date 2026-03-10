@@ -14,7 +14,7 @@ export interface Collaborator {
   role_id: string;
   sector_id: string | null;
   unit_id: string | null;
-  company: { id: string; name: string; slug: string; emoji: string };
+  company: { id: string; name: string; slug: string };
   role: { id: string; name: string; level: number };
   sector: { id: string; name: string } | null;
   unit: { id: string; name: string } | null;
@@ -56,7 +56,7 @@ export function CollaboratorProvider({ children }: { children: ReactNode }) {
       .select(`
         id, auth_user_id, name, email, phone, whatsapp, is_active,
         company_id, role_id, sector_id, unit_id,
-        company:companies!collaborators_company_id_fkey(id, name, slug, emoji),
+        company:companies!collaborators_company_id_fkey(id, name, slug),
         role:roles!collaborators_role_id_fkey(id, name, level),
         sector:sectors!collaborators_sector_id_fkey(id, name),
         unit:units!collaborators_unit_id_fkey(id, name)
