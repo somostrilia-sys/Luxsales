@@ -45,7 +45,7 @@ export default function Cadastro() {
       supabase.from("roles").select("id, name, level, company_id").eq("active", true).order("level"),
       supabase.from("sectors").select("id, name, company_id").order("name"),
       supabase.from("collaborators").select(`
-        id, name, email, phone, active, company_id,
+        id, name, email, phone, active, company_id, company_ids,
         role:roles!collaborators_role_id_fkey(name, level),
         company:companies!collaborators_company_id_fkey(name),
         sector:sectors!collaborators_sector_id_fkey(name)
