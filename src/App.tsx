@@ -47,6 +47,7 @@ const App = () => (
                 <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
                 <Route path="/extracao" element={<ProtectedRoute><Extracao /></ProtectedRoute>} />
                 <Route path="/agentes" element={<ProtectedRoute minLevel={1}><Agentes /></ProtectedRoute>} />
+                <Route path="/bots" element={<ProtectedRoute minLevel={1}><Bots /></ProtectedRoute>} />
                 <Route path="/base-dados" element={<ProtectedRoute minLevel={2}><BaseDados /></ProtectedRoute>} />
                 <Route path="/conversas" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
                 <Route path="/meu-bot" element={<ProtectedRoute><MeuBot /></ProtectedRoute>} />
