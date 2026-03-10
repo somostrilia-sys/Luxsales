@@ -60,7 +60,7 @@ export default function Colaboradores() {
       supabase.from("units").select("id, name, company_id").order("name"),
       supabase.from("agent_definitions").select("id, name, emoji, company_id").eq("active", true).order("name"),
       supabase.from("role_agent_access").select("role_id, agent_id"),
-      supabase.from("collaborators").select("id, name, email, company_id").eq("active", true).order("name"),
+      supabase.from("collaborators").select("id, name, email, company_id, company_ids, role:roles!collaborators_role_id_fkey(name)").eq("active", true).order("name"),
     ]);
     setCollaborators(collabRes.data || []);
     setCompanies(compRes.data || []);
