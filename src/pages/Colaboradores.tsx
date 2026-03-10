@@ -190,7 +190,12 @@ export default function Colaboradores() {
   const filteredRoles = roles.filter(r => !form.company_id || r.company_id === form.company_id);
   const filteredUnits = units.filter(u => !form.company_id || u.company_id === form.company_id);
   const filteredAgents = agents.filter(a => !form.company_id || a.company_id === form.company_id);
-  const filteredCollabs = allCollaborators.filter(c => !form.company_id || c.company_id === form.company_id);
+  const filteredCollabs = allCollaborators.filter(c => {
+    if (!form.company_id) return true;
+    if (c.company_id === form.company_id) return true;
+    if (Array.isArray(c.company_ids) && c.company_ids.includes(form.company_id)) return true;
+    return false;
+  });
 
   const toggleUnit = (unitId: string) => {
     setSelectedUnitIds(prev =>
