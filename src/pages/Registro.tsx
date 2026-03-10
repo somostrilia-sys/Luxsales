@@ -15,6 +15,7 @@ export default function Registro() {
   const [companyId, setCompanyId] = useState("");
   const [roleId, setRoleId] = useState("");
   const [sectorId, setSectorId] = useState("");
+  const [unitId, setUnitId] = useState("");
   const [reportsTo, setReportsTo] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
