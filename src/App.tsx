@@ -15,6 +15,7 @@ import Metricas from "./pages/Metricas";
 import Conversas from "./pages/Conversas";
 import MeuBot from "./pages/MeuBot";
 import Configuracoes from "./pages/Configuracoes";
+import IdentidadeVisual from "./pages/IdentidadeVisual";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -46,6 +47,7 @@ const App = () => (
                 <Route path="/metricas" element={<ProtectedRoute minLevel={2}><Metricas /></ProtectedRoute>} />
                 <Route path="/colaboradores" element={<ProtectedRoute minLevel={0}><Colaboradores /></ProtectedRoute>} />
                 <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+                <Route path="/identidade-visual" element={<ProtectedRoute minLevel={0}><IdentidadeVisual /></ProtectedRoute>} />
 
                 <Route path="*" element={<NotFound />} />
               </Routes>

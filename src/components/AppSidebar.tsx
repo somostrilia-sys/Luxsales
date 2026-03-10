@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut
+  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -26,6 +26,7 @@ const allItems: MenuItem[] = [
   { title: "Meu Bot", url: "/meu-bot", icon: Bot },
   { title: "Métricas", url: "/metricas", icon: BarChart3, maxLevel: 2 },
   { title: "Colaboradores", url: "/colaboradores", icon: Users, maxLevel: 0 },
+  { title: "Identidade Visual", url: "/identidade-visual", icon: Palette, maxLevel: 0 },
   { title: "Configurações", url: "/configuracoes", icon: Settings },
 ];
 
