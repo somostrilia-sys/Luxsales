@@ -9,7 +9,7 @@ export interface Collaborator {
   email: string;
   phone: string | null;
   whatsapp: string | null;
-  is_active: boolean;
+  active: boolean;
   company_id: string;
   role_id: string;
   sector_id: string | null;
