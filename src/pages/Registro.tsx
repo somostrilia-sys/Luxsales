@@ -46,7 +46,7 @@ export default function Registro() {
     try {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL || "https://ecaduzwautlpzpvjognr.supabase.co"}/functions/v1/register-collaborator`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Public-Register": "true" },
         body: JSON.stringify({
           name: nome, email, phone, company_id: companyId,
           role_id: roleId || undefined, sector_id: sectorId || undefined,
