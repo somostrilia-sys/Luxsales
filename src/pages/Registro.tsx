@@ -15,6 +15,7 @@ export default function Registro() {
   const [companyId, setCompanyId] = useState("");
   const [roleId, setRoleId] = useState("");
   const [sectorId, setSectorId] = useState("");
+  const [unitId, setUnitId] = useState("");
   const [reportsTo, setReportsTo] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -23,6 +24,7 @@ export default function Registro() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [sectors, setSectors] = useState<any[]>([]);
+  const [units, setUnits] = useState<any[]>([]);
   const [collaborators, setCollaborators] = useState<any[]>([]);
 
   useEffect(() => {
@@ -32,10 +34,11 @@ export default function Registro() {
   }, []);
 
   useEffect(() => {
-    if (!companyId) { setRoles([]); setSectors([]); setCollaborators([]); setRoleId(""); setSectorId(""); setReportsTo(""); return; }
-    setRoleId(""); setSectorId(""); setReportsTo("");
+    if (!companyId) { setRoles([]); setSectors([]); setUnits([]); setCollaborators([]); setRoleId(""); setSectorId(""); setUnitId(""); setReportsTo(""); return; }
+    setRoleId(""); setSectorId(""); setUnitId(""); setReportsTo("");
     supabase.from("roles").select("id, name, level").eq("company_id", companyId).eq("active", true).gte("level", 1).order("name").then(({ data }) => { if (data) setRoles(data); });
     supabase.from("sectors").select("id, name").eq("company_id", companyId).order("name").then(({ data }) => { if (data) setSectors(data); });
+    supabase.from("units").select("id, name").eq("company_id", companyId).order("name").then(({ data }) => { if (data) setUnits(data); });
     supabase.from("collaborators").select("id, name, email").eq("company_id", companyId).eq("active", true).order("name").then(({ data }) => { if (data) setCollaborators(data); });
   }, [companyId]);
 
@@ -49,7 +52,7 @@ export default function Registro() {
         headers: { "Content-Type": "application/json", "X-Public-Register": "true" },
         body: JSON.stringify({
           name: nome, email, phone, company_id: companyId,
-          role_id: roleId || undefined, sector_id: sectorId || undefined,
+          role_id: roleId || undefined, sector_id: sectorId || undefined, unit_id: unitId || undefined,
           reports_to: reportsTo || undefined,
         }),
       });
@@ -141,6 +144,15 @@ export default function Registro() {
                     <SelectContent>{sectors.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
+                {units.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label>Unidade</Label>
+                    <Select value={unitId} onValueChange={setUnitId}>
+                      <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+                      <SelectContent>{units.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label>Superior Direto</Label>
                   <Select value={reportsTo} onValueChange={setReportsTo}>
