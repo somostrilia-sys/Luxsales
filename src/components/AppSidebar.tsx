@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus
+  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -20,6 +20,7 @@ interface MenuItem {
 
 const managementItems: MenuItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, levels: [0, 1, 2] },
+  { title: "Agentes de IA", url: "/agentes", icon: Cpu, levels: [0, 1] },
   { title: "Colaboradores", url: "/colaboradores", icon: Users, levels: [0, 1, 2] },
   { title: "Cadastro", url: "/cadastro", icon: UserPlus, levels: [0, 1] },
   { title: "Extração de Leads", url: "/extracao", icon: FileSearch, levels: [0, 1, 2] },

@@ -12,6 +12,7 @@ import Colaboradores from "./pages/Colaboradores";
 import Cadastro from "./pages/Cadastro";
 import Extracao from "./pages/Extracao";
 import BaseDados from "./pages/BaseDados";
+import Agentes from "./pages/Agentes";
 import Metricas from "./pages/Metricas";
 import Conversas from "./pages/Conversas";
 import MeuBot from "./pages/MeuBot";
@@ -44,6 +45,7 @@ const App = () => (
 
                 <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
                 <Route path="/extracao" element={<ProtectedRoute><Extracao /></ProtectedRoute>} />
+                <Route path="/agentes" element={<ProtectedRoute minLevel={1}><Agentes /></ProtectedRoute>} />
                 <Route path="/base-dados" element={<ProtectedRoute minLevel={2}><BaseDados /></ProtectedRoute>} />
                 <Route path="/conversas" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
                 <Route path="/meu-bot" element={<ProtectedRoute><MeuBot /></ProtectedRoute>} />
