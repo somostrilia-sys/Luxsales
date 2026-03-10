@@ -34,7 +34,7 @@ export default function Registro() {
   useEffect(() => {
     if (!companyId) { setRoles([]); setSectors([]); setCollaborators([]); setRoleId(""); setSectorId(""); setReportsTo(""); return; }
     setRoleId(""); setSectorId(""); setReportsTo("");
-    supabase.from("roles").select("id, name").eq("company_id", companyId).eq("active", true).order("name").then(({ data }) => { if (data) setRoles(data); });
+    supabase.from("roles").select("id, name, level").eq("company_id", companyId).eq("active", true).gte("level", 1).order("name").then(({ data }) => { if (data) setRoles(data); });
     supabase.from("sectors").select("id, name").eq("company_id", companyId).order("name").then(({ data }) => { if (data) setSectors(data); });
     supabase.from("collaborators").select("id, name, email").eq("company_id", companyId).eq("active", true).order("name").then(({ data }) => { if (data) setCollaborators(data); });
   }, [companyId]);
