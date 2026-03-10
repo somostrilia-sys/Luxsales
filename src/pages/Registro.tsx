@@ -24,6 +24,7 @@ export default function Registro() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [sectors, setSectors] = useState<any[]>([]);
+  const [units, setUnits] = useState<any[]>([]);
   const [collaborators, setCollaborators] = useState<any[]>([]);
 
   useEffect(() => {
