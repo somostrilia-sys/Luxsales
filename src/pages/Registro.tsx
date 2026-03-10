@@ -144,6 +144,15 @@ export default function Registro() {
                     <SelectContent>{sectors.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
+                {units.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label>Unidade</Label>
+                    <Select value={unitId} onValueChange={setUnitId}>
+                      <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+                      <SelectContent>{units.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label>Superior Direto</Label>
                   <Select value={reportsTo} onValueChange={setReportsTo}>
