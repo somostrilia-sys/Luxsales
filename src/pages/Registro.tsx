@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { Loader2, Copy, CheckCircle2 } from "lucide-react";
 
@@ -15,7 +17,7 @@ export default function Registro() {
   const [companyId, setCompanyId] = useState("");
   const [roleId, setRoleId] = useState("");
   const [sectorId, setSectorId] = useState("");
-  const [unitId, setUnitId] = useState("");
+  const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
   const [reportsTo, setReportsTo] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -34,13 +36,19 @@ export default function Registro() {
   }, []);
 
   useEffect(() => {
-    if (!companyId) { setRoles([]); setSectors([]); setUnits([]); setCollaborators([]); setRoleId(""); setSectorId(""); setUnitId(""); setReportsTo(""); return; }
-    setRoleId(""); setSectorId(""); setUnitId(""); setReportsTo("");
+    if (!companyId) { setRoles([]); setSectors([]); setUnits([]); setCollaborators([]); setRoleId(""); setSectorId(""); setSelectedUnitIds([]); setReportsTo(""); return; }
+    setRoleId(""); setSectorId(""); setSelectedUnitIds([]); setReportsTo("");
     supabase.from("roles").select("id, name, level").eq("company_id", companyId).eq("active", true).gte("level", 1).order("name").then(({ data }) => { if (data) setRoles(data); });
     supabase.from("sectors").select("id, name").eq("company_id", companyId).order("name").then(({ data }) => { if (data) setSectors(data); });
     supabase.from("units").select("id, name").eq("company_id", companyId).order("name").then(({ data }) => { if (data) setUnits(data); });
     supabase.from("collaborators").select("id, name, email").eq("company_id", companyId).eq("active", true).order("name").then(({ data }) => { if (data) setCollaborators(data); });
   }, [companyId]);
+
+  const toggleUnit = (unitId: string) => {
+    setSelectedUnitIds(prev =>
+      prev.includes(unitId) ? prev.filter(id => id !== unitId) : [...prev, unitId]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +60,9 @@ export default function Registro() {
         headers: { "Content-Type": "application/json", "X-Public-Register": "true" },
         body: JSON.stringify({
           name: nome, email, phone, company_id: companyId,
-          role_id: roleId || undefined, sector_id: sectorId || undefined, unit_id: unitId || undefined,
+          role_id: roleId || undefined, sector_id: sectorId || undefined,
+          unit_id: selectedUnitIds.length > 0 ? selectedUnitIds[0] : undefined,
+          unit_ids: selectedUnitIds.length > 0 ? selectedUnitIds : undefined,
           reports_to: reportsTo || undefined,
         }),
       });
@@ -146,11 +156,28 @@ export default function Registro() {
                 </div>
                 {units.length > 0 && (
                   <div className="space-y-1.5">
-                    <Label>Unidade</Label>
-                    <Select value={unitId} onValueChange={setUnitId}>
-                      <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
-                      <SelectContent>{units.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
-                    </Select>
+                    <Label>Unidades</Label>
+                    <div className="rounded-md border border-border bg-background">
+                      <ScrollArea className="max-h-40">
+                        <div className="p-2 space-y-1">
+                          {units.map(u => (
+                            <label
+                              key={u.id}
+                              className="flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted/50 transition-colors"
+                            >
+                              <Checkbox
+                                checked={selectedUnitIds.includes(u.id)}
+                                onCheckedChange={() => toggleUnit(u.id)}
+                              />
+                              <span className="text-sm text-foreground">{u.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                    {selectedUnitIds.length > 0 && (
+                      <p className="text-xs text-muted-foreground">{selectedUnitIds.length} unidade(s) selecionada(s)</p>
+                    )}
                   </div>
                 )}
                 <div className="space-y-1.5">
