@@ -66,7 +66,6 @@ export default function BaseDados() {
     setLeads((data || []) as Lead[]);
     setTotal(count || 0);
 
-    // Stats
     let statsQuery = supabase.from("contact_leads").select("tipo_pessoa, email, phone");
     if (selectedCompanyId !== "all") statsQuery = statsQuery.eq("company_target", selectedCompanyId);
     const { data: allData } = await statsQuery;
@@ -146,7 +145,7 @@ export default function BaseDados() {
 
   const openDistribute = async () => {
     if (selected.size === 0) { toast.error("Selecione leads"); return; }
-    const { data } = await supabase.from("collaborators").select("id, name").eq("is_active", true).order("name");
+    const { data } = await supabase.from("collaborators").select("id, name").eq("active", true).order("name");
     setCollaborators(data || []);
     setDistributeOpen(true);
   };
@@ -177,7 +176,7 @@ export default function BaseDados() {
             { label: "Com Email", value: stats.email },
             { label: "Com Telefone", value: stats.phone },
           ].map(s => (
-            <Card key={s.label} className="shadow-sm">
+            <Card key={s.label}>
               <CardContent className="pt-4 pb-3 text-center">
                 <p className="text-xs text-muted-foreground">{s.label}</p>
                 <p className="text-xl font-bold">{s.value}</p>
@@ -237,7 +236,7 @@ export default function BaseDados() {
           </div>
         )}
 
-        <Card className="shadow-sm">
+        <Card>
           <CardContent className="p-0">
             {loading ? (
               <div className="flex justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
@@ -317,7 +316,7 @@ export default function BaseDados() {
           </Select>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDistributeOpen(false)}>Cancelar</Button>
-            <Button onClick={distribute} disabled={!assignTo}>Distribuir</Button>
+            <Button onClick={distribute} disabled={!assignTo} className="btn-modern">Distribuir</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
