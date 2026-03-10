@@ -52,7 +52,7 @@ export default function Registro() {
         headers: { "Content-Type": "application/json", "X-Public-Register": "true" },
         body: JSON.stringify({
           name: nome, email, phone, company_id: companyId,
-          role_id: roleId || undefined, sector_id: sectorId || undefined,
+          role_id: roleId || undefined, sector_id: sectorId || undefined, unit_id: unitId || undefined,
           reports_to: reportsTo || undefined,
         }),
       });
