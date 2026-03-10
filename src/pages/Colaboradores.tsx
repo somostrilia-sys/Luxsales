@@ -302,13 +302,33 @@ export default function Colaboradores() {
                 </Select>
               </div>
               <div>
-                <Label>Unidade</Label>
-                <Select value={form.unit_id} onValueChange={v => setForm({ ...form, unit_id: v })}>
+                <Label>Superior Direto</Label>
+                <Select value={form.reports_to} onValueChange={v => setForm({ ...form, reports_to: v })}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{filteredUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
+                  <SelectContent>{filteredCollabs.filter(c => !editing || c.id !== editing.id).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
+
+            {filteredUnits.length > 0 && (
+              <div>
+                <Label className="mb-1 block">Unidades</Label>
+                <p className="text-xs text-muted-foreground mb-1">Selecione as unidades (role para ver todas)</p>
+                <div className="rounded-md border border-border bg-background max-h-72 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(240 10% 58% / 0.3) transparent' }}>
+                  <div className="p-2 space-y-1">
+                    {filteredUnits.map(u => (
+                      <label key={u.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted/50 transition-colors">
+                        <Checkbox checked={selectedUnitIds.includes(u.id)} onCheckedChange={() => toggleUnit(u.id)} />
+                        <span className="text-sm text-foreground">{u.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {selectedUnitIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">{selectedUnitIds.length} unidade(s) selecionada(s)</p>
+                )}
+              </div>
+            )}
 
             {filteredAgents.length > 0 && (
               <div>
