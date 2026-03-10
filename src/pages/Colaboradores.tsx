@@ -60,7 +60,7 @@ export default function Colaboradores() {
       supabase.from("units").select("id, name, company_id").order("name"),
       supabase.from("agent_definitions").select("id, name, emoji, company_id").eq("active", true).order("name"),
       supabase.from("role_agent_access").select("role_id, agent_id"),
-      supabase.from("collaborators").select("id, name, email, company_id").eq("active", true).order("name"),
+      supabase.from("collaborators").select("id, name, email, company_id, company_ids, role:roles!collaborators_role_id_fkey(name)").eq("active", true).order("name"),
     ]);
     setCollaborators(collabRes.data || []);
     setCompanies(compRes.data || []);
@@ -190,7 +190,12 @@ export default function Colaboradores() {
   const filteredRoles = roles.filter(r => !form.company_id || r.company_id === form.company_id);
   const filteredUnits = units.filter(u => !form.company_id || u.company_id === form.company_id);
   const filteredAgents = agents.filter(a => !form.company_id || a.company_id === form.company_id);
-  const filteredCollabs = allCollaborators.filter(c => !form.company_id || c.company_id === form.company_id);
+  const filteredCollabs = allCollaborators.filter(c => {
+    if (!form.company_id) return true;
+    if (c.company_id === form.company_id) return true;
+    if (Array.isArray(c.company_ids) && c.company_ids.includes(form.company_id)) return true;
+    return false;
+  });
 
   const toggleUnit = (unitId: string) => {
     setSelectedUnitIds(prev =>
@@ -336,7 +341,7 @@ export default function Colaboradores() {
                 <Label>Superior Direto</Label>
                 <Select value={form.reports_to} onValueChange={v => setForm({ ...form, reports_to: v })}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{filteredCollabs.filter(c => !editing || c.id !== editing.id).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                  <SelectContent>{filteredCollabs.filter(c => !editing || c.id !== editing.id).map(c => <SelectItem key={c.id} value={c.id}>{c.name}{c.role?.name ? ` - ${c.role.name}` : ""}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>

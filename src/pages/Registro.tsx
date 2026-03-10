@@ -41,7 +41,9 @@ export default function Registro() {
     supabase.from("roles").select("id, name, level").eq("company_id", companyId).eq("active", true).gte("level", 1).order("name").limit(1000).then(({ data }) => { if (data) setRoles(data); });
     supabase.from("sectors").select("id, name").eq("company_id", companyId).order("name").limit(1000).then(({ data }) => { if (data) setSectors(data); });
     supabase.from("units").select("id, name").eq("company_id", companyId).order("name").limit(1000).then(({ data }) => { if (data) setUnits(data); });
-    supabase.from("collaborators").select("id, name, email").eq("company_id", companyId).eq("active", true).order("name").limit(1000).then(({ data }) => { if (data) setCollaborators(data); });
+    supabase.from("collaborators").select("id, name, email, company_id, company_ids, role:roles!collaborators_role_id_fkey(name)").eq("active", true).order("name").limit(1000).then(({ data }) => {
+      if (data) setCollaborators(data.filter(c => c.company_id === companyId || (Array.isArray(c.company_ids) && c.company_ids.includes(companyId))));
+    });
   }, [companyId]);
 
   const toggleUnit = (unitId: string) => {
@@ -183,7 +185,7 @@ export default function Registro() {
                   <Label>Superior Direto</Label>
                   <Select value={reportsTo} onValueChange={setReportsTo}>
                     <SelectTrigger><SelectValue placeholder="Selecione o superior" /></SelectTrigger>
-                    <SelectContent>{collaborators.map(c => <SelectItem key={c.id} value={c.id}>{c.name} ({c.email})</SelectItem>)}</SelectContent>
+                    <SelectContent>{collaborators.map(c => <SelectItem key={c.id} value={c.id}>{c.name}{c.role?.name ? ` - ${c.role.name}` : ""}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </>

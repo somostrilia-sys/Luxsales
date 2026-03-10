@@ -45,7 +45,7 @@ export default function Cadastro() {
       supabase.from("roles").select("id, name, level, company_id").eq("active", true).order("level"),
       supabase.from("sectors").select("id, name, company_id").order("name"),
       supabase.from("collaborators").select(`
-        id, name, email, phone, active, company_id,
+        id, name, email, phone, active, company_id, company_ids,
         role:roles!collaborators_role_id_fkey(name, level),
         company:companies!collaborators_company_id_fkey(name),
         sector:sectors!collaborators_sector_id_fkey(name)
@@ -60,7 +60,12 @@ export default function Cadastro() {
 
   const filteredRoles = roles.filter(r => !form.company_id || r.company_id === form.company_id);
   const filteredSectors = sectors.filter(s => !form.company_id || s.company_id === form.company_id);
-  const filteredSupervisors = collaborators.filter(c => c.company_id === form.company_id);
+  const filteredSupervisors = collaborators.filter(c => {
+    if (!form.company_id) return false;
+    if (c.company_id === form.company_id) return true;
+    if (Array.isArray(c.company_ids) && c.company_ids.includes(form.company_id)) return true;
+    return false;
+  });
 
   const getDefaultPassword = (name: string) => {
     const firstName = name.trim().split(" ")[0];
@@ -251,7 +256,7 @@ export default function Cadastro() {
                     <Label>Superior Direto</Label>
                     <Select value={form.reports_to} onValueChange={v => setForm({ ...form, reports_to: v })}>
                       <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>{filteredSupervisors.map(c => <SelectItem key={c.id} value={c.id}>{c.name} ({c.email})</SelectItem>)}</SelectContent>
+                      <SelectContent>{filteredSupervisors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}{c.role?.name ? ` - ${c.role.name}` : ""}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 </div>
