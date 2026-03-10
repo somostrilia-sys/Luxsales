@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut
+  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
