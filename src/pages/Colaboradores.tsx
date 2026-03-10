@@ -82,6 +82,7 @@ export default function Colaboradores() {
     setEditing(null);
     setForm({ name: "", email: "", phone: "", whatsapp: "", company_id: "", role_id: "", active: true, reports_to: "" });
     setSelectedUnitIds([]);
+    setSelectedCompanyIds([]);
     setSelectedAgents(new Set());
     setModalOpen(true);
   };
@@ -93,6 +94,7 @@ export default function Colaboradores() {
       company_id: c.company_id, role_id: c.role_id, active: c.active, reports_to: c.reports_to || "",
     });
     setSelectedUnitIds(Array.isArray(c.unit_ids) ? c.unit_ids : c.unit_id ? [c.unit_id] : []);
+    setSelectedCompanyIds(Array.isArray(c.company_ids) ? c.company_ids : []);
     const { data } = await supabase.from("collaborator_agent_access").select("agent_id, has_access").eq("collaborator_id", c.id);
     const overrides = new Map((data || []).map((d: any) => [d.agent_id, d.has_access]));
     const roleAgents = new Set(roleAgentAccess.filter(r => r.role_id === c.role_id).map(r => r.agent_id));
