@@ -304,6 +304,26 @@ export default function Colaboradores() {
                 <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            {companies.length > 1 && (
+              <div>
+                <Label className="mb-1 block">Empresas adicionais</Label>
+                <p className="text-xs text-muted-foreground mb-1">Selecione empresas adicionais além da principal</p>
+                <div className="rounded-md border border-border bg-background max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(240 10% 58% / 0.3) transparent' }}>
+                  <div className="p-2 space-y-1">
+                    {companies.filter(c => c.id !== form.company_id).map(c => (
+                      <label key={c.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted/50 transition-colors">
+                        <Checkbox checked={selectedCompanyIds.includes(c.id)} onCheckedChange={() => toggleCompanyId(c.id)} />
+                        <span className="text-sm text-foreground">{c.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {selectedCompanyIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">{selectedCompanyIds.length} empresa(s) adicional(is)</p>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Cargo *</Label>
