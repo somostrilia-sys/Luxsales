@@ -341,7 +341,7 @@ export default function Colaboradores() {
                 <Label>Superior Direto</Label>
                 <Select value={form.reports_to} onValueChange={v => setForm({ ...form, reports_to: v })}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{filteredCollabs.filter(c => !editing || c.id !== editing.id).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                  <SelectContent>{filteredCollabs.filter(c => !editing || c.id !== editing.id).map(c => <SelectItem key={c.id} value={c.id}>{c.name}{c.role?.name ? ` - ${c.role.name}` : ""}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>

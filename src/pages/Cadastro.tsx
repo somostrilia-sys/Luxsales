@@ -256,7 +256,7 @@ export default function Cadastro() {
                     <Label>Superior Direto</Label>
                     <Select value={form.reports_to} onValueChange={v => setForm({ ...form, reports_to: v })}>
                       <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>{filteredSupervisors.map(c => <SelectItem key={c.id} value={c.id}>{c.name} ({c.email})</SelectItem>)}</SelectContent>
+                      <SelectContent>{filteredSupervisors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}{c.role?.name ? ` - ${c.role.name}` : ""}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 </div>

@@ -185,7 +185,7 @@ export default function Registro() {
                   <Label>Superior Direto</Label>
                   <Select value={reportsTo} onValueChange={setReportsTo}>
                     <SelectTrigger><SelectValue placeholder="Selecione o superior" /></SelectTrigger>
-                    <SelectContent>{collaborators.map(c => <SelectItem key={c.id} value={c.id}>{c.name} ({c.email})</SelectItem>)}</SelectContent>
+                    <SelectContent>{collaborators.map(c => <SelectItem key={c.id} value={c.id}>{c.name}{c.role?.name ? ` - ${c.role.name}` : ""}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </>
