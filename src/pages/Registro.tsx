@@ -157,8 +157,9 @@ export default function Registro() {
                 {units.length > 0 && (
                   <div className="space-y-1.5">
                     <Label>Unidades</Label>
+                    <p className="text-xs text-muted-foreground">Selecione suas unidades (role para ver todas)</p>
                     <div className="rounded-md border border-border bg-background">
-                      <ScrollArea className="max-h-40">
+                      <ScrollArea className="max-h-72">
                         <div className="p-2 space-y-1">
                           {units.map(u => (
                             <label
