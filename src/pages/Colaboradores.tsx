@@ -238,7 +238,13 @@ export default function Colaboradores() {
                       <TableCell>{c.phone || "—"}</TableCell>
                       <TableCell>{c.company?.name || "—"}</TableCell>
                       <TableCell>{c.role?.name || "—"}</TableCell>
-                      <TableCell>{c.unit?.name || "—"}</TableCell>
+                      <TableCell>
+                        {(() => {
+                          const ids = Array.isArray(c.unit_ids) ? c.unit_ids : c.unit_id ? [c.unit_id] : [];
+                          const names = ids.map((id: string) => units.find(u => u.id === id)?.name).filter(Boolean);
+                          return names.length > 0 ? names.join(", ") : "—";
+                        })()}
+                      </TableCell>
                       <TableCell>
                         <Badge className={c.active ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"}>
                           {c.active ? "Ativo" : "Inativo"}
