@@ -89,8 +89,9 @@ export default function Colaboradores() {
     setEditing(c);
     setForm({
       name: c.name, email: c.email, phone: c.phone || "", whatsapp: c.whatsapp || "",
-      company_id: c.company_id, role_id: c.role_id, unit_id: c.unit_id || "", active: c.active,
+      company_id: c.company_id, role_id: c.role_id, active: c.active, reports_to: c.reports_to || "",
     });
+    setSelectedUnitIds(Array.isArray(c.unit_ids) ? c.unit_ids : c.unit_id ? [c.unit_id] : []);
     const { data } = await supabase.from("collaborator_agent_access").select("agent_id, has_access").eq("collaborator_id", c.id);
     const overrides = new Map((data || []).map((d: any) => [d.agent_id, d.has_access]));
     const roleAgents = new Set(roleAgentAccess.filter(r => r.role_id === c.role_id).map(r => r.agent_id));
