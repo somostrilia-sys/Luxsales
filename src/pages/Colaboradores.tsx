@@ -36,6 +36,7 @@ export default function Colaboradores() {
     company_id: "", role_id: "", active: true, reports_to: "",
   });
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
   const [allCollaborators, setAllCollaborators] = useState<any[]>([]);
 
@@ -44,7 +45,7 @@ export default function Colaboradores() {
   const loadData = async () => {
     setLoading(true);
     let collabQuery = supabase.from("collaborators").select(`
-      id, name, email, phone, whatsapp, active, company_id, role_id, unit_id, unit_ids, reports_to,
+      id, name, email, phone, whatsapp, active, company_id, role_id, unit_id, unit_ids, company_ids, reports_to,
       company:companies!collaborators_company_id_fkey(id, name),
       role:roles!collaborators_role_id_fkey(id, name, level),
       unit:units!collaborators_unit_id_fkey(id, name)
@@ -81,6 +82,7 @@ export default function Colaboradores() {
     setEditing(null);
     setForm({ name: "", email: "", phone: "", whatsapp: "", company_id: "", role_id: "", active: true, reports_to: "" });
     setSelectedUnitIds([]);
+    setSelectedCompanyIds([]);
     setSelectedAgents(new Set());
     setModalOpen(true);
   };
@@ -92,6 +94,7 @@ export default function Colaboradores() {
       company_id: c.company_id, role_id: c.role_id, active: c.active, reports_to: c.reports_to || "",
     });
     setSelectedUnitIds(Array.isArray(c.unit_ids) ? c.unit_ids : c.unit_id ? [c.unit_id] : []);
+    setSelectedCompanyIds(Array.isArray(c.company_ids) ? c.company_ids : []);
     const { data } = await supabase.from("collaborator_agent_access").select("agent_id, has_access").eq("collaborator_id", c.id);
     const overrides = new Map((data || []).map((d: any) => [d.agent_id, d.has_access]));
     const roleAgents = new Set(roleAgentAccess.filter(r => r.role_id === c.role_id).map(r => r.agent_id));
@@ -106,7 +109,14 @@ export default function Colaboradores() {
   const handleCompanyChange = (companyId: string) => {
     setForm(prev => ({ ...prev, company_id: companyId, role_id: "", reports_to: "" }));
     setSelectedUnitIds([]);
+    setSelectedCompanyIds(prev => prev.filter(id => id !== companyId));
     setSelectedAgents(new Set());
+  };
+
+  const toggleCompanyId = (companyId: string) => {
+    setSelectedCompanyIds(prev =>
+      prev.includes(companyId) ? prev.filter(id => id !== companyId) : [...prev, companyId]
+    );
   };
 
   const handleRoleChange = (roleId: string) => {
@@ -127,6 +137,7 @@ export default function Colaboradores() {
       role_id: form.role_id, active: form.active,
       unit_id: selectedUnitIds.length > 0 ? selectedUnitIds[0] : null,
       unit_ids: selectedUnitIds.length > 0 ? selectedUnitIds : null,
+      company_ids: selectedCompanyIds.length > 0 ? selectedCompanyIds : null,
       reports_to: form.reports_to || null,
     };
 
@@ -293,6 +304,26 @@ export default function Colaboradores() {
                 <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            {companies.length > 1 && (
+              <div>
+                <Label className="mb-1 block">Empresas adicionais</Label>
+                <p className="text-xs text-muted-foreground mb-1">Selecione empresas adicionais além da principal</p>
+                <div className="rounded-md border border-border bg-background max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(240 10% 58% / 0.3) transparent' }}>
+                  <div className="p-2 space-y-1">
+                    {companies.filter(c => c.id !== form.company_id).map(c => (
+                      <label key={c.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted/50 transition-colors">
+                        <Checkbox checked={selectedCompanyIds.includes(c.id)} onCheckedChange={() => toggleCompanyId(c.id)} />
+                        <span className="text-sm text-foreground">{c.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {selectedCompanyIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">{selectedCompanyIds.length} empresa(s) adicional(is)</p>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Cargo *</Label>
