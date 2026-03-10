@@ -79,7 +79,8 @@ export default function Colaboradores() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", email: "", phone: "", whatsapp: "", company_id: "", role_id: "", unit_id: "", active: true });
+    setForm({ name: "", email: "", phone: "", whatsapp: "", company_id: "", role_id: "", active: true, reports_to: "" });
+    setSelectedUnitIds([]);
     setSelectedAgents(new Set());
     setModalOpen(true);
   };
