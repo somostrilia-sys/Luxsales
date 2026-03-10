@@ -12,6 +12,7 @@ import Colaboradores from "./pages/Colaboradores";
 import Cadastro from "./pages/Cadastro";
 import Extracao from "./pages/Extracao";
 import BaseDados from "./pages/BaseDados";
+import Agentes from "./pages/Agentes";
 import Metricas from "./pages/Metricas";
 import Conversas from "./pages/Conversas";
 import MeuBot from "./pages/MeuBot";
