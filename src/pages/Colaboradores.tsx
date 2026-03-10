@@ -137,6 +137,7 @@ export default function Colaboradores() {
       role_id: form.role_id, active: form.active,
       unit_id: selectedUnitIds.length > 0 ? selectedUnitIds[0] : null,
       unit_ids: selectedUnitIds.length > 0 ? selectedUnitIds : null,
+      company_ids: selectedCompanyIds.length > 0 ? selectedCompanyIds : null,
       reports_to: form.reports_to || null,
     };
 
