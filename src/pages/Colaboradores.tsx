@@ -109,7 +109,14 @@ export default function Colaboradores() {
   const handleCompanyChange = (companyId: string) => {
     setForm(prev => ({ ...prev, company_id: companyId, role_id: "", reports_to: "" }));
     setSelectedUnitIds([]);
+    setSelectedCompanyIds(prev => prev.filter(id => id !== companyId));
     setSelectedAgents(new Set());
+  };
+
+  const toggleCompanyId = (companyId: string) => {
+    setSelectedCompanyIds(prev =>
+      prev.includes(companyId) ? prev.filter(id => id !== companyId) : [...prev, companyId]
+    );
   };
 
   const handleRoleChange = (roleId: string) => {
