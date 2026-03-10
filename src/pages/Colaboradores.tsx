@@ -33,16 +33,18 @@ export default function Colaboradores() {
 
   const [form, setForm] = useState({
     name: "", email: "", phone: "", whatsapp: "",
-    company_id: "", role_id: "", unit_id: "", active: true,
+    company_id: "", role_id: "", active: true, reports_to: "",
   });
+  const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
+  const [allCollaborators, setAllCollaborators] = useState<any[]>([]);
 
   useEffect(() => { loadData(); }, [selectedCompanyId]);
 
   const loadData = async () => {
     setLoading(true);
     let collabQuery = supabase.from("collaborators").select(`
-      id, name, email, phone, whatsapp, active, company_id, role_id, unit_id,
+      id, name, email, phone, whatsapp, active, company_id, role_id, unit_id, unit_ids, reports_to,
       company:companies!collaborators_company_id_fkey(id, name),
       role:roles!collaborators_role_id_fkey(id, name, level),
       unit:units!collaborators_unit_id_fkey(id, name)
@@ -50,13 +52,14 @@ export default function Colaboradores() {
 
     if (selectedCompanyId !== "all") collabQuery = collabQuery.eq("company_id", selectedCompanyId);
 
-    const [collabRes, compRes, roleRes, unitRes, agentRes, raaRes] = await Promise.all([
+    const [collabRes, compRes, roleRes, unitRes, agentRes, raaRes, allCollabRes] = await Promise.all([
       collabQuery,
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("roles").select("id, name, level, company_id").order("level"),
       supabase.from("units").select("id, name, company_id").order("name"),
       supabase.from("agent_definitions").select("id, name, emoji, company_id").eq("active", true).order("name"),
       supabase.from("role_agent_access").select("role_id, agent_id"),
+      supabase.from("collaborators").select("id, name, email, company_id").eq("active", true).order("name"),
     ]);
     setCollaborators(collabRes.data || []);
     setCompanies(compRes.data || []);
@@ -64,6 +67,7 @@ export default function Colaboradores() {
     setUnits(unitRes.data || []);
     setAgents(agentRes.data || []);
     setRoleAgentAccess(raaRes.data || []);
+    setAllCollaborators(allCollabRes.data || []);
     setLoading(false);
   };
 
@@ -75,7 +79,8 @@ export default function Colaboradores() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", email: "", phone: "", whatsapp: "", company_id: "", role_id: "", unit_id: "", active: true });
+    setForm({ name: "", email: "", phone: "", whatsapp: "", company_id: "", role_id: "", active: true, reports_to: "" });
+    setSelectedUnitIds([]);
     setSelectedAgents(new Set());
     setModalOpen(true);
   };
@@ -84,8 +89,9 @@ export default function Colaboradores() {
     setEditing(c);
     setForm({
       name: c.name, email: c.email, phone: c.phone || "", whatsapp: c.whatsapp || "",
-      company_id: c.company_id, role_id: c.role_id, unit_id: c.unit_id || "", active: c.active,
+      company_id: c.company_id, role_id: c.role_id, active: c.active, reports_to: c.reports_to || "",
     });
+    setSelectedUnitIds(Array.isArray(c.unit_ids) ? c.unit_ids : c.unit_id ? [c.unit_id] : []);
     const { data } = await supabase.from("collaborator_agent_access").select("agent_id, has_access").eq("collaborator_id", c.id);
     const overrides = new Map((data || []).map((d: any) => [d.agent_id, d.has_access]));
     const roleAgents = new Set(roleAgentAccess.filter(r => r.role_id === c.role_id).map(r => r.agent_id));
@@ -98,7 +104,8 @@ export default function Colaboradores() {
   };
 
   const handleCompanyChange = (companyId: string) => {
-    setForm(prev => ({ ...prev, company_id: companyId, role_id: "", unit_id: "" }));
+    setForm(prev => ({ ...prev, company_id: companyId, role_id: "", reports_to: "" }));
+    setSelectedUnitIds([]);
     setSelectedAgents(new Set());
   };
 
@@ -114,10 +121,13 @@ export default function Colaboradores() {
       return;
     }
 
-    const payload = {
+    const payload: any = {
       name: form.name, email: form.email, phone: form.phone || null,
       whatsapp: form.whatsapp || null, company_id: form.company_id,
-      role_id: form.role_id, unit_id: form.unit_id || null, active: form.active,
+      role_id: form.role_id, active: form.active,
+      unit_id: selectedUnitIds.length > 0 ? selectedUnitIds[0] : null,
+      unit_ids: selectedUnitIds.length > 0 ? selectedUnitIds : null,
+      reports_to: form.reports_to || null,
     };
 
     let collabId: string;
@@ -169,6 +179,13 @@ export default function Colaboradores() {
   const filteredRoles = roles.filter(r => !form.company_id || r.company_id === form.company_id);
   const filteredUnits = units.filter(u => !form.company_id || u.company_id === form.company_id);
   const filteredAgents = agents.filter(a => !form.company_id || a.company_id === form.company_id);
+  const filteredCollabs = allCollaborators.filter(c => !form.company_id || c.company_id === form.company_id);
+
+  const toggleUnit = (unitId: string) => {
+    setSelectedUnitIds(prev =>
+      prev.includes(unitId) ? prev.filter(id => id !== unitId) : [...prev, unitId]
+    );
+  };
 
   return (
     <DashboardLayout>
@@ -221,7 +238,13 @@ export default function Colaboradores() {
                       <TableCell>{c.phone || "—"}</TableCell>
                       <TableCell>{c.company?.name || "—"}</TableCell>
                       <TableCell>{c.role?.name || "—"}</TableCell>
-                      <TableCell>{c.unit?.name || "—"}</TableCell>
+                      <TableCell>
+                        {(() => {
+                          const ids = Array.isArray(c.unit_ids) ? c.unit_ids : c.unit_id ? [c.unit_id] : [];
+                          const names = ids.map((id: string) => units.find(u => u.id === id)?.name).filter(Boolean);
+                          return names.length > 0 ? names.join(", ") : "—";
+                        })()}
+                      </TableCell>
                       <TableCell>
                         <Badge className={c.active ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"}>
                           {c.active ? "Ativo" : "Inativo"}
@@ -279,13 +302,33 @@ export default function Colaboradores() {
                 </Select>
               </div>
               <div>
-                <Label>Unidade</Label>
-                <Select value={form.unit_id} onValueChange={v => setForm({ ...form, unit_id: v })}>
+                <Label>Superior Direto</Label>
+                <Select value={form.reports_to} onValueChange={v => setForm({ ...form, reports_to: v })}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{filteredUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
+                  <SelectContent>{filteredCollabs.filter(c => !editing || c.id !== editing.id).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
+
+            {filteredUnits.length > 0 && (
+              <div>
+                <Label className="mb-1 block">Unidades</Label>
+                <p className="text-xs text-muted-foreground mb-1">Selecione as unidades (role para ver todas)</p>
+                <div className="rounded-md border border-border bg-background max-h-72 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(240 10% 58% / 0.3) transparent' }}>
+                  <div className="p-2 space-y-1">
+                    {filteredUnits.map(u => (
+                      <label key={u.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted/50 transition-colors">
+                        <Checkbox checked={selectedUnitIds.includes(u.id)} onCheckedChange={() => toggleUnit(u.id)} />
+                        <span className="text-sm text-foreground">{u.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {selectedUnitIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">{selectedUnitIds.length} unidade(s) selecionada(s)</p>
+                )}
+              </div>
+            )}
 
             {filteredAgents.length > 0 && (
               <div>
