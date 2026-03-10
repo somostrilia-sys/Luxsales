@@ -54,14 +54,14 @@ export function CollaboratorProvider({ children }: { children: ReactNode }) {
     const { data, error: fetchError } = await supabase
       .from("collaborators")
       .select(`
-        id, user_id, name, email, phone, whatsapp, is_active,
+        id, auth_user_id, name, email, phone, whatsapp, is_active,
         company_id, role_id, sector_id, unit_id,
         company:companies!collaborators_company_id_fkey(id, name, slug),
         role:roles!collaborators_role_id_fkey(id, name, level),
         sector:sectors!collaborators_sector_id_fkey(id, name),
         unit:units!collaborators_unit_id_fkey(id, name)
       `)
-      .eq("user_id", user.id)
+      .eq("auth_user_id", user.id)
       .eq("is_active", true)
       .maybeSingle();
 
