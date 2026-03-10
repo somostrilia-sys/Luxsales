@@ -33,9 +33,11 @@ export default function Colaboradores() {
 
   const [form, setForm] = useState({
     name: "", email: "", phone: "", whatsapp: "",
-    company_id: "", role_id: "", unit_id: "", active: true,
+    company_id: "", role_id: "", active: true, reports_to: "",
   });
+  const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
+  const [allCollaborators, setAllCollaborators] = useState<any[]>([]);
 
   useEffect(() => { loadData(); }, [selectedCompanyId]);
 
