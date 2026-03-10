@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { AnimatedBackground } from "@/components/AnimatedBackground";
+
 import { toast } from "sonner";
 import { Bot, Mail, Lock, Loader2 } from "lucide-react";
 
