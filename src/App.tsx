@@ -16,6 +16,7 @@ import Agentes from "./pages/Agentes";
 import Metricas from "./pages/Metricas";
 import Conversas from "./pages/Conversas";
 import MeuBot from "./pages/MeuBot";
+import Bots from "./pages/Bots";
 import Configuracoes from "./pages/Configuracoes";
 import IdentidadeVisual from "./pages/IdentidadeVisual";
 import Login from "./pages/Login";
