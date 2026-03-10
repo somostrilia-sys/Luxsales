@@ -1,6 +1,5 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -34,7 +33,6 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 <span className="text-xs text-muted-foreground font-medium">{collaborator.company.name}</span>
               )}
             </div>
-            <ThemeToggle />
           </header>
           <main className="flex-1 p-6 overflow-auto">{children}</main>
         </div>

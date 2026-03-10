@@ -9,6 +9,7 @@ import { CompanyFilterProvider } from "@/contexts/CompanyFilterContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Colaboradores from "./pages/Colaboradores";
+import Cadastro from "./pages/Cadastro";
 import Extracao from "./pages/Extracao";
 import BaseDados from "./pages/BaseDados";
 import Metricas from "./pages/Metricas";
@@ -40,13 +41,14 @@ const App = () => (
                 <Route path="/reset-password" element={<ResetPassword />} />
 
                 <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-                <Route path="/extracao" element={<ProtectedRoute minLevel={2}><Extracao /></ProtectedRoute>} />
+                <Route path="/extracao" element={<ProtectedRoute><Extracao /></ProtectedRoute>} />
                 <Route path="/base-dados" element={<ProtectedRoute minLevel={2}><BaseDados /></ProtectedRoute>} />
                 <Route path="/conversas" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
                 <Route path="/meu-bot" element={<ProtectedRoute><MeuBot /></ProtectedRoute>} />
-                <Route path="/metricas" element={<ProtectedRoute minLevel={2}><Metricas /></ProtectedRoute>} />
-                <Route path="/colaboradores" element={<ProtectedRoute minLevel={0}><Colaboradores /></ProtectedRoute>} />
-                <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+                <Route path="/metricas" element={<ProtectedRoute><Metricas /></ProtectedRoute>} />
+                <Route path="/colaboradores" element={<ProtectedRoute minLevel={2}><Colaboradores /></ProtectedRoute>} />
+                <Route path="/cadastro" element={<ProtectedRoute minLevel={1}><Cadastro /></ProtectedRoute>} />
+                <Route path="/configuracoes" element={<ProtectedRoute minLevel={1}><Configuracoes /></ProtectedRoute>} />
                 <Route path="/identidade-visual" element={<ProtectedRoute minLevel={0}><IdentidadeVisual /></ProtectedRoute>} />
 
                 <Route path="*" element={<NotFound />} />

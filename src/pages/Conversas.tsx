@@ -39,7 +39,7 @@ export default function Conversas() {
 
     if (allowedIds.size > 0) {
       const { data } = await supabase.from("agent_definitions").select("id, name, emoji, description")
-        .in("id", Array.from(allowedIds)).eq("is_active", true).order("name");
+        .in("id", Array.from(allowedIds)).eq("active", true).order("name");
       setAgents((data || []) as AgentItem[]);
     }
     setLoading(false);
@@ -120,7 +120,7 @@ export default function Conversas() {
             <div className="flex gap-2 max-w-3xl mx-auto">
               <Input value={input} onChange={e => setInput(e.target.value)} placeholder="Digite sua mensagem..."
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()} />
-              <Button onClick={sendMessage} disabled={sending || !input.trim()}>
+              <Button onClick={sendMessage} disabled={sending || !input.trim()} className="btn-modern">
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
@@ -142,7 +142,7 @@ export default function Conversas() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {agents.map(agent => (
-              <Card key={agent.id} className="cursor-pointer hover:shadow-md transition-shadow shadow-sm" onClick={() => openChat(agent)}>
+              <Card key={agent.id} className="cursor-pointer hover:bg-[hsl(var(--card-hover))] transition-colors" onClick={() => openChat(agent)}>
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-3 mb-3">
                     <span className="text-3xl">{agent.emoji}</span>

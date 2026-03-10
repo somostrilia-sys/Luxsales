@@ -11,10 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { toast } from "sonner";
-import { Plus, Pencil, Loader2 } from "lucide-react";
+import { Plus, Pencil, Loader2, Trash2, UserX, UserCheck } from "lucide-react";
 
 export default function Colaboradores() {
+  const { isCEO } = useCollaborator();
+  const { selectedCompanyId } = useCompanyFilter();
   const [collaborators, setCollaborators] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
@@ -29,25 +33,29 @@ export default function Colaboradores() {
 
   const [form, setForm] = useState({
     name: "", email: "", phone: "", whatsapp: "",
-    company_id: "", role_id: "", unit_id: "", is_active: true,
+    company_id: "", role_id: "", unit_id: "", active: true,
   });
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [selectedCompanyId]);
 
   const loadData = async () => {
     setLoading(true);
+    let collabQuery = supabase.from("collaborators").select(`
+      id, name, email, phone, whatsapp, active, company_id, role_id, unit_id,
+      company:companies!collaborators_company_id_fkey(id, name),
+      role:roles!collaborators_role_id_fkey(id, name, level),
+      unit:units!collaborators_unit_id_fkey(id, name)
+    `).order("name");
+
+    if (selectedCompanyId !== "all") collabQuery = collabQuery.eq("company_id", selectedCompanyId);
+
     const [collabRes, compRes, roleRes, unitRes, agentRes, raaRes] = await Promise.all([
-      supabase.from("collaborators").select(`
-        id, name, email, phone, whatsapp, is_active, company_id, role_id, unit_id,
-        company:companies!collaborators_company_id_fkey(id, name),
-        role:roles!collaborators_role_id_fkey(id, name, level),
-        unit:units!collaborators_unit_id_fkey(id, name)
-      `).order("name"),
+      collabQuery,
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("roles").select("id, name, level, company_id").order("level"),
       supabase.from("units").select("id, name, company_id").order("name"),
-      supabase.from("agent_definitions").select("id, name, emoji, company_id").eq("is_active", true).order("name"),
+      supabase.from("agent_definitions").select("id, name, emoji, company_id").eq("active", true).order("name"),
       supabase.from("role_agent_access").select("role_id, agent_id"),
     ]);
     setCollaborators(collabRes.data || []);
@@ -67,7 +75,7 @@ export default function Colaboradores() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", email: "", phone: "", whatsapp: "", company_id: "", role_id: "", unit_id: "", is_active: true });
+    setForm({ name: "", email: "", phone: "", whatsapp: "", company_id: "", role_id: "", unit_id: "", active: true });
     setSelectedAgents(new Set());
     setModalOpen(true);
   };
@@ -76,7 +84,7 @@ export default function Colaboradores() {
     setEditing(c);
     setForm({
       name: c.name, email: c.email, phone: c.phone || "", whatsapp: c.whatsapp || "",
-      company_id: c.company_id, role_id: c.role_id, unit_id: c.unit_id || "", is_active: c.is_active,
+      company_id: c.company_id, role_id: c.role_id, unit_id: c.unit_id || "", active: c.active,
     });
     const { data } = await supabase.from("collaborator_agent_access").select("agent_id, has_access").eq("collaborator_id", c.id);
     const overrides = new Map((data || []).map((d: any) => [d.agent_id, d.has_access]));
@@ -109,7 +117,7 @@ export default function Colaboradores() {
     const payload = {
       name: form.name, email: form.email, phone: form.phone || null,
       whatsapp: form.whatsapp || null, company_id: form.company_id,
-      role_id: form.role_id, unit_id: form.unit_id || null, is_active: form.is_active,
+      role_id: form.role_id, unit_id: form.unit_id || null, active: form.active,
     };
 
     let collabId: string;
@@ -138,6 +146,26 @@ export default function Colaboradores() {
     loadData();
   };
 
+  const manageCollaborator = async (action: string, collaboratorId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/manage-collaborator`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ action, collaborator_id: collaboratorId }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro");
+      toast.success(action === "delete" ? "Colaborador excluído" : action === "deactivate" ? "Colaborador desativado" : "Colaborador ativado");
+      loadData();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
   const filteredRoles = roles.filter(r => !form.company_id || r.company_id === form.company_id);
   const filteredUnits = units.filter(u => !form.company_id || u.company_id === form.company_id);
   const filteredAgents = agents.filter(a => !form.company_id || a.company_id === form.company_id);
@@ -147,7 +175,7 @@ export default function Colaboradores() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Colaboradores</h1>
-          <Button onClick={openCreate}><Plus className="h-4 w-4 mr-1" /> Novo Colaborador</Button>
+          <Button onClick={openCreate} className="btn-modern"><Plus className="h-4 w-4 mr-1" /> Novo Colaborador</Button>
         </div>
 
         <div className="flex gap-3">
@@ -167,7 +195,7 @@ export default function Colaboradores() {
           </Select>
         </div>
 
-        <Card className="shadow-sm">
+        <Card>
           <CardContent className="p-0">
             {loading ? (
               <div className="flex justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
@@ -182,7 +210,7 @@ export default function Colaboradores() {
                     <TableHead>Cargo</TableHead>
                     <TableHead>Unidade</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="w-16">Ações</TableHead>
+                    <TableHead className="w-28">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -195,14 +223,26 @@ export default function Colaboradores() {
                       <TableCell>{c.role?.name || "—"}</TableCell>
                       <TableCell>{c.unit?.name || "—"}</TableCell>
                       <TableCell>
-                        <Badge className={c.is_active ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"}>
-                          {c.is_active ? "Ativo" : "Inativo"}
+                        <Badge className={c.active ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"}>
+                          {c.active ? "Ativo" : "Inativo"}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(c)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(c)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          {isCEO && (
+                            <>
+                              <Button variant="ghost" size="sm" onClick={() => manageCollaborator(c.active ? "deactivate" : "activate", c.id)} title={c.active ? "Desativar" : "Ativar"}>
+                                {c.active ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => manageCollaborator("delete", c.id)} title="Excluir" className="text-destructive hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -271,13 +311,13 @@ export default function Colaboradores() {
             )}
 
             <div className="flex items-center gap-2">
-              <Switch checked={form.is_active} onCheckedChange={v => setForm({ ...form, is_active: v })} />
+              <Switch checked={form.active} onCheckedChange={v => setForm({ ...form, active: v })} />
               <Label>Ativo</Label>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button onClick={save}>{editing ? "Salvar" : "Criar"}</Button>
+            <Button onClick={save} className="btn-modern">{editing ? "Salvar" : "Criar"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

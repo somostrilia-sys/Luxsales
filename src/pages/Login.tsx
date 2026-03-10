@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-
 import { toast } from "sonner";
-import { Bot, Mail, Lock, Loader2 } from "lucide-react";
+import { Mail, Lock, Loader2 } from "lucide-react";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -19,9 +18,7 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
     const { error } = await signIn(email, password);
-    
     if (error) {
       toast.error("Erro ao entrar", { description: error.message });
     } else {
@@ -32,12 +29,11 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative">
-      
-      <Card className="w-full max-w-md bg-card/80 backdrop-blur-md border-border/50 shadow-2xl animate-fade-in">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+      <Card className="w-full max-w-md border-border">
         <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-kpi-from to-kpi-to flex items-center justify-center shadow-glow">
-            <Bot className="h-8 w-8 text-white" />
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-primary flex items-center justify-center">
+            <span className="text-primary-foreground font-extrabold text-2xl">W</span>
           </div>
           <div>
             <CardTitle className="text-2xl font-bold">Bem-vindo de volta</CardTitle>
@@ -50,48 +46,28 @@ export default function Login() {
               <Label htmlFor="email">E-mail</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="seu@email.com"
-                  className="pl-10"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
+                <Input id="email" type="email" placeholder="seu@email.com" className="pl-10" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  className="pl-10"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+                <Input id="password" type="password" placeholder="••••••••" className="pl-10" value={password} onChange={(e) => setPassword(e.target.value)} required />
               </div>
             </div>
             <div className="flex justify-end">
-              <Link to="/forgot-password" className="text-sm text-primary hover:underline">
-                Esqueceu a senha?
-              </Link>
+              <Link to="/forgot-password" className="text-sm text-primary hover:underline">Esqueceu a senha?</Link>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full btn-shimmer bg-gradient-to-r from-kpi-from to-kpi-to" disabled={loading}>
+            <Button type="submit" className="w-full btn-modern" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Entrar
             </Button>
             <p className="text-sm text-muted-foreground text-center">
               Não tem conta?{" "}
-              <Link to="/register" className="text-primary hover:underline font-medium">
-                Cadastre-se
-              </Link>
+              <Link to="/register" className="text-primary hover:underline font-medium">Cadastre-se</Link>
             </p>
           </CardFooter>
         </form>
