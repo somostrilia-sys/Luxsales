@@ -19,6 +19,7 @@ import Configuracoes from "./pages/Configuracoes";
 import IdentidadeVisual from "./pages/IdentidadeVisual";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Registro from "./pages/Registro";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
@@ -37,6 +38,7 @@ const App = () => (
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/registro" element={<Registro />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
 
