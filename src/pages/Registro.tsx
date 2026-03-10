@@ -38,10 +38,10 @@ export default function Registro() {
   useEffect(() => {
     if (!companyId) { setRoles([]); setSectors([]); setUnits([]); setCollaborators([]); setRoleId(""); setSectorId(""); setSelectedUnitIds([]); setReportsTo(""); return; }
     setRoleId(""); setSectorId(""); setSelectedUnitIds([]); setReportsTo("");
-    supabase.from("roles").select("id, name, level").eq("company_id", companyId).eq("active", true).gte("level", 1).order("name").then(({ data }) => { if (data) setRoles(data); });
-    supabase.from("sectors").select("id, name").eq("company_id", companyId).order("name").then(({ data }) => { if (data) setSectors(data); });
-    supabase.from("units").select("id, name").eq("company_id", companyId).order("name").then(({ data }) => { if (data) setUnits(data); });
-    supabase.from("collaborators").select("id, name, email").eq("company_id", companyId).eq("active", true).order("name").then(({ data }) => { if (data) setCollaborators(data); });
+    supabase.from("roles").select("id, name, level").eq("company_id", companyId).eq("active", true).gte("level", 1).order("name").limit(1000).then(({ data }) => { if (data) setRoles(data); });
+    supabase.from("sectors").select("id, name").eq("company_id", companyId).order("name").limit(1000).then(({ data }) => { if (data) setSectors(data); });
+    supabase.from("units").select("id, name").eq("company_id", companyId).order("name").limit(1000).then(({ data }) => { if (data) setUnits(data); });
+    supabase.from("collaborators").select("id, name, email").eq("company_id", companyId).eq("active", true).order("name").limit(1000).then(({ data }) => { if (data) setCollaborators(data); });
   }, [companyId]);
 
   const toggleUnit = (unitId: string) => {
