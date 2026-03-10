@@ -1,0 +1,5 @@
+[project]
+id = "ecaduzwautlpzpvjognr"
+
+[functions.unified-extract]
+verify_jwt = false
