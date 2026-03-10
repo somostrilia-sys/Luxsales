@@ -60,7 +60,12 @@ export default function Cadastro() {
 
   const filteredRoles = roles.filter(r => !form.company_id || r.company_id === form.company_id);
   const filteredSectors = sectors.filter(s => !form.company_id || s.company_id === form.company_id);
-  const filteredSupervisors = collaborators.filter(c => c.company_id === form.company_id);
+  const filteredSupervisors = collaborators.filter(c => {
+    if (!form.company_id) return false;
+    if (c.company_id === form.company_id) return true;
+    if (Array.isArray(c.company_ids) && c.company_ids.includes(form.company_id)) return true;
+    return false;
+  });
 
   const getDefaultPassword = (name: string) => {
     const firstName = name.trim().split(" ")[0];
