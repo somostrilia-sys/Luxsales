@@ -44,7 +44,7 @@ export default function Colaboradores() {
   const loadData = async () => {
     setLoading(true);
     let collabQuery = supabase.from("collaborators").select(`
-      id, name, email, phone, whatsapp, active, company_id, role_id, unit_id,
+      id, name, email, phone, whatsapp, active, company_id, role_id, unit_id, unit_ids, reports_to,
       company:companies!collaborators_company_id_fkey(id, name),
       role:roles!collaborators_role_id_fkey(id, name, level),
       unit:units!collaborators_unit_id_fkey(id, name)
