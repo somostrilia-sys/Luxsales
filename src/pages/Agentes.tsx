@@ -100,7 +100,7 @@ export default function Agentes() {
       setAccess(prev => prev.filter(a => !(a.agent_id === agent.id && roleIds.includes(a.role_id))));
     } else {
       const inserts = companyRoles.map(r => ({ agent_id: agent.id, role_id: r.id }));
-      const { error } = await supabase.from("role_agent_access").insert(inserts);
+      const { error } = await supabase.from("role_agent_access").upsert(inserts, { onConflict: "role_id,agent_id" });
       if (error) {
         toast({ title: "Erro", description: error.message, variant: "destructive" });
         return;
