@@ -75,16 +75,12 @@ export default function Index() {
     });
 
     // Usage limits for consultants
-    if (roleLevel === 3 && collaborator?.role_id) {
-      const { data: roleData } = await supabase.from("roles").select("usage_limits").eq("id", collaborator.role_id).single();
-      if (roleData?.usage_limits) {
-        setUsageLimits(roleData.usage_limits);
-        // Count today's usage
-        let todayLeads = supabase.from("contact_leads").select("id", { count: "exact", head: true }).gte("created_at", today);
-        if (companyFilter) todayLeads = todayLeads.eq("company_target", companyFilter);
-        const { count: lc } = await todayLeads;
-        setUsageCounts({ leads: lc || 0, extractions: 0 });
-      }
+    if (roleData?.usage_limits) {
+      setUsageLimits(roleData.usage_limits);
+      let todayLeads = supabase.from("contact_leads").select("id", { count: "exact", head: true }).gte("created_at", today);
+      if (companyFilter) todayLeads = todayLeads.eq("company_target", companyFilter);
+      const { count: lc } = await todayLeads;
+      setUsageCounts({ leads: lc || 0, extractions: 0 });
     }
 
     setLoading(false);
