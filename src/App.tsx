@@ -19,6 +19,7 @@ import MeuBot from "./pages/MeuBot";
 import Bots from "./pages/Bots";
 import Configuracoes from "./pages/Configuracoes";
 import IdentidadeVisual from "./pages/IdentidadeVisual";
+import CeoBolt from "./pages/CeoBolt";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Registro from "./pages/Registro";
@@ -56,6 +57,7 @@ const App = () => (
                 <Route path="/cadastro" element={<ProtectedRoute minLevel={1}><Cadastro /></ProtectedRoute>} />
                 <Route path="/configuracoes" element={<ProtectedRoute minLevel={1}><Configuracoes /></ProtectedRoute>} />
                 <Route path="/identidade-visual" element={<ProtectedRoute minLevel={0}><IdentidadeVisual /></ProtectedRoute>} />
+                <Route path="/ceo" element={<ProtectedRoute minLevel={0}><CeoBolt /></ProtectedRoute>} />
 
                 <Route path="*" element={<NotFound />} />
               </Routes>

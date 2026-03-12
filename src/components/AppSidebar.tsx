@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu
+  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -29,6 +29,7 @@ const managementItems: MenuItem[] = [
   { title: "Métricas", url: "/metricas", icon: BarChart3, levels: [0, 1, 2] },
   { title: "Identidade Visual", url: "/identidade-visual", icon: Palette, levels: [0] },
   { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0, 1] },
+  { title: "CEO / Bolt", url: "/ceo", icon: Crown, levels: [0] },
 ];
 
 const consultantItems: MenuItem[] = [
