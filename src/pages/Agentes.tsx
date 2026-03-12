@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Bot, Plus, Search } from "lucide-react";
+import { Bot, Plus, Search, Info } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 
@@ -17,6 +17,8 @@ interface Agent {
   slug: string;
   active: boolean;
   company_id: string;
+  description: string | null;
+  agent_type: string | null;
 }
 
 interface Company {
@@ -52,11 +54,12 @@ export default function Agentes() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [detailAgent, setDetailAgent] = useState<Agent | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [agentsRes, companiesRes, rolesRes, accessRes] = await Promise.all([
-      supabase.from("agent_definitions").select("id, name, slug, active, company_id"),
+      supabase.from("agent_definitions").select("id, name, slug, active, company_id, description, agent_type"),
       supabase.from("companies").select("id, name"),
       supabase.from("roles").select("id, level, company_id"),
       supabase.from("role_agent_access").select("agent_id, role_id"),
@@ -171,10 +174,19 @@ export default function Agentes() {
                         <p className="text-xs text-muted-foreground truncate">{companyName(agent.company_id)}</p>
                       </div>
                     </div>
-                    <Badge variant={agent.active ? "default" : "secondary"} className={agent.active ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : ""}>
-                      {agent.active ? "Ativo" : "Inativo"}
-                    </Badge>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDetailAgent(agent)}>
+                        <Info className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                      <Badge variant={agent.active ? "default" : "secondary"} className={agent.active ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : ""}>
+                        {agent.active ? "Ativo" : "Inativo"}
+                      </Badge>
+                    </div>
                   </div>
+
+                  {agent.description && (
+                    <p className="text-xs text-muted-foreground line-clamp-2">{agent.description}</p>
+                  )}
 
                   <div className="space-y-2.5 pt-1 border-t border-border">
                     <p className="text-[11px] text-muted-foreground uppercase tracking-wider pt-2">Acesso por nível</p>
@@ -195,7 +207,40 @@ export default function Agentes() {
         )}
       </div>
 
-      {/* Modal placeholder */}
+      {/* Detail modal */}
+      <Dialog open={!!detailAgent} onOpenChange={(open) => !open && setDetailAgent(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+              {detailAgent?.name}
+            </DialogTitle>
+            <DialogDescription>Detalhes do agente</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            {detailAgent?.agent_type && (
+              <div>
+                <span className="font-medium text-foreground">Tipo:</span>{" "}
+                <Badge variant="outline">{detailAgent.agent_type}</Badge>
+              </div>
+            )}
+            {detailAgent?.company_id && (
+              <div>
+                <span className="font-medium text-foreground">Empresa:</span>{" "}
+                <span className="text-muted-foreground">{companyName(detailAgent.company_id)}</span>
+              </div>
+            )}
+            <div>
+              <span className="font-medium text-foreground">Descrição:</span>
+              <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
+                {detailAgent?.description || "Sem descrição disponível."}
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* New agent modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent>
           <DialogHeader>
