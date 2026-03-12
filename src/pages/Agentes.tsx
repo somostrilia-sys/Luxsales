@@ -150,7 +150,7 @@ export default function Agentes() {
               placeholder="Buscar agente..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              autoComplete="off"
+              autoComplete="new-password"
               name="agent-search"
               className="pl-9 bg-card border-border"
             />
