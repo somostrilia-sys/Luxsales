@@ -79,7 +79,7 @@ export function AppSidebar() {
             <img
               src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/logos/walk-holding-logo.png"
               alt="Walk Holding"
-              className="h-8 w-auto object-contain max-w-[120px] shrink-0"
+              className="h-14 w-auto object-contain max-w-[180px] shrink-0"
             />
           )}
           {!collapsed && !collaborator?.company?.logo_url && (

@@ -3,6 +3,7 @@ import { Target, Bot, MessageSquare, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
@@ -45,10 +46,19 @@ export default function Index() {
       supabase.from("companies").select("id"),
     ]);
 
-    // Daily chart - leads by day
+    // Daily chart - run in parallel with main queries above
     let dailyQuery = supabase.from("contact_leads").select("created_at").gte("created_at", daysAgo);
     if (selectedCompanyId !== "all") dailyQuery = dailyQuery.eq("company_target", selectedCompanyId);
-    const { data: dailyLeads } = await dailyQuery;
+
+    // Usage limits query (conditional)
+    const usageLimitsPromise = (roleLevel === 3 && collaborator?.role_id)
+      ? supabase.from("roles").select("usage_limits").eq("id", collaborator.role_id).single()
+      : Promise.resolve({ data: null });
+
+    const [{ data: dailyLeads }, { data: roleData }] = await Promise.all([
+      dailyQuery,
+      usageLimitsPromise,
+    ]);
 
     const dayCounts: Record<string, number> = {};
     (dailyLeads || []).forEach((l: any) => {
@@ -65,16 +75,12 @@ export default function Index() {
     });
 
     // Usage limits for consultants
-    if (roleLevel === 3 && collaborator?.role_id) {
-      const { data: roleData } = await supabase.from("roles").select("usage_limits").eq("id", collaborator.role_id).single();
-      if (roleData?.usage_limits) {
-        setUsageLimits(roleData.usage_limits);
-        // Count today's usage
-        let todayLeads = supabase.from("contact_leads").select("id", { count: "exact", head: true }).gte("created_at", today);
-        if (companyFilter) todayLeads = todayLeads.eq("company_target", companyFilter);
-        const { count: lc } = await todayLeads;
-        setUsageCounts({ leads: lc || 0, extractions: 0 });
-      }
+    if (roleData?.usage_limits) {
+      setUsageLimits(roleData.usage_limits);
+      let todayLeads = supabase.from("contact_leads").select("id", { count: "exact", head: true }).gte("created_at", today);
+      if (companyFilter) todayLeads = todayLeads.eq("company_target", companyFilter);
+      const { count: lc } = await todayLeads;
+      setUsageCounts({ leads: lc || 0, extractions: 0 });
     }
 
     setLoading(false);
@@ -112,7 +118,11 @@ export default function Index() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
-                    <p className="text-2xl font-bold mt-1">{loading ? "..." : s.value}</p>
+                    {loading ? (
+                      <Skeleton className="h-7 w-16 mt-1" />
+                    ) : (
+                      <p className="text-2xl font-bold mt-1">{s.value}</p>
+                    )}
                   </div>
                   <div className={`p-2.5 rounded-lg bg-muted ${s.color}`}>
                     <s.icon className="h-5 w-5" />
@@ -154,15 +164,19 @@ export default function Index() {
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Leads por Dia</CardTitle></CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={dailyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", color: "hsl(var(--foreground))" }} />
-                <Bar dataKey="leads" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {loading ? (
+              <Skeleton className="w-full h-[250px] rounded" />
+            ) : (
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={dailyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", color: "hsl(var(--foreground))" }} />
+                  <Bar dataKey="leads" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>
