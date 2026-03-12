@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,24 +10,32 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
-import { Search, Download, Loader2 } from "lucide-react";
+import { Search, Download, Loader2, Filter } from "lucide-react";
+
+const ESTADOS = ["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MG","MS","MT","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SC","SE","SP","TO"];
 
 interface Lead {
+  id?: string;
   name: string;
   phone: string;
   email?: string;
   tipo_pessoa: string;
   city?: string;
+  state?: string;
   category?: string;
   source: string;
   score: number;
+  status?: string;
 }
 
 export default function Extracao() {
   const { companies } = useCompanyFilter();
+
+  // Extraction form
   const [cep, setCep] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
@@ -37,9 +45,20 @@ export default function Extracao() {
   const [radius, setRadius] = useState([10]);
   const [extracting, setExtracting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [results, setResults] = useState<Lead[]>([]);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  // Leads listing (from DB)
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [totalLeads, setTotalLeads] = useState(0);
+  const [loadingLeads, setLoadingLeads] = useState(false);
   const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  // Filters
+  const [filterCity, setFilterCity] = useState("");
+  const [filterState, setFilterState] = useState("all");
+  const [filterType, setFilterType] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [searchName, setSearchName] = useState("");
 
   const perPage = 50;
 
@@ -70,6 +89,49 @@ export default function Extracao() {
     setSources(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
   };
 
+  // Load leads from contact_leads table
+  const loadLeads = useCallback(async () => {
+    setLoadingLeads(true);
+    try {
+      let query = supabase.from("contact_leads").select("*", { count: "exact" });
+
+      if (filterCity) query = query.ilike("city", `%${filterCity}%`);
+      if (filterState !== "all") query = query.eq("state", filterState);
+      if (filterType !== "all") query = query.eq("tipo_pessoa", filterType);
+      if (filterStatus !== "all") query = query.eq("status", filterStatus);
+      if (searchName) query = query.ilike("name", `%${searchName}%`);
+
+      const { data, count, error } = await query
+        .order("created_at", { ascending: false })
+        .range(page * perPage, (page + 1) * perPage - 1);
+
+      if (error) throw error;
+      setLeads((data || []).map((d: any) => ({
+        id: d.id,
+        name: d.name || d.nome || "—",
+        phone: d.phone || d.telefone || "—",
+        email: d.email,
+        tipo_pessoa: d.tipo_pessoa || "PJ",
+        city: d.city || d.cidade || "",
+        state: d.state || d.estado || "",
+        category: d.category || d.categoria || "",
+        source: d.source || d.fonte || "pj_base",
+        score: d.score || 0,
+        status: d.status || "novo",
+      })));
+      setTotalLeads(count || 0);
+    } catch (e: any) {
+      toast.error("Erro ao carregar leads: " + e.message);
+    } finally {
+      setLoadingLeads(false);
+    }
+  }, [page, filterCity, filterState, filterType, filterStatus, searchName]);
+
+  useEffect(() => { loadLeads(); }, [loadLeads]);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(0); }, [filterCity, filterState, filterType, filterStatus, searchName]);
+
   const handleExtract = async () => {
     const digits = cep.replace("-", "");
     if (digits.length !== 8) { toast.error("CEP inválido"); return; }
@@ -77,14 +139,12 @@ export default function Extracao() {
 
     setExtracting(true);
     setProgress(10);
-    setResults([]);
 
     try {
-      const projectId = "ecaduzwautlpzpvjognr";
       const { data: { session } } = await supabase.auth.getSession();
-
       setProgress(30);
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/unified-extract`, {
+
+      const res = await fetch(`https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/unified-extract`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -102,9 +162,10 @@ export default function Extracao() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro na extração");
 
-      setResults(data.leads || []);
       setProgress(100);
       toast.success(`${(data.leads || []).length} leads extraídos!`);
+      // Reload the listing to show new leads
+      await loadLeads();
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -121,156 +182,149 @@ export default function Extracao() {
   };
 
   const toggleAll = () => {
-    const pageItems = results.slice(page * perPage, (page + 1) * perPage);
-    if (selected.size === pageItems.length) setSelected(new Set());
-    else setSelected(new Set(pageItems.map((_, i) => page * perPage + i)));
+    if (selected.size === leads.length) setSelected(new Set());
+    else setSelected(new Set(leads.map((_, i) => i)));
   };
 
   const exportCSV = () => {
-    const items = selected.size > 0 ? Array.from(selected).map(i => results[i]) : results;
-    const header = "Nome,Telefone,Email,Tipo,Cidade,Categoria,Fonte,Score\n";
-    const rows = items.map(l => `"${l.name}","${l.phone}","${l.email || ""}","${l.tipo_pessoa}","${l.city || ""}","${l.category || ""}","${l.source}","${l.score}"`).join("\n");
+    const items = selected.size > 0 ? Array.from(selected).map(i => leads[i]) : leads;
+    const header = "Nome,Telefone,Email,Tipo,Cidade,Estado,Categoria,Fonte,Status,Score\n";
+    const rows = items.map(l => `"${l.name}","${l.phone}","${l.email || ""}","${l.tipo_pessoa}","${l.city || ""}","${l.state || ""}","${l.category || ""}","${l.source}","${l.status || ""}","${l.score}"`).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = "leads.csv"; a.click();
   };
 
-  const scoreBadge = (score: number) => {
-    if (score >= 80) return <Badge className="bg-success text-success-foreground">{score}</Badge>;
-    if (score >= 60) return <Badge className="bg-warning text-warning-foreground">{score}</Badge>;
-    return <Badge variant="secondary">{score}</Badge>;
-  };
-
-  const sourceBadge = (source: string) => {
-    const colors: Record<string, string> = {
-      pj_base: "bg-primary text-primary-foreground",
-      google_maps: "bg-success text-success-foreground",
-      olx: "bg-warning text-warning-foreground",
-      instagram: "bg-purple-600 text-white",
+  const statusBadge = (status: string) => {
+    const map: Record<string, string> = {
+      novo: "bg-primary text-primary-foreground",
+      em_contato: "bg-warning text-warning-foreground",
+      convertido: "bg-success text-success-foreground",
     };
-    return <Badge className={colors[source] || "bg-muted text-muted-foreground"}>{source}</Badge>;
+    const labels: Record<string, string> = { novo: "Novo", em_contato: "Em contato", convertido: "Convertido" };
+    return <Badge className={map[status] || "bg-muted text-muted-foreground"}>{labels[status] || status}</Badge>;
   };
 
-  const pageResults = results.slice(page * perPage, (page + 1) * perPage);
-  const totalPages = Math.ceil(results.length / perPage);
-  const totalPF = results.filter(l => l.tipo_pessoa === "PF").length;
-  const totalPJ = results.filter(l => l.tipo_pessoa === "PJ").length;
-  const totalEmail = results.filter(l => l.email).length;
+  const totalPages = Math.ceil(totalLeads / perPage);
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Extração de Leads</h1>
 
-        <Card className="shadow-sm">
-          <CardContent className="pt-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label>CEP</Label>
-                <Input placeholder="00000-000" value={cep} onChange={e => handleCepChange(e.target.value)} />
-                {city && <p className="text-xs text-muted-foreground mt-1">{bairro && `${bairro}, `}{city}/{state}</p>}
-              </div>
-              <div>
-                <Label>Empresa Alvo</Label>
-                <Select value={companyTarget} onValueChange={setCompanyTarget}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Raio: {radius[0]} km</Label>
-                <Slider value={radius} onValueChange={setRadius} min={5} max={50} step={5} className="mt-2" />
-              </div>
-            </div>
+        <Tabs defaultValue="leads" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="leads">Leads ({totalLeads})</TabsTrigger>
+            <TabsTrigger value="extract">Nova Extração</TabsTrigger>
+          </TabsList>
 
-            <div>
-              <Label className="mb-2 block">Fontes</Label>
-              <div className="flex flex-wrap gap-4">
-                {[
-                  { id: "pj_base", label: "PJ Base" },
-                  { id: "google_maps", label: "Google Maps" },
-                  { id: "olx", label: "OLX" },
-                  { id: "instagram", label: "Instagram" },
-                ].map(s => (
-                  <label key={s.id} className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox checked={sources.includes(s.id)} onCheckedChange={() => toggleSource(s.id)} />
-                    <span className="text-sm">{s.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+          {/* LEADS LISTING TAB */}
+          <TabsContent value="leads" className="space-y-4">
+            {/* Filters */}
+            <Card className="shadow-sm">
+              <CardContent className="pt-4 pb-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  <div>
+                    <Label className="text-xs">Buscar nome</Label>
+                    <Input placeholder="Nome do lead..." value={searchName} onChange={e => setSearchName(e.target.value)} className="h-8 text-sm" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Cidade</Label>
+                    <Input placeholder="Filtrar cidade..." value={filterCity} onChange={e => setFilterCity(e.target.value)} className="h-8 text-sm" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Estado</Label>
+                    <Select value={filterState} onValueChange={setFilterState}>
+                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        {ESTADOS.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Tipo</Label>
+                    <Select value={filterType} onValueChange={setFilterType}>
+                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="PJ">PJ</SelectItem>
+                        <SelectItem value="PF">PF</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Status</Label>
+                    <Select value={filterStatus} onValueChange={setFilterStatus}>
+                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="novo">Novo</SelectItem>
+                        <SelectItem value="em_contato">Em contato</SelectItem>
+                        <SelectItem value="convertido">Convertido</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-            <Button onClick={handleExtract} disabled={extracting} className="w-full md:w-auto" size="lg">
-              {extracting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
-              Extrair Leads
-            </Button>
-
-            {extracting && <Progress value={progress} className="h-2" />}
-          </CardContent>
-        </Card>
-
-        {results.length > 0 && (
-          <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[
-                { label: "Total", value: results.length },
-                { label: "PF", value: totalPF },
-                { label: "PJ", value: totalPJ },
-                { label: "Com Email", value: totalEmail },
-              ].map(s => (
-                <Card key={s.label} className="shadow-sm">
-                  <CardContent className="pt-4 pb-3 text-center">
-                    <p className="text-xs text-muted-foreground">{s.label}</p>
-                    <p className="text-xl font-bold">{s.value}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            <div className="flex gap-2">
+            {/* Counter + Export */}
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                <span className="font-bold text-foreground text-lg">{totalLeads}</span> leads encontrados
+              </p>
               <Button variant="outline" size="sm" onClick={exportCSV}>
                 <Download className="h-4 w-4 mr-1" /> Exportar CSV
               </Button>
             </div>
 
+            {/* Table */}
             <Card className="shadow-sm">
               <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10">
-                        <Checkbox checked={selected.size === pageResults.length && pageResults.length > 0} onCheckedChange={toggleAll} />
-                      </TableHead>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Cidade</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Fonte</TableHead>
-                      <TableHead>Score</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pageResults.map((lead, i) => {
-                      const idx = page * perPage + i;
-                      return (
-                        <TableRow key={idx} className="table-row-hover">
-                          <TableCell><Checkbox checked={selected.has(idx)} onCheckedChange={() => toggleSelect(idx)} /></TableCell>
+                {loadingLeads ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : leads.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Filter className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>Nenhum lead encontrado</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">
+                          <Checkbox checked={selected.size === leads.length && leads.length > 0} onCheckedChange={toggleAll} />
+                        </TableHead>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Cidade</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Categoria</TableHead>
+                        <TableHead>Telefone</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {leads.map((lead, i) => (
+                        <TableRow key={lead.id || i}>
+                          <TableCell><Checkbox checked={selected.has(i)} onCheckedChange={() => toggleSelect(i)} /></TableCell>
                           <TableCell className="font-medium">{lead.name}</TableCell>
-                          <TableCell>{lead.phone}</TableCell>
-                          <TableCell><Badge variant={lead.tipo_pessoa === "PJ" ? "default" : "secondary"}>{lead.tipo_pessoa}</Badge></TableCell>
                           <TableCell>{lead.city || "—"}</TableCell>
+                          <TableCell>{lead.state || "—"}</TableCell>
+                          <TableCell><Badge variant={lead.tipo_pessoa === "PJ" ? "default" : "secondary"}>{lead.tipo_pessoa}</Badge></TableCell>
                           <TableCell>{lead.category || "—"}</TableCell>
-                          <TableCell>{sourceBadge(lead.source)}</TableCell>
-                          <TableCell>{scoreBadge(lead.score)}</TableCell>
+                          <TableCell>{lead.phone}</TableCell>
+                          <TableCell>{lead.email || "—"}</TableCell>
+                          <TableCell>{statusBadge(lead.status || "novo")}</TableCell>
                         </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
 
@@ -281,8 +335,61 @@ export default function Extracao() {
                 <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Próxima</Button>
               </div>
             )}
-          </>
-        )}
+          </TabsContent>
+
+          {/* EXTRACTION TAB */}
+          <TabsContent value="extract" className="space-y-4">
+            <Card className="shadow-sm">
+              <CardContent className="pt-6 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label>CEP</Label>
+                    <Input placeholder="00000-000" value={cep} onChange={e => handleCepChange(e.target.value)} />
+                    {city && <p className="text-xs text-muted-foreground mt-1">{bairro && `${bairro}, `}{city}/{state}</p>}
+                  </div>
+                  <div>
+                    <Label>Empresa Alvo</Label>
+                    <Select value={companyTarget} onValueChange={setCompanyTarget}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas</SelectItem>
+                        {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Raio: {radius[0]} km</Label>
+                    <Slider value={radius} onValueChange={setRadius} min={5} max={50} step={5} className="mt-2" />
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="mb-2 block">Fontes</Label>
+                  <div className="flex flex-wrap gap-4">
+                    {[
+                      { id: "pj_base", label: "PJ Base" },
+                      { id: "google_maps", label: "Google Maps" },
+                      { id: "olx", label: "OLX" },
+                      { id: "instagram", label: "Instagram" },
+                    ].map(s => (
+                      <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox checked={sources.includes(s.id)} onCheckedChange={() => toggleSource(s.id)} />
+                        <span className="text-sm">{s.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <Button onClick={handleExtract} disabled={extracting} className="w-full md:w-auto" size="lg">
+                  {extracting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
+                  Extrair Leads
+                </Button>
+
+                {extracting && <Progress value={progress} className="h-2" />}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </DashboardLayout>
   );
