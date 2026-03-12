@@ -131,7 +131,7 @@ export default function BaseDados() {
   // Load table data
   const loadLeads = useCallback(async () => {
     setLoading(true);
-    let query = supabase.from("contact_leads").select("*", { count: "exact" });
+    let query = supabase.from("contact_leads").select("id,name,phone,email,tipo_pessoa,city,region,state,category,subcategory,source,score,status,created_at", { count: "exact" });
 
     // Default: only leads with phone
     if (!includeNoPhone) query = query.not("phone", "is", null);
@@ -494,8 +494,8 @@ export default function BaseDados() {
 
         {/* Filters */}
         <div className="flex flex-wrap gap-3 items-end">
-          <Input placeholder="Buscar nome/telefone..." value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} className="w-64" />
-          <Input placeholder="Buscar cidade..." value={citySearch} onChange={e => { setCitySearch(e.target.value); setPage(0); }} className="w-44" />
+          <Input placeholder="Buscar nome/telefone..." value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} className="w-64" autoComplete="off" name="leads-search" />
+          <Input placeholder="Buscar cidade..." value={citySearch} onChange={e => { setCitySearch(e.target.value); setPage(0); }} className="w-44" autoComplete="off" name="leads-city" />
           <Input placeholder="DDD (ex: 11)" value={dddFilter} onChange={e => { const v = e.target.value.replace(/\D/g, "").slice(0, 2); setDddFilter(v); setPage(0); }} className="w-24" maxLength={2} />
           <Select value={filterType} onValueChange={v => { setFilterType(v); setPage(0); }}>
             <SelectTrigger className="w-[120px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
