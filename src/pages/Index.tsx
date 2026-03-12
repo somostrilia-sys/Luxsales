@@ -31,12 +31,15 @@ export default function Index() {
     const daysAgo = subDays(new Date(), parseInt(period)).toISOString();
 
     // Parallel queries
+    let leadsQ = supabase.from("contact_leads").select("id", { count: "exact", head: true });
+    if (selectedCompanyId !== "all") leadsQ = leadsQ.eq("company_target", selectedCompanyId);
+
+    let agentsQ = supabase.from("agent_definitions").select("id", { count: "exact", head: true }).eq("active", true);
+    if (selectedCompanyId !== "all") agentsQ = agentsQ.eq("company_id", selectedCompanyId);
+
     const [leadsRes, agentsRes, msgsRes, companiesRes] = await Promise.all([
-      supabase.from("contact_leads").select("id", { count: "exact", head: true })
-        .eq(selectedCompanyId !== "all" ? "company_target" : "company_target", companyFilter || ""),
-      supabase.from("agent_definitions").select("id", { count: "exact", head: true })
-        .eq("active", true)
-        .eq(selectedCompanyId !== "all" ? "company_id" : "company_id", companyFilter || ""),
+      leadsQ,
+      agentsQ,
       supabase.from("agent_messages").select("id", { count: "exact", head: true })
         .gte("created_at", today),
       supabase.from("companies").select("id"),
