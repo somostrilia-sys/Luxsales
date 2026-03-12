@@ -149,7 +149,6 @@ export default function BaseDados() {
     if (search) query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
 
     const { data, count } = await query
-      .order("created_at", { ascending: false })
       .range(page * perPage, (page + 1) * perPage - 1);
 
     setLeads((data || []) as Lead[]);
