@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Eye, EyeOff, Save, Send, Crown, Bot } from "lucide-react";
+import { Eye, EyeOff, Save, Send, Crown, Bot, Settings } from "lucide-react";
 
 interface SystemConfig {
   id: string;
@@ -40,16 +40,11 @@ interface ChatMessage {
 export default function CeoBolt() {
   const { toast } = useToast();
 
-  // Config state
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("claude-opus-4-5");
   const [showKey, setShowKey] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
-
-  // Agents state
   const [agents, setAgents] = useState<AgentDef[]>([]);
-
-  // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", content: "Olá! Sou o Bolt, seu assistente CEO. Como posso ajudar?" },
   ]);
@@ -66,9 +61,7 @@ export default function CeoBolt() {
   }, [messages]);
 
   async function loadConfigs() {
-    const { data } = await supabase
-      .from("system_configs" as any)
-      .select("*");
+    const { data } = await supabase.from("system_configs" as any).select("*");
     if (data) {
       const configs = data as unknown as SystemConfig[];
       configs.forEach((c) => {
@@ -84,8 +77,6 @@ export default function CeoBolt() {
       .select("id, name, emoji, active, company_id");
     if (!data) return;
     const agentList = data as unknown as AgentDef[];
-
-    // fetch company names
     const companyIds = [...new Set(agentList.filter((a) => a.company_id).map((a) => a.company_id!))];
     let companyMap: Record<string, string> = {};
     if (companyIds.length > 0) {
@@ -141,8 +132,6 @@ export default function CeoBolt() {
     const userMsg: ChatMessage = { role: "user", content: chatInput.trim() };
     setMessages((prev) => [...prev, userMsg]);
     setChatInput("");
-
-    // Simulated response (TODO: integrate with Anthropic API)
     setTimeout(() => {
       setMessages((prev) => [
         ...prev,
@@ -157,13 +146,12 @@ export default function CeoBolt() {
   return (
     <DashboardLayout>
       <div className="space-y-6 p-4 md:p-6 max-w-6xl mx-auto">
-        {/* Header */}
         <div className="flex items-center gap-3">
-          <Crown className="h-7 w-7 text-yellow-500" />
+          <Crown className="h-7 w-7 text-accent-foreground" />
           <h1 className="text-2xl font-bold text-foreground">CEO / Bolt</h1>
         </div>
 
-        {/* A) CONFIGURAÇÕES */}
+        {/* Configurações */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -174,9 +162,7 @@ export default function CeoBolt() {
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">
-                  API Key Anthropic
-                </label>
+                <label className="text-sm font-medium text-foreground">API Key Anthropic</label>
                 <div className="relative">
                   <Input
                     type={showKey ? "text" : "password"}
@@ -197,7 +183,6 @@ export default function CeoBolt() {
                   </Button>
                 </div>
               </div>
-
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Modelo</label>
                 <Select value={model} onValueChange={setModel}>
@@ -211,7 +196,6 @@ export default function CeoBolt() {
                 </Select>
               </div>
             </div>
-
             <Button onClick={saveConfigs} disabled={savingConfig} className="gap-2">
               <Save className="h-4 w-4" />
               {savingConfig ? "Salvando..." : "Salvar"}
@@ -219,7 +203,7 @@ export default function CeoBolt() {
           </CardContent>
         </Card>
 
-        {/* B) STATUS DOS AGENTES */}
+        {/* Status dos Agentes */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -240,24 +224,14 @@ export default function CeoBolt() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-lg">{agent.emoji || "🤖"}</span>
-                        <span className="font-medium text-foreground truncate">
-                          {agent.name}
-                        </span>
+                        <span className="font-medium text-foreground truncate">{agent.name}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1 truncate">
-                        {agent.company_name}
-                      </p>
-                      <Badge
-                        variant={agent.active ? "default" : "secondary"}
-                        className="mt-1 text-[10px]"
-                      >
+                      <p className="text-xs text-muted-foreground mt-1 truncate">{agent.company_name}</p>
+                      <Badge variant={agent.active ? "default" : "secondary"} className="mt-1 text-[10px]">
                         {agent.active ? "Ativo" : "Inativo"}
                       </Badge>
                     </div>
-                    <Switch
-                      checked={agent.active}
-                      onCheckedChange={() => toggleAgent(agent)}
-                    />
+                    <Switch checked={agent.active} onCheckedChange={() => toggleAgent(agent)} />
                   </div>
                 ))}
               </div>
@@ -265,22 +239,18 @@ export default function CeoBolt() {
           </CardContent>
         </Card>
 
-        {/* C) CHAT COM BOLT */}
+        {/* Chat com Bolt */}
         <Card className="flex flex-col" style={{ minHeight: 400 }}>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
-              <Crown className="h-5 w-5 text-yellow-500" />
+              <Crown className="h-5 w-5 text-accent-foreground" />
               Chat com Bolt
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col flex-1 p-0">
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3" style={{ maxHeight: 350 }}>
               {messages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                >
+                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div
                     className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
                       msg.role === "user"
@@ -294,8 +264,6 @@ export default function CeoBolt() {
               ))}
               <div ref={chatEndRef} />
             </div>
-
-            {/* Input */}
             <div className="border-t border-border p-3 flex gap-2">
               <Input
                 type="search"
@@ -316,6 +284,3 @@ export default function CeoBolt() {
     </DashboardLayout>
   );
 }
-
-// Need to import Settings
-import { Settings } from "lucide-react";
