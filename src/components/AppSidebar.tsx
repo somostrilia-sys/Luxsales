@@ -69,10 +69,18 @@ export function AppSidebar() {
       <SidebarContent className="pt-6 bg-sidebar">
         {/* Logo */}
         <div className="px-4 mb-6 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
-            <span className="text-primary-foreground font-extrabold text-sm">W</span>
-          </div>
-          {!collapsed && (
+          {collaborator?.company?.logo_url ? (
+            <img
+              src={collaborator.company.logo_url}
+              alt={collaborator.company.name}
+              className="h-9 shrink-0 object-contain"
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
+              <span className="text-primary-foreground font-extrabold text-sm">W</span>
+            </div>
+          )}
+          {!collapsed && !collaborator?.company?.logo_url && (
             <span className="font-extrabold text-lg tracking-tight text-foreground">WALK</span>
           )}
         </div>

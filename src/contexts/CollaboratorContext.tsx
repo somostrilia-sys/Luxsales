@@ -14,7 +14,7 @@ export interface Collaborator {
   role_id: string;
   sector_id: string | null;
   unit_id: string | null;
-  company: { id: string; name: string; slug: string };
+  company: { id: string; name: string; slug: string; logo_url: string | null };
   role: { id: string; name: string; level: number };
   sector: { id: string; name: string } | null;
   unit: { id: string; name: string } | null;
