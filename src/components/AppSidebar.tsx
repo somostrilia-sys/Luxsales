@@ -77,7 +77,7 @@ export function AppSidebar() {
             />
           ) : (
             <img
-              src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/logos/walk-holding-logo.png"
+              src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/assets/logos/logo-walk-holding-transparent.png"
               alt="Walk Holding"
               className="h-14 w-auto object-contain max-w-[180px] shrink-0"
             />
