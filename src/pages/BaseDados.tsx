@@ -81,53 +81,28 @@ export default function BaseDados() {
 
   const perPage = 50;
 
-  // Load counts once on mount (and when realtime updates total)
+  // Load counts once via single RPC call
   const loadCounts = useCallback(async () => {
-    const q = () => supabase.from("contact_leads").select("*", { count: "exact", head: true });
+    const { data: s, error } = await supabase.rpc('get_contact_leads_stats');
+    if (error) { console.error("Stats RPC error:", error); return; }
 
-    const [
-      { count: cTotal },
-      { count: cPF },
-      { count: cPJ },
-      { count: cEmail },
-      { count: cPhone },
-      { count: cObjTransp },
-      { count: cObjGeral },
-      { count: cTrilia },
-      { count: cOlx },
-      { count: cGoogle },
-      { count: cMotApp },
-    ] = await Promise.all([
-      q(),
-      q().eq("tipo_pessoa", "PF"),
-      q().eq("tipo_pessoa", "PJ"),
-      q().not("email", "is", null),
-      q().not("phone", "is", null),
-      q().eq("category", "objetivo-transporte"),
-      q().eq("category", "objetivo-geral"),
-      q().eq("category", "trilia-consultoria"),
-      q().eq("source", "olx"),
-      q().eq("source", "google_maps"),
-      q().eq("subcategory", "motorista-aplicativo"),
-    ]);
-
-    setStats({ total: cTotal ?? 0, pf: cPF ?? 0, pj: cPJ ?? 0, email: cEmail ?? 0, phone: cPhone ?? 0 });
+    setStats({ total: s.total ?? 0, pf: s.pf ?? 0, pj: s.pj ?? 0, email: s.com_email ?? 0, phone: s.com_telefone ?? 0 });
     setDestinoCounts({
-      "objetivo-transporte": cObjTransp ?? 0,
-      "objetivo-geral": cObjGeral ?? 0,
-      trilia: cTrilia ?? 0,
-      olx: cOlx ?? 0,
-      google: cGoogle ?? 0,
-      all: cTotal ?? 0,
+      "objetivo-transporte": s.objetivo_transporte ?? 0,
+      "objetivo-geral": s.objetivo_geral ?? 0,
+      trilia: s.trilia ?? 0,
+      olx: s.olx ?? 0,
+      google: s.google_maps ?? 0,
+      all: s.total ?? 0,
     });
     setTabCounts({
-      all: cTotal ?? 0,
-      "objetivo-transporte": cObjTransp ?? 0,
-      "motorista-app": cMotApp ?? 0,
-      "trilia-consultoria": cTrilia ?? 0,
-      "objetivo-geral": cObjGeral ?? 0,
-      olx: cOlx ?? 0,
-      google_maps: cGoogle ?? 0,
+      all: s.total ?? 0,
+      "objetivo-transporte": s.objetivo_transporte ?? 0,
+      "motorista-app": s.motorista_app ?? (s.objetivo_transporte ?? 0),
+      "trilia-consultoria": s.trilia ?? 0,
+      "objetivo-geral": s.objetivo_geral ?? 0,
+      olx: s.olx ?? 0,
+      google_maps: s.google_maps ?? 0,
     });
   }, []);
 
