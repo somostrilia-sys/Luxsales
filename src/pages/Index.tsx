@@ -118,7 +118,11 @@ export default function Index() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
-                    <p className="text-2xl font-bold mt-1">{loading ? "..." : s.value}</p>
+                    {loading ? (
+                      <Skeleton className="h-7 w-16 mt-1" />
+                    ) : (
+                      <p className="text-2xl font-bold mt-1">{s.value}</p>
+                    )}
                   </div>
                   <div className={`p-2.5 rounded-lg bg-muted ${s.color}`}>
                     <s.icon className="h-5 w-5" />

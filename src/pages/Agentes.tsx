@@ -160,7 +160,34 @@ export default function Agentes() {
 
         {/* Grid */}
         {loading ? (
-          <p className="text-muted-foreground text-sm">Carregando agentes...</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i} className="bg-card border-border">
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="w-10 h-10 rounded-lg" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                  </div>
+                  <Skeleton className="h-3 w-full" />
+                  <div className="space-y-2.5 pt-1 border-t border-border">
+                    <Skeleton className="h-3 w-24 mt-2" />
+                    {Array.from({ length: 4 }).map((_, j) => (
+                      <div key={j} className="flex items-center justify-between">
+                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="h-5 w-9 rounded-full" />
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nenhum agente encontrado.</p>
         ) : (
