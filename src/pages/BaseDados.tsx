@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { supabase } from "@/lib/supabase";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { toast } from "sonner";
-import { Download, Trash2, Users, Loader2 } from "lucide-react";
+import { Download, Trash2, Users, Loader2, Building2, Briefcase, Car, MapPin, Database } from "lucide-react";
 
 interface Lead {
   id: string;
@@ -29,6 +29,22 @@ interface Lead {
   company_target: string | null;
 }
 
+const getDestino = (lead: Lead): string => {
+  if (lead.category === "objetivo-transporte" || lead.category === "objetivo-geral") return "Objetivo Auto & Truck";
+  if (lead.category === "trilia-consultoria") return "Trilia";
+  if (lead.source === "olx") return "OLX - Veículos PF";
+  if (lead.source === "google_maps") return "Google Maps";
+  return "Outros";
+};
+
+const destinoConfig = [
+  { key: "objetivo", label: "Objetivo Auto & Truck", icon: Building2, color: "border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-300" },
+  { key: "trilia", label: "Trilia", icon: Briefcase, color: "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  { key: "olx", label: "OLX - Veículos PF", icon: Car, color: "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-300" },
+  { key: "google", label: "Google Maps", icon: MapPin, color: "border-red-500 bg-red-500/10 text-red-700 dark:text-red-300" },
+  { key: "all", label: "TOTAL", icon: Database, color: "border-primary bg-primary/10 text-primary" },
+];
+
 export default function BaseDados() {
   const { selectedCompanyId } = useCompanyFilter();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -37,17 +53,19 @@ export default function BaseDados() {
   const [filterType, setFilterType] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterDestino, setFilterDestino] = useState("all");
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState({ total: 0, pf: 0, pj: 0, email: 0, phone: 0 });
+  const [destinoCounts, setDestinoCounts] = useState<Record<string, number>>({ objetivo: 0, trilia: 0, olx: 0, google: 0, all: 0 });
   const [distributeOpen, setDistributeOpen] = useState(false);
   const [collaborators, setCollaborators] = useState<any[]>([]);
   const [assignTo, setAssignTo] = useState("");
 
   const perPage = 100;
 
-  useEffect(() => { loadLeads(); }, [selectedCompanyId, filterType, filterSource, filterStatus, search, page]);
+  useEffect(() => { loadLeads(); }, [selectedCompanyId, filterType, filterSource, filterStatus, filterDestino, search, page]);
 
   const loadLeads = async () => {
     setLoading(true);
@@ -59,6 +77,13 @@ export default function BaseDados() {
     if (filterStatus !== "all") query = query.eq("status", filterStatus);
     if (search) query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
 
+    if (filterDestino !== "all") {
+      if (filterDestino === "objetivo") query = query.or("category.eq.objetivo-transporte,category.eq.objetivo-geral");
+      else if (filterDestino === "trilia") query = query.eq("category", "trilia-consultoria");
+      else if (filterDestino === "olx") query = query.eq("source", "olx");
+      else if (filterDestino === "google") query = query.eq("source", "google_maps");
+    }
+
     const { data, count } = await query
       .order("created_at", { ascending: false })
       .range(page * perPage, (page + 1) * perPage - 1);
@@ -66,7 +91,8 @@ export default function BaseDados() {
     setLeads((data || []) as Lead[]);
     setTotal(count || 0);
 
-    let statsQuery = supabase.from("contact_leads").select("tipo_pessoa, email, phone");
+    // Stats & destination counts
+    let statsQuery = supabase.from("contact_leads").select("tipo_pessoa, email, phone, category, source");
     if (selectedCompanyId !== "all") statsQuery = statsQuery.eq("company_target", selectedCompanyId);
     const { data: allData } = await statsQuery;
     const all = allData || [];
@@ -77,6 +103,15 @@ export default function BaseDados() {
       email: all.filter(l => l.email).length,
       phone: all.filter(l => l.phone).length,
     });
+
+    const counts = { objetivo: 0, trilia: 0, olx: 0, google: 0, all: all.length };
+    all.forEach(l => {
+      if (l.category === "objetivo-transporte" || l.category === "objetivo-geral") counts.objetivo++;
+      else if (l.category === "trilia-consultoria") counts.trilia++;
+      else if (l.source === "olx") counts.olx++;
+      else if (l.source === "google_maps") counts.google++;
+    });
+    setDestinoCounts(counts);
 
     setLoading(false);
   };
@@ -116,11 +151,23 @@ export default function BaseDados() {
     return <Badge className={colors[status] || "bg-muted"}>{labels[status] || status}</Badge>;
   };
 
+  const destinoBadge = (lead: Lead) => {
+    const d = getDestino(lead);
+    const colors: Record<string, string> = {
+      "Objetivo Auto & Truck": "bg-blue-500/20 text-blue-700 dark:text-blue-300",
+      "Trilia": "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
+      "OLX - Veículos PF": "bg-orange-500/20 text-orange-700 dark:text-orange-300",
+      "Google Maps": "bg-red-500/20 text-red-700 dark:text-red-300",
+      "Outros": "bg-muted text-muted-foreground",
+    };
+    return <Badge className={colors[d] || "bg-muted text-muted-foreground"}>{d}</Badge>;
+  };
+
   const exportCSV = () => {
     const items = selected.size > 0 ? leads.filter(l => selected.has(l.id)) : leads;
-    const header = "Nome,Telefone,Email,Tipo,Cidade,UF,Categoria,Fonte,Score,Status\n";
+    const header = "Nome,Telefone,Email,Tipo,Cidade,UF,Categoria,Fonte,Destino,Score,Status\n";
     const rows = items.map(l =>
-      `"${l.name}","${l.phone}","${l.email || ""}","${l.tipo_pessoa}","${l.city || ""}","${l.region || ""}","${l.category || ""}","${l.source || ""}","${l.score || ""}","${l.status}"`
+      `"${l.name}","${l.phone}","${l.email || ""}","${l.tipo_pessoa}","${l.city || ""}","${l.region || ""}","${l.category || ""}","${l.source || ""}","${getDestino(l)}","${l.score || ""}","${l.status}"`
     ).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
     const a = document.createElement("a");
@@ -163,11 +210,38 @@ export default function BaseDados() {
 
   const totalPages = Math.ceil(total / perPage);
 
+  const handleDestinoClick = (key: string) => {
+    setFilterDestino(prev => prev === key ? "all" : key === "all" ? "all" : key);
+    setPage(0);
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Base de Dados</h1>
 
+        {/* Destination company cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          {destinoConfig.map(d => {
+            const Icon = d.icon;
+            const isActive = filterDestino === d.key;
+            return (
+              <Card
+                key={d.key}
+                className={`cursor-pointer transition-all border-2 ${isActive ? d.color + " ring-2 ring-offset-2 ring-primary/30" : "border-transparent hover:border-muted-foreground/20"}`}
+                onClick={() => handleDestinoClick(d.key)}
+              >
+                <CardContent className="pt-4 pb-3 text-center">
+                  <Icon className={`h-5 w-5 mx-auto mb-1 ${isActive ? "" : "text-muted-foreground"}`} />
+                  <p className="text-xs font-medium truncate">{d.label}</p>
+                  <p className="text-2xl font-bold">{destinoCounts[d.key]}</p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Existing stats cards */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           {[
             { label: "Total", value: stats.total },
@@ -259,6 +333,7 @@ export default function BaseDados() {
                     <TableHead>Tipo</TableHead>
                     <TableHead>Cidade/UF</TableHead>
                     <TableHead>Categoria</TableHead>
+                    <TableHead>Destino</TableHead>
                     <TableHead>Fonte</TableHead>
                     <TableHead>Score</TableHead>
                     <TableHead>Status</TableHead>
@@ -274,6 +349,7 @@ export default function BaseDados() {
                       <TableCell><Badge variant={lead.tipo_pessoa === "PJ" ? "default" : "secondary"}>{lead.tipo_pessoa}</Badge></TableCell>
                       <TableCell>{[lead.city, lead.region].filter(Boolean).join("/") || "—"}</TableCell>
                       <TableCell>{lead.category || "—"}</TableCell>
+                      <TableCell>{destinoBadge(lead)}</TableCell>
                       <TableCell>{sourceBadge(lead.source)}</TableCell>
                       <TableCell>
                         {lead.score != null ? (
