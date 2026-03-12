@@ -46,10 +46,19 @@ export default function Index() {
       supabase.from("companies").select("id"),
     ]);
 
-    // Daily chart - leads by day
+    // Daily chart - run in parallel with main queries above
     let dailyQuery = supabase.from("contact_leads").select("created_at").gte("created_at", daysAgo);
     if (selectedCompanyId !== "all") dailyQuery = dailyQuery.eq("company_target", selectedCompanyId);
-    const { data: dailyLeads } = await dailyQuery;
+
+    // Usage limits query (conditional)
+    const usageLimitsPromise = (roleLevel === 3 && collaborator?.role_id)
+      ? supabase.from("roles").select("usage_limits").eq("id", collaborator.role_id).single()
+      : Promise.resolve({ data: null });
+
+    const [{ data: dailyLeads }, { data: roleData }] = await Promise.all([
+      dailyQuery,
+      usageLimitsPromise,
+    ]);
 
     const dayCounts: Record<string, number> = {};
     (dailyLeads || []).forEach((l: any) => {
