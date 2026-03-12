@@ -131,7 +131,7 @@ export default function BaseDados() {
   // Load table data
   const loadLeads = useCallback(async () => {
     setLoading(true);
-    let query = supabase.from("contact_leads").select("*", { count: "exact" });
+    let query = supabase.from("contact_leads").select("id,name,phone,email,tipo_pessoa,city,state,category,source,score,status", { count: "exact" });
 
     // Default: only leads with phone
     if (!includeNoPhone) query = query.not("phone", "is", null);
