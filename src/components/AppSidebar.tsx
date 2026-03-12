@@ -76,9 +76,11 @@ export function AppSidebar() {
               className="h-9 shrink-0 object-contain"
             />
           ) : (
-            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
-              <span className="text-primary-foreground font-extrabold text-sm">W</span>
-            </div>
+            <img
+              src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/logos/walk-holding-logo.png"
+              alt="Walk Holding"
+              className="h-8 w-auto object-contain max-w-[120px] shrink-0"
+            />
           )}
           {!collapsed && !collaborator?.company?.logo_url && (
             <span className="font-extrabold text-lg tracking-tight text-foreground">WALK</span>
