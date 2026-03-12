@@ -91,27 +91,50 @@ export default function BaseDados() {
     setLeads((data || []) as Lead[]);
     setTotal(count || 0);
 
-    // Stats & destination counts
-    let statsQuery = supabase.from("contact_leads").select("tipo_pessoa, email, phone, category, source");
-    if (selectedCompanyId !== "all") statsQuery = statsQuery.eq("company_target", selectedCompanyId);
-    const { data: allData } = await statsQuery;
-    const all = allData || [];
-    setStats({
-      total: all.length,
-      pf: all.filter(l => l.tipo_pessoa === "PF").length,
-      pj: all.filter(l => l.tipo_pessoa === "PJ").length,
-      email: all.filter(l => l.email).length,
-      phone: all.filter(l => l.phone).length,
-    });
+    // Stats & destination counts using head:true count queries
+    const companyFilter = selectedCompanyId !== "all" ? selectedCompanyId : null;
+    const buildQ = () => {
+      let q = supabase.from("contact_leads").select("*", { count: "exact", head: true });
+      if (companyFilter) q = q.eq("company_target", companyFilter);
+      return q;
+    };
 
-    const counts = { objetivo: 0, trilia: 0, olx: 0, google: 0, all: all.length };
-    all.forEach(l => {
-      if (l.category === "objetivo-transporte" || l.category === "objetivo-geral") counts.objetivo++;
-      else if (l.category === "trilia-consultoria") counts.trilia++;
-      else if (l.source === "olx") counts.olx++;
-      else if (l.source === "google_maps") counts.google++;
+    const [
+      { count: cTotal },
+      { count: cPF },
+      { count: cPJ },
+      { count: cEmail },
+      { count: cPhone },
+      { count: cObjetivo },
+      { count: cTrilia },
+      { count: cOlx },
+      { count: cGoogle },
+    ] = await Promise.all([
+      buildQ(),
+      buildQ().eq("tipo_pessoa", "PF"),
+      buildQ().eq("tipo_pessoa", "PJ"),
+      buildQ().not("email", "is", null),
+      buildQ().not("phone", "is", null),
+      buildQ().or("category.eq.objetivo-transporte,category.eq.objetivo-geral"),
+      buildQ().eq("category", "trilia-consultoria"),
+      buildQ().eq("source", "olx"),
+      buildQ().eq("source", "google_maps"),
+    ]);
+
+    setStats({
+      total: cTotal || 0,
+      pf: cPF || 0,
+      pj: cPJ || 0,
+      email: cEmail || 0,
+      phone: cPhone || 0,
     });
-    setDestinoCounts(counts);
+    setDestinoCounts({
+      objetivo: cObjetivo || 0,
+      trilia: cTrilia || 0,
+      olx: cOlx || 0,
+      google: cGoogle || 0,
+      all: cTotal || 0,
+    });
 
     setLoading(false);
   };
