@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,13 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { Download, Trash2, Users, Building2, Briefcase, Car, MapPin, Database, Radio } from "lucide-react";
+import { Download, Upload, Trash2, Users, Building2, Briefcase, Car, MapPin, Database, Radio } from "lucide-react";
+import Papa from "papaparse";
 
 interface Lead {
   id: string;
@@ -59,16 +63,23 @@ const tabConfig = [
   { key: "google_maps", label: "Google Maps" },
 ];
 
+const IMPORT_FIELDS = ["name", "phone", "email", "document", "city", "state"] as const;
+type ImportField = typeof IMPORT_FIELDS[number];
+
 export default function BaseDados() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [citySearch, setCitySearch] = useState("");
+  const [dddFilter, setDddFilter] = useState("");
+  const [includeNoPhone, setIncludeNoPhone] = useState(false);
   const [filterType, setFilterType] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [activeTab, setActiveTab] = useState("all");
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [statsLoading, setStatsLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, pf: 0, pj: 0, email: 0, phone: 0 });
   const [destinoCounts, setDestinoCounts] = useState<Record<string, number>>({
     "objetivo-transporte": 0, "objetivo-geral": 0, trilia: 0, olx: 0, google: 0, all: 0,
@@ -79,12 +90,22 @@ export default function BaseDados() {
   const [assignTo, setAssignTo] = useState("");
   const [isLive, setIsLive] = useState(false);
 
+  // Import CSV state
+  const [importOpen, setImportOpen] = useState(false);
+  const [importRows, setImportRows] = useState<string[][]>([]);
+  const [importHeaders, setImportHeaders] = useState<string[]>([]);
+  const [importMapping, setImportMapping] = useState<Record<string, ImportField | "">>({}); 
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const perPage = 50;
 
-  // Load counts once via single RPC call
+  // Load counts via RPC (independent from table)
   const loadCounts = useCallback(async () => {
+    setStatsLoading(true);
     const { data: s, error } = await supabase.rpc('get_contact_leads_stats');
-    if (error) { console.error("Stats RPC error:", error); return; }
+    if (error) { console.error("Stats RPC error:", error); setStatsLoading(false); return; }
 
     setStats({ total: s.total ?? 0, pf: s.pf ?? 0, pj: s.pj ?? 0, email: s.com_email ?? 0, phone: s.com_telefone ?? 0 });
     setDestinoCounts({
@@ -104,12 +125,16 @@ export default function BaseDados() {
       olx: s.olx ?? 0,
       google_maps: s.google_maps ?? 0,
     });
+    setStatsLoading(false);
   }, []);
 
   // Load table data
   const loadLeads = useCallback(async () => {
     setLoading(true);
     let query = supabase.from("contact_leads").select("*", { count: "exact" });
+
+    // Default: only leads with phone
+    if (!includeNoPhone) query = query.not("phone", "is", null);
 
     // Tab filter
     if (activeTab === "objetivo-transporte") query = query.eq("category", "objetivo-transporte");
@@ -122,6 +147,8 @@ export default function BaseDados() {
     if (filterType !== "all") query = query.eq("tipo_pessoa", filterType);
     if (filterStatus !== "all") query = query.eq("status", filterStatus);
     if (search) query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+    if (citySearch) query = query.ilike("city", `%${citySearch}%`);
+    if (dddFilter && dddFilter.length === 2) query = query.like("phone", `${dddFilter}%`);
 
     const { data, count } = await query
       .range(page * perPage, (page + 1) * perPage - 1);
@@ -129,7 +156,7 @@ export default function BaseDados() {
     setLeads((data || []) as Lead[]);
     setTotal(count || 0);
     setLoading(false);
-  }, [activeTab, filterType, filterStatus, search, page]);
+  }, [activeTab, filterType, filterStatus, search, citySearch, dddFilter, includeNoPhone, page]);
 
   useEffect(() => { loadCounts(); }, [loadCounts]);
   useEffect(() => { loadLeads(); }, [loadLeads]);
@@ -208,11 +235,14 @@ export default function BaseDados() {
     else if (activeTab === "olx") query = query.eq("source", "olx");
     else if (activeTab === "google_maps") query = query.eq("source", "google_maps");
 
+    if (!includeNoPhone) query = query.not("phone", "is", null);
     if (filterType !== "all") query = query.eq("tipo_pessoa", filterType);
     if (filterStatus !== "all") query = query.eq("status", filterStatus);
     if (search) query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+    if (citySearch) query = query.ilike("city", `%${citySearch}%`);
+    if (dddFilter && dddFilter.length === 2) query = query.like("phone", `${dddFilter}%`);
 
-    const { data } = await query.order("created_at", { ascending: false }).limit(10000);
+    const { data } = await query.limit(10000);
     const items = data || [];
 
     const header = "Nome,Telefone,Email,Tipo,Cidade,UF,Categoria,Fonte,Destino,Score,Status\n";
@@ -259,10 +289,87 @@ export default function BaseDados() {
     loadLeads();
   };
 
+  // --- Import CSV logic ---
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      preview: 100, // parse enough to show preview
+      skipEmptyLines: true,
+      complete: (results) => {
+        const rows = results.data as string[][];
+        if (rows.length < 2) { toast.error("Arquivo vazio ou inválido"); return; }
+        setImportHeaders(rows[0]);
+        setImportRows(rows.slice(1));
+        // Auto-map by header name
+        const autoMap: Record<string, ImportField | ""> = {};
+        rows[0].forEach((h) => {
+          const lower = h.toLowerCase().trim();
+          if (lower.includes("nome") || lower === "name") autoMap[h] = "name";
+          else if (lower.includes("telefone") || lower.includes("phone") || lower === "celular") autoMap[h] = "phone";
+          else if (lower.includes("email") || lower === "e-mail") autoMap[h] = "email";
+          else if (lower.includes("cpf") || lower.includes("cnpj") || lower === "document" || lower === "documento") autoMap[h] = "document";
+          else if (lower.includes("cidade") || lower === "city") autoMap[h] = "city";
+          else if (lower.includes("estado") || lower === "uf" || lower === "state") autoMap[h] = "state";
+          else autoMap[h] = "";
+        });
+        setImportMapping(autoMap);
+        setImportOpen(true);
+      },
+      error: () => toast.error("Erro ao ler arquivo"),
+    });
+    // reset input
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const runImport = async () => {
+    const mappedFields = Object.entries(importMapping).filter(([, v]) => v !== "");
+    if (!mappedFields.some(([, v]) => v === "name" || v === "phone")) {
+      toast.error("Mapeie pelo menos 'name' ou 'phone'");
+      return;
+    }
+
+    setImporting(true);
+    const allRows = importRows;
+    const batchSize = 200;
+    let done = 0;
+    setImportProgress({ done: 0, total: allRows.length });
+
+    for (let i = 0; i < allRows.length; i += batchSize) {
+      const batch = allRows.slice(i, i + batchSize).map(row => {
+        const record: Record<string, string> = {};
+        importHeaders.forEach((h, idx) => {
+          const field = importMapping[h];
+          if (field && row[idx]) {
+            if (field === "state") record["region"] = row[idx];
+            else record[field] = row[idx];
+          }
+        });
+        // defaults
+        if (!record.status) record.status = "pending";
+        if (!record.tipo_pessoa) record.tipo_pessoa = "PF";
+        return record;
+      });
+
+      const { error } = await supabase.from("contact_leads").upsert(batch, { onConflict: "document" });
+      if (error) console.error("Import batch error:", error);
+      done += batch.length;
+      setImportProgress({ done, total: allRows.length });
+    }
+
+    toast.success(`${fmt(done)} leads importados`);
+    setImporting(false);
+    setImportOpen(false);
+    setImportRows([]);
+    setImportHeaders([]);
+    loadLeads();
+    loadCounts();
+  };
+
   const totalPages = Math.ceil(total / perPage);
 
   const handleDestinoClick = (key: string) => {
-    // Map card key to tab key
     const cardToTab: Record<string, string> = {
       "objetivo-transporte": "objetivo-transporte",
       "objetivo-geral": "objetivo-geral",
@@ -296,6 +403,16 @@ export default function BaseDados() {
     </>
   );
 
+  const SkeletonCard = () => (
+    <Card>
+      <CardContent className="pt-4 pb-3 text-center">
+        <Skeleton className="h-5 w-5 mx-auto mb-1 rounded" />
+        <Skeleton className="h-3 w-16 mx-auto mb-1" />
+        <Skeleton className="h-7 w-20 mx-auto" />
+      </CardContent>
+    </Card>
+  );
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -312,8 +429,7 @@ export default function BaseDados() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {destinoConfig.map(d => {
             const Icon = d.icon;
-            const countKey = d.key;
-            const count = destinoCounts[countKey] ?? 0;
+            const count = destinoCounts[d.key] ?? 0;
             const isActive =
               (d.key === "objetivo-transporte" && activeTab === "objetivo-transporte") ||
               (d.key === "objetivo-geral" && activeTab === "objetivo-geral") ||
@@ -328,9 +444,19 @@ export default function BaseDados() {
                 onClick={() => handleDestinoClick(d.key)}
               >
                 <CardContent className="pt-4 pb-3 text-center">
-                  <Icon className={`h-5 w-5 mx-auto mb-1 ${isActive ? "" : "text-muted-foreground"}`} />
-                  <p className="text-xs font-medium truncate">{d.label}</p>
-                  <p className="text-2xl font-bold">{fmt(count)}</p>
+                  {statsLoading ? (
+                    <>
+                      <Skeleton className="h-5 w-5 mx-auto mb-1 rounded" />
+                      <Skeleton className="h-3 w-16 mx-auto mb-1" />
+                      <Skeleton className="h-7 w-20 mx-auto" />
+                    </>
+                  ) : (
+                    <>
+                      <Icon className={`h-5 w-5 mx-auto mb-1 ${isActive ? "" : "text-muted-foreground"}`} />
+                      <p className="text-xs font-medium truncate">{d.label}</p>
+                      <p className="text-2xl font-bold">{fmt(count)}</p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             );
@@ -349,7 +475,7 @@ export default function BaseDados() {
             <Card key={s.label}>
               <CardContent className="pt-4 pb-3 text-center">
                 <p className="text-xs text-muted-foreground">{s.label}</p>
-                <p className="text-xl font-bold">{fmt(s.value)}</p>
+                {statsLoading ? <Skeleton className="h-6 w-20 mx-auto mt-1" /> : <p className="text-xl font-bold">{fmt(s.value)}</p>}
               </CardContent>
             </Card>
           ))}
@@ -367,8 +493,10 @@ export default function BaseDados() {
         </Tabs>
 
         {/* Filters */}
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 items-end">
           <Input placeholder="Buscar nome/telefone..." value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} className="w-64" />
+          <Input placeholder="Buscar cidade..." value={citySearch} onChange={e => { setCitySearch(e.target.value); setPage(0); }} className="w-44" />
+          <Input placeholder="DDD (ex: 11)" value={dddFilter} onChange={e => { const v = e.target.value.replace(/\D/g, "").slice(0, 2); setDddFilter(v); setPage(0); }} className="w-24" maxLength={2} />
           <Select value={filterType} onValueChange={v => { setFilterType(v); setPage(0); }}>
             <SelectTrigger className="w-[120px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
             <SelectContent>
@@ -388,6 +516,10 @@ export default function BaseDados() {
               <SelectItem value="converted">Convertido</SelectItem>
             </SelectContent>
           </Select>
+          <div className="flex items-center gap-2">
+            <Switch checked={includeNoPhone} onCheckedChange={(v) => { setIncludeNoPhone(v); setPage(0); }} id="no-phone" />
+            <Label htmlFor="no-phone" className="text-xs whitespace-nowrap cursor-pointer">Incluir sem telefone</Label>
+          </div>
         </div>
 
         {/* Bulk actions */}
@@ -473,10 +605,15 @@ export default function BaseDados() {
         )}
 
         {!selected.size && !loading && (
-          <Button variant="outline" size="sm" onClick={exportCSV}><Download className="h-4 w-4 mr-1" /> Exportar CSV (máx 10.000)</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={exportCSV}><Download className="h-4 w-4 mr-1" /> Exportar CSV (máx 10.000)</Button>
+            <input ref={fileInputRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={handleFileSelect} />
+            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}><Upload className="h-4 w-4 mr-1" /> Importar CSV</Button>
+          </div>
         )}
       </div>
 
+      {/* Distribute Dialog */}
       <Dialog open={distributeOpen} onOpenChange={setDistributeOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Distribuir Leads</DialogTitle></DialogHeader>
@@ -491,6 +628,67 @@ export default function BaseDados() {
             <Button variant="outline" onClick={() => setDistributeOpen(false)}>Cancelar</Button>
             <Button onClick={distribute} disabled={!assignTo}>Distribuir</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import CSV Dialog */}
+      <Dialog open={importOpen} onOpenChange={(o) => { if (!importing) setImportOpen(o); }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Importar CSV</DialogTitle></DialogHeader>
+
+          {importing ? (
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground text-center">
+                Importando... {fmt(importProgress.done)} de {fmt(importProgress.total)}
+              </p>
+              <Progress value={importProgress.total ? (importProgress.done / importProgress.total) * 100 : 0} />
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">{fmt(importRows.length)} linhas encontradas. Mapeie as colunas:</p>
+
+              {/* Column mapping */}
+              <div className="grid grid-cols-2 gap-2">
+                {importHeaders.map(h => (
+                  <div key={h} className="flex items-center gap-2">
+                    <span className="text-xs font-medium truncate w-28" title={h}>{h}</span>
+                    <Select value={importMapping[h] || ""} onValueChange={v => setImportMapping(prev => ({ ...prev, [h]: v as ImportField | "" }))}>
+                      <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Ignorar" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Ignorar</SelectItem>
+                        {IMPORT_FIELDS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+
+              {/* Preview */}
+              {importRows.length > 0 && (
+                <div className="overflow-x-auto border rounded">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {importHeaders.map(h => <TableHead key={h} className="text-xs whitespace-nowrap">{h}</TableHead>)}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {importRows.slice(0, 3).map((row, i) => (
+                        <TableRow key={i}>
+                          {row.map((cell, j) => <TableCell key={j} className="text-xs whitespace-nowrap">{cell}</TableCell>)}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setImportOpen(false)}>Cancelar</Button>
+                <Button onClick={runImport}>Importar {fmt(importRows.length)} leads</Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </DashboardLayout>
