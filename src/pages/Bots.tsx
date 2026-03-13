@@ -339,18 +339,15 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                   </div>
                   <div className="flex gap-2">
                     {chip.status !== "connected" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleConnect(chip)}
-                        disabled={connecting === chip.id}
-                        className="gap-1 text-xs"
+                      <Badge
+                        onClick={() => !connecting && handleConnect(chip)}
+                        className={`cursor-pointer gap-1 text-xs px-3 py-1 ${connecting === chip.id ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20'}`}
                       >
                         {connecting === chip.id
                           ? <Loader2 className="h-3 w-3 animate-spin" />
                           : <QrCode className="h-3 w-3" />}
-                        {connecting === chip.id ? "Aguardando..." : "Conectar"}
-                      </Button>
+                        {connecting === chip.id ? "Aguardando..." : "QR Code"}
+                      </Badge>
                     )}
                     <Button
                       size="sm"
