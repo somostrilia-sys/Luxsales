@@ -468,7 +468,7 @@ export default function MotorDisparo() {
             )}
             <Button onClick={() => setDistributeModal(true)} disabled={loadingAction} className="btn-modern" size="sm">
               <Zap className="h-4 w-4 mr-2" />
-              Distribuir para Todos
+              Distribuir Leads (500 por consultor)
             </Button>
           </div>
         </div>
