@@ -22,7 +22,13 @@ import {
   Zap, TrendingUp, History, Clock
 } from "lucide-react";
 
-const COMMERCIAL_SLUGS = ["comercial", "consultor", "gestor-comercial", "gestor-trilia", "gestora-essencia", "gestor-digitallux"];
+/** Resolve companyId: "all" means null (for RPCs) or fallback to collaborator's company */
+function resolveCompanyId(selectedCompanyId: string, fallback?: string | null): string | null {
+  if (selectedCompanyId && selectedCompanyId !== "all") return selectedCompanyId;
+  return fallback || null;
+}
+
+
 
 // ═══════════════════════════════════════════
 // MAIN
