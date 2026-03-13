@@ -25,6 +25,7 @@ import MotorLeads from "./pages/MotorLeads";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Registro from "./pages/Registro";
+import Convite from "./pages/Convite";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
