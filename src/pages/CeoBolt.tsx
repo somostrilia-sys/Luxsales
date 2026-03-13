@@ -5,23 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Eye, EyeOff, Save, Send, Crown, Bot, Settings } from "lucide-react";
-
-interface SystemConfig {
-  id: string;
-  key: string;
-  value: string;
-  description: string | null;
-}
+import { Send, Crown, Bot } from "lucide-react";
+import { ConfigCards } from "@/components/ceo/ConfigCards";
 
 interface AgentDef {
   id: string;
@@ -39,11 +26,6 @@ interface ChatMessage {
 
 export default function CeoBolt() {
   const { toast } = useToast();
-
-  const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("claude-opus-4-5");
-  const [showKey, setShowKey] = useState(false);
-  const [savingConfig, setSavingConfig] = useState(false);
   const [agents, setAgents] = useState<AgentDef[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", content: "Olá! Sou o Bolt, seu assistente CEO. Como posso ajudar?" },
@@ -52,24 +34,12 @@ export default function CeoBolt() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    loadConfigs();
     loadAgents();
   }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  async function loadConfigs() {
-    const { data } = await supabase.from("system_configs" as any).select("*");
-    if (data) {
-      const configs = data as unknown as SystemConfig[];
-      configs.forEach((c) => {
-        if (c.key === "anthropic_api_key") setApiKey(c.value);
-        if (c.key === "ceo_model") setModel(c.value);
-      });
-    }
-  }
 
   async function loadAgents() {
     const { data } = await supabase
@@ -96,24 +66,6 @@ export default function CeoBolt() {
         company_name: a.company_id ? companyMap[a.company_id] || "—" : "—",
       }))
     );
-  }
-
-  async function saveConfigs() {
-    setSavingConfig(true);
-    try {
-      await supabase
-        .from("system_configs" as any)
-        .update({ value: apiKey, updated_at: new Date().toISOString() } as any)
-        .eq("key", "anthropic_api_key");
-      await supabase
-        .from("system_configs" as any)
-        .update({ value: model, updated_at: new Date().toISOString() } as any)
-        .eq("key", "ceo_model");
-      toast({ title: "Configurações salvas!" });
-    } catch {
-      toast({ title: "Erro ao salvar", variant: "destructive" });
-    }
-    setSavingConfig(false);
   }
 
   async function toggleAgent(agent: AgentDef) {
@@ -145,63 +97,14 @@ export default function CeoBolt() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 p-4 md:p-6 max-w-6xl mx-auto">
+      <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
         <div className="flex items-center gap-3">
-          <Crown className="h-7 w-7 text-accent-foreground" />
+          <Crown className="h-7 w-7 text-yellow-500" />
           <h1 className="text-2xl font-bold text-foreground">CEO / Bolt</h1>
         </div>
 
-        {/* Configurações */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Settings className="h-5 w-5 text-muted-foreground" />
-              Configurações
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">API Key Anthropic</label>
-                <div className="relative">
-                  <Input
-                    type={showKey ? "text" : "password"}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-ant-..."
-                    autoComplete="off"
-                    className="pr-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground"
-                    onClick={() => setShowKey(!showKey)}
-                  >
-                    {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Modelo</label>
-                <Select value={model} onValueChange={setModel}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="claude-opus-4-5">claude-opus-4-5</SelectItem>
-                    <SelectItem value="claude-sonnet-4-6">claude-sonnet-4-6</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <Button onClick={saveConfigs} disabled={savingConfig} className="gap-2">
-              <Save className="h-4 w-4" />
-              {savingConfig ? "Salvando..." : "Salvar"}
-            </Button>
-          </CardContent>
-        </Card>
+        {/* Configurações - 3 cards */}
+        <ConfigCards />
 
         {/* Status dos Agentes */}
         <Card>
@@ -243,7 +146,7 @@ export default function CeoBolt() {
         <Card className="flex flex-col" style={{ minHeight: 400 }}>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
-              <Crown className="h-5 w-5 text-accent-foreground" />
+              <Crown className="h-5 w-5 text-yellow-500" />
               Chat com Bolt
             </CardTitle>
           </CardHeader>
