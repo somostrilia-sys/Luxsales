@@ -1,7 +1,7 @@
 // v2.5 — Refined dark dashboard sidebar
 import {
   LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Zap, Rocket
+  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -31,8 +31,7 @@ const managementItems: MenuItem[] = [
   { title: "Identidade Visual", url: "/identidade-visual", icon: Palette, levels: [0] },
   { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0, 1] },
   { title: "CEO / Bolt", url: "/ceo", icon: Crown, levels: [0] },
-  { title: "Motor de Disparo", url: "/motor-disparo", icon: Zap, levels: [0, 1, 2, 3] },
-  { title: "Motor de Leads", url: "/motor-leads", icon: Rocket, levels: [0, 1] },
+  { title: "Motor de Leads", url: "/motor-leads", icon: Rocket, levels: [0, 1, 2, 3] },
 ];
 
 const consultantItems: MenuItem[] = [
