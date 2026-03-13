@@ -694,8 +694,10 @@ function DashboardTab() {
 }
 
 // ═══════════════════════════════════════════
-// CONSULTOR VIEW — Meus Leads + Resumo
+// CONSULTOR VIEW — Meus Leads via Edge Function lead-pool
 // ═══════════════════════════════════════════
+const LEAD_POOL_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/lead-pool";
+
 function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -704,71 +706,102 @@ function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
   const [markingAll, setMarkingAll] = useState(false);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
-  const [counts, setCounts] = useState({ distributed: 0, dispatched: 0, total: 0 });
+  const [counts, setCounts] = useState({ pending: 0, dispatched: 0, responded: 0, converted: 0, total: 0 });
 
-  useEffect(() => { if (collaboratorId) fetchData(); }, [collaboratorId, page]);
+  useEffect(() => { if (collaboratorId) fetchAll(); }, [collaboratorId, page]);
 
-  // Realtime
-  useEffect(() => {
-    if (!collaboratorId) return;
-    const channel = supabase
-      .channel("my_leads_rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "lead_items", filter: `assigned_to=eq.${collaboratorId}` }, () => {
-        fetchData();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [collaboratorId]);
+  const getAuthHeaders = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${session?.access_token || ""}`,
+    };
+  };
 
-  const fetchData = async () => {
+  const fetchAll = async () => {
     setLoading(true);
-    const [leadsRes, countRes] = await Promise.all([
-      supabase.from("lead_items")
-        .select("*")
-        .eq("assigned_to", collaboratorId)
-        .in("status", ["distributed", "dispatched"])
-        .order("created_at", { ascending: false })
-        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1),
-      supabase.from("lead_items")
-        .select("status")
-        .eq("assigned_to", collaboratorId)
-        .in("status", ["distributed", "dispatched"]),
-    ]);
-    setLeads(leadsRes.data || []);
-    const c = { distributed: 0, dispatched: 0, total: 0 };
-    (countRes.data || []).forEach(item => {
-      if (item.status === "distributed") c.distributed++;
-      if (item.status === "dispatched") c.dispatched++;
-      c.total++;
-    });
-    setCounts(c);
-    setLoading(false);
+    try {
+      const headers = await getAuthHeaders();
+
+      const [leadsRes, statusRes] = await Promise.all([
+        fetch(LEAD_POOL_URL, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            action: "list_pending",
+            collaborator_id: collaboratorId,
+            page,
+            page_size: PAGE_SIZE,
+          }),
+        }),
+        fetch(LEAD_POOL_URL, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            action: "status",
+            collaborator_id: collaboratorId,
+          }),
+        }),
+      ]);
+
+      const leadsData = await leadsRes.json();
+      const statusData = await statusRes.json();
+
+      setLeads(leadsData?.leads || leadsData?.data || []);
+      setCounts({
+        pending: statusData?.pending || 0,
+        dispatched: statusData?.dispatched || 0,
+        responded: statusData?.responded || 0,
+        converted: statusData?.converted || 0,
+        total: (statusData?.pending || 0) + (statusData?.dispatched || 0) + (statusData?.responded || 0) + (statusData?.converted || 0),
+      });
+    } catch (e: any) {
+      toast.error("Erro ao carregar leads: " + e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filtered = leads.filter(l => {
+    if (!search) return true;
     const q = search.toLowerCase();
-    if (q && !(l.name || "").toLowerCase().includes(q) && !l.phone.includes(q) && !(l.city || "").toLowerCase().includes(q)) return false;
-    return true;
+    return (l.lead_name || "").toLowerCase().includes(q)
+      || (l.phone || "").includes(q)
+      || (l.city || "").toLowerCase().includes(q);
   });
 
   const markAsDispatched = async (id: string) => {
-    const { error } = await supabase.from("lead_items").update({ status: "dispatched", dispatched_at: new Date().toISOString() }).eq("id", id);
-    if (error) toast.error(error.message);
-    else fetchData();
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(LEAD_POOL_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action: "mark_dispatched", id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Erro");
+      fetchAll();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   };
 
   const markSelectedAsDispatched = async () => {
     if (selected.size === 0) return;
     setMarkingAll(true);
     try {
+      const headers = await getAuthHeaders();
       const ids = Array.from(selected);
-      for (let i = 0; i < ids.length; i += 100) {
-        const chunk = ids.slice(i, i + 100);
-        await supabase.from("lead_items").update({ status: "dispatched", dispatched_at: new Date().toISOString() }).in("id", chunk);
+      for (const id of ids) {
+        await fetch(LEAD_POOL_URL, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ action: "mark_dispatched", id }),
+        });
       }
       toast.success(`${ids.length} leads marcados como enviados`);
       setSelected(new Set());
-      fetchData();
+      fetchAll();
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -780,10 +813,10 @@ function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   };
 
-  const selectAllDistributed = () => {
-    const distributedIds = filtered.filter(l => l.status === "distributed").map(l => l.id);
-    if (selected.size === distributedIds.length) setSelected(new Set());
-    else setSelected(new Set(distributedIds));
+  const selectAllPending = () => {
+    const pendingIds = filtered.filter(l => l.status === "pending" || l.status === "distributed").map(l => l.id);
+    if (selected.size === pendingIds.length) setSelected(new Set());
+    else setSelected(new Set(pendingIds));
   };
 
   const copyPhone = (phone: string) => {
@@ -797,13 +830,33 @@ function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
     window.open(`https://wa.me/${num}`, "_blank");
   };
 
+  const statusLabel = (s: string) => {
+    switch (s) {
+      case "pending": case "distributed": return "Pendente";
+      case "dispatched": return "Enviado";
+      case "responded": return "Respondeu";
+      case "converted": return "Convertido";
+      default: return s;
+    }
+  };
+
+  const statusBadge = (s: string) => {
+    switch (s) {
+      case "dispatched": return "bg-success/20 text-success";
+      case "responded": return "bg-primary/20 text-primary";
+      case "converted": return "bg-accent/20 text-accent-foreground";
+      default: return "";
+    }
+  };
+
   return (
     <>
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-3">
-        <SummaryCard icon={<Package className="h-5 w-5" />} label="Pendentes" value={counts.distributed} color="yellow" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <SummaryCard icon={<Package className="h-5 w-5" />} label="Pendentes" value={counts.pending} color="yellow" />
         <SummaryCard icon={<CheckCircle className="h-5 w-5" />} label="Enviados" value={counts.dispatched} color="green" />
-        <SummaryCard icon={<TrendingUp className="h-5 w-5" />} label="Total" value={counts.total} />
+        <SummaryCard icon={<MessageCircle className="h-5 w-5" />} label="Responderam" value={counts.responded} />
+        <SummaryCard icon={<TrendingUp className="h-5 w-5" />} label="Convertidos" value={counts.converted} />
       </div>
 
       {/* Leads Table */}
@@ -815,7 +868,7 @@ function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
               <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Buscar nome, telefone, cidade..." className="pl-8 h-9 w-52" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
-            <Button size="sm" variant="outline" onClick={fetchData} disabled={loading}>
+            <Button size="sm" variant="outline" onClick={fetchAll} disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </Button>
           </div>
@@ -837,33 +890,39 @@ function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
               <TableRow>
                 <TableHead className="w-10">
                   <Checkbox
-                    checked={selected.size > 0 && selected.size === filtered.filter(l => l.status === "distributed").length}
-                    onCheckedChange={selectAllDistributed}
+                    checked={selected.size > 0 && selected.size === filtered.filter(l => l.status === "pending" || l.status === "distributed").length}
+                    onCheckedChange={selectAllPending}
                   />
                 </TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>Cidade</TableHead>
-                <TableHead>DDD</TableHead>
+                <TableHead>Campanha</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin mx-auto text-primary" />
+                  </TableCell>
+                </TableRow>
+              ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    {loading ? "Carregando..." : "Nenhum lead encontrado"}
+                    Nenhum lead encontrado
                   </TableCell>
                 </TableRow>
               ) : filtered.map(l => (
                 <TableRow key={l.id} className="table-row-hover">
                   <TableCell>
-                    {l.status === "distributed" && (
+                    {(l.status === "pending" || l.status === "distributed") && (
                       <Checkbox checked={selected.has(l.id)} onCheckedChange={() => toggleSelect(l.id)} />
                     )}
                   </TableCell>
-                  <TableCell className="font-medium">{l.name || "—"}</TableCell>
+                  <TableCell className="font-medium">{l.lead_name || "—"}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">
                       <span className="font-mono text-sm">{l.phone}</span>
@@ -876,15 +935,19 @@ function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
                     </div>
                   </TableCell>
                   <TableCell>{l.city || "—"}</TableCell>
-                  <TableCell>{l.ddd || "—"}</TableCell>
                   <TableCell>
-                    <Badge variant={l.status === "distributed" ? "secondary" : "default"}
-                      className={l.status === "dispatched" ? "bg-success/20 text-success" : ""}>
-                      {l.status === "distributed" ? "Pendente" : "Enviado"}
+                    {l.campaign_tag ? (
+                      <Badge variant="outline" className="text-xs">{l.campaign_tag}</Badge>
+                    ) : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={l.status === "pending" || l.status === "distributed" ? "secondary" : "default"}
+                      className={statusBadge(l.status)}>
+                      {statusLabel(l.status)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    {l.status === "distributed" && (
+                    {(l.status === "pending" || l.status === "distributed") && (
                       <Button size="sm" variant="outline" onClick={() => markAsDispatched(l.id)} className="gap-1 text-xs">
                         <CheckCircle className="h-3.5 w-3.5" /> Enviado
                       </Button>
@@ -895,7 +958,7 @@ function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
             </TableBody>
           </Table>
 
-          {leads.length === PAGE_SIZE && (
+          {leads.length >= PAGE_SIZE && (
             <div className="flex items-center justify-center gap-3 p-4">
               <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Anterior</Button>
               <span className="text-sm text-muted-foreground">Página {page + 1}</span>
