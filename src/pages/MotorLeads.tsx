@@ -42,7 +42,7 @@ export default function MotorLeads() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Motor de Leads</h1>
             <p className="text-muted-foreground text-sm">
-              {isAdmin ? "Upload, distribuição e acompanhamento de leads" : "Leads distribuídos para você"}
+              {isAdmin ? "Visão geral dos pools" : "Leads distribuídos para você"}
             </p>
           </div>
         </div>
