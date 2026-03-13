@@ -672,69 +672,19 @@ function DashboardTab() {
               ) : collabStats.map(c => {
                 const total = c.distributed + c.dispatched;
                 const rate = total > 0 ? Math.round((c.dispatched / total) * 100) : 0;
-                const isExpanded = expandedCollab === c.id;
                 return (
-                  <>
-                    <TableRow key={c.id} className="table-row-hover">
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary">{c.distributed}</Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {c.dispatched > 0 ? <Badge className="bg-success/20 text-success">{c.dispatched}</Badge> : "0"}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className={rate > 50 ? "text-success font-semibold" : "text-muted-foreground"}>{rate}%</span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button size="sm" variant={isExpanded ? "default" : "outline"} onClick={() => loadCollabLeads(c.id)} className="gap-1 text-xs">
-                          <Eye className="h-3.5 w-3.5" /> {isExpanded ? "Fechar" : "Ver Leads"}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                    {isExpanded && (
-                      <TableRow key={`${c.id}-detail`}>
-                        <TableCell colSpan={5} className="p-0 bg-muted/30">
-                          {loadingLeads ? (
-                            <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
-                          ) : expandedLeads.length === 0 ? (
-                            <p className="text-center text-muted-foreground py-6 text-sm">Nenhum lead encontrado</p>
-                          ) : (
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="text-xs">Nome</TableHead>
-                                  <TableHead className="text-xs">Telefone</TableHead>
-                                  <TableHead className="text-xs">Cidade</TableHead>
-                                  <TableHead className="text-xs">DDD</TableHead>
-                                  <TableHead className="text-xs">Status</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {expandedLeads.map(l => (
-                                  <TableRow key={l.id}>
-                                    <TableCell className="text-xs">{l.name || "—"}</TableCell>
-                                    <TableCell className="text-xs font-mono">{l.phone}</TableCell>
-                                    <TableCell className="text-xs">{l.city || "—"}</TableCell>
-                                    <TableCell className="text-xs">{l.ddd || "—"}</TableCell>
-                                    <TableCell className="text-xs">
-                                      <Badge variant={l.status === "distributed" ? "secondary" : "default"}
-                                        className={l.status === "dispatched" ? "bg-success/20 text-success" : ""}>
-                                        {l.status === "distributed" ? "Pendente" : "Enviado"}
-                                      </Badge>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          )}
-                          {expandedLeads.length === 50 && (
-                            <p className="text-center text-xs text-muted-foreground py-2">Mostrando primeiros 50 leads</p>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </>
+                  <TableRow key={c.id} className="table-row-hover">
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="secondary">{c.distributed}</Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {c.dispatched > 0 ? <Badge className="bg-success/20 text-success">{c.dispatched}</Badge> : "0"}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className={rate > 50 ? "text-success font-semibold" : "text-muted-foreground"}>{rate}%</span>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
             </TableBody>
