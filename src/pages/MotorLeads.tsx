@@ -517,6 +517,9 @@ function DashboardTab() {
   const [togglingRefill, setTogglingRefill] = useState(false);
   const [stats, setStats] = useState({ pending: 0, distributed: 0, dispatched: 0, total: 0 });
   const [collabStats, setCollabStats] = useState<{ id: string; name: string; distributed: number; dispatched: number }[]>([]);
+  const [expandedCollab, setExpandedCollab] = useState<string | null>(null);
+  const [expandedLeads, setExpandedLeads] = useState<any[]>([]);
+  const [loadingLeads, setLoadingLeads] = useState(false);
 
   useEffect(() => { loadDashboard(); }, []);
 
@@ -527,27 +530,48 @@ function DashboardTab() {
       const { data: cfg } = await supabase.from("system_configs").select("value").eq("key", "auto_refill_enabled").single();
       setAutoRefill(cfg?.value === "true");
 
-      // Lead item counts
-      const { data: items } = await supabase.from("lead_items").select("status,assigned_to").limit(50000);
-      const allItems = items || [];
-      const pending = allItems.filter(i => i.status === "pending" && !i.assigned_to).length;
-      const distributed = allItems.filter(i => i.status === "distributed").length;
-      const dispatched = allItems.filter(i => i.status === "dispatched").length;
-      setStats({ pending, distributed, dispatched, total: allItems.length });
-
-      // Per-collaborator stats
-      const collabMap = new Map<string, { distributed: number; dispatched: number }>();
-      allItems.forEach(item => {
-        if (!item.assigned_to) return;
-        if (!collabMap.has(item.assigned_to)) collabMap.set(item.assigned_to, { distributed: 0, dispatched: 0 });
-        const entry = collabMap.get(item.assigned_to)!;
-        if (item.status === "distributed") entry.distributed++;
-        if (item.status === "dispatched") entry.dispatched++;
+      // Counts via head:true (no data transfer)
+      const [pendingRes, distributedRes, dispatchedRes, totalRes] = await Promise.all([
+        supabase.from("lead_items").select("id", { count: "exact", head: true }).eq("status", "pending").is("assigned_to", null),
+        supabase.from("lead_items").select("id", { count: "exact", head: true }).eq("status", "distributed"),
+        supabase.from("lead_items").select("id", { count: "exact", head: true }).eq("status", "dispatched"),
+        supabase.from("lead_items").select("id", { count: "exact", head: true }),
+      ]);
+      setStats({
+        pending: pendingRes.count || 0,
+        distributed: distributedRes.count || 0,
+        dispatched: dispatchedRes.count || 0,
+        total: totalRes.count || 0,
       });
 
-      // Get names
+      // Per-collaborator stats: get batches which already have assigned_to + total_leads
+      const { data: batches } = await supabase.from("lead_batches")
+        .select("assigned_to, total_leads, status");
+
+      // Also get per-collab dispatched counts (only assigned collabs)
+      const collabMap = new Map<string, { distributed: number; dispatched: number }>();
+      (batches || []).forEach(b => {
+        if (!b.assigned_to) return;
+        if (!collabMap.has(b.assigned_to)) collabMap.set(b.assigned_to, { distributed: 0, dispatched: 0 });
+        const entry = collabMap.get(b.assigned_to)!;
+        entry.distributed += (b.total_leads || 0);
+      });
+
+      // Get actual dispatched count per collaborator
       const collabIds = Array.from(collabMap.keys());
       if (collabIds.length > 0) {
+        // Get dispatched counts per collab
+        for (const cid of collabIds) {
+          const { count } = await supabase.from("lead_items")
+            .select("id", { count: "exact", head: true })
+            .eq("assigned_to", cid)
+            .eq("status", "dispatched");
+          const entry = collabMap.get(cid)!;
+          entry.dispatched = count || 0;
+          // distributed = total assigned - dispatched
+          entry.distributed = Math.max(0, entry.distributed - entry.dispatched);
+        }
+
         const { data: collabs } = await supabase.from("collaborators").select("id,name").in("id", collabIds);
         const nameMap = new Map((collabs || []).map(c => [c.id, c.name]));
         setCollabStats(
@@ -562,6 +586,24 @@ function DashboardTab() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadCollabLeads = async (collabId: string) => {
+    if (expandedCollab === collabId) {
+      setExpandedCollab(null);
+      setExpandedLeads([]);
+      return;
+    }
+    setExpandedCollab(collabId);
+    setLoadingLeads(true);
+    const { data } = await supabase.from("lead_items")
+      .select("id, name, phone, city, ddd, status, dispatched_at")
+      .eq("assigned_to", collabId)
+      .in("status", ["distributed", "dispatched"])
+      .order("created_at", { ascending: false })
+      .limit(50);
+    setExpandedLeads(data || []);
+    setLoadingLeads(false);
   };
 
   const toggleAutoRefill = async (enabled: boolean) => {
