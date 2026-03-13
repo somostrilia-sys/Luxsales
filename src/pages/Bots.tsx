@@ -887,8 +887,13 @@ export default function Bots() {
 
         {/* ════════════════════ CHIPS DESCARTÁVEIS ════════════════════ */}
         <DisposableChipsSection collaboratorId={collaborator?.id || null} />
-      </div>
 
+        {/* ════════════════════ TREINAR MEU BOT ════════════════════ */}
+        <BotTrainingSection collaboratorId={collaborator?.id || null} />
+
+        {/* ════════════════════ CONVERSAS DO WHATSAPP ════════════════════ */}
+        <WhatsAppConversationsSection collaboratorId={collaborator?.id || null} />
+      </div>
       {/* ════════════════════ MODAL BOT ════════════════════ */}
       <Dialog open={botModalOpen} onOpenChange={setBotModalOpen}>
         <DialogContent className="bg-[#111118] border-[#1E1E2E] max-w-2xl max-h-[90vh] overflow-y-auto">
