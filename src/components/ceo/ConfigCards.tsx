@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Crown, Users } from "lucide-react";
+import { Save, Crown } from "lucide-react";
 import { ApiKeyInput } from "./ApiKeyInput";
 
 interface ConfigValues {
