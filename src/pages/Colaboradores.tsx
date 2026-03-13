@@ -305,7 +305,7 @@ export default function Colaboradores() {
             {canManageInvites && (
               <>
                 <Button variant="outline" onClick={() => setInviteListOpen(true)} className="text-sm">
-                  Convites ({inviteLinks.filter(i => i.is_active && (!i.expires_at || new Date(i.expires_at) > new Date())).length})
+                  Convites ({inviteLinks.filter(i => i.active && (!i.expires_at || new Date(i.expires_at) > new Date())).length})
                 </Button>
                 <Button variant="outline" onClick={openInviteDialog} className="text-sm">
                   <Link2 className="h-4 w-4 mr-1.5" />
