@@ -95,14 +95,13 @@ function maskKey(key: string) {
 export default function Bots() {
   const { collaborator } = useCollaborator();
   const { user } = useAuth();
-  const [myWhatsAppBot, setMyWhatsAppBot] = useState<BotInstance | null>(null);
-  const [waLoading, setWaLoading] = useState(true);
-  const [waConnecting, setWaConnecting] = useState(false);
+
+  // ── WhatsApp states ──
+  type WaStatus = "loading" | "disconnected" | "connecting" | "connected" | "no_instance";
+  const [waInstanceStatus, setWaInstanceStatus] = useState<WaStatus>("loading");
   const [waQrCode, setWaQrCode] = useState<string | null>(null);
-  const [waConnected, setWaConnected] = useState(false);
-  const [waNumber, setWaNumber] = useState<string | null>(null);
-  const [collabId, setCollabId] = useState<string | null>(null);
-  const [collabName, setCollabName] = useState<string | null>(null);
+  const [waPhone, setWaPhone] = useState<string | null>(null);
+  const [waProfileName, setWaProfileName] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [bots, setBots] = useState<BotInstance[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
@@ -146,127 +145,105 @@ export default function Bots() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Fetch collaborator ID from auth user
-  useEffect(() => {
-    if (!user) { setWaLoading(false); return; }
-    (async () => {
-      const { data: collab } = await supabase
-        .from("collaborators")
-        .select("id, name")
-        .eq("auth_user_id", user.id)
-        .single();
-      if (collab) {
-        setCollabId(collab.id);
-        setCollabName(collab.name);
-      } else {
-        setWaLoading(false);
-      }
-    })();
-  }, [user]);
-
-  // Check WhatsApp status on load when collabId is ready
-  useEffect(() => {
-    if (!collabId) return;
-    (async () => {
-      setWaLoading(true);
-      await checkWaStatus();
-      setWaLoading(false);
-    })();
-  }, [collabId]);
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+  // ── WhatsApp: helpers ──
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
   }, []);
 
-  const stopPolling = () => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-  };
-
-  const checkWaStatus = async () => {
-    if (!collabId) return;
+  const fetchQrCode = useCallback(async (collabId: string) => {
+    setWaInstanceStatus("connecting");
     try {
-      const { data, error } = await supabase.functions.invoke("create-whatsapp-instance", {
-        body: { action: "status", collaborator_id: collabId },
+      const { data } = await supabase.functions.invoke("create-whatsapp-instance", {
+        body: { action: "qrcode", collaborator_id: collabId },
       });
-      if (error || data?.error) return;
-      if (data?.connected) {
-        setWaConnected(true);
-        setWaQrCode(null);
-        setWaNumber(data.number || null);
-        stopPolling();
+      if (data?.qr_code) {
+        setWaQrCode(data.qr_code);
+      } else {
+        toast.error("Não foi possível gerar QR code");
       }
-    } catch {}
-  };
+    } catch { toast.error("Erro ao gerar QR code"); }
+  }, []);
 
-  const startPolling = () => {
+  const startPolling = useCallback((collabId: string) => {
     stopPolling();
     pollingRef.current = setInterval(async () => {
-      if (!collabId) return;
       try {
         const { data } = await supabase.functions.invoke("create-whatsapp-instance", {
           body: { action: "status", collaborator_id: collabId },
         });
         if (data?.connected) {
-          setWaConnected(true);
+          setWaInstanceStatus("connected");
           setWaQrCode(null);
-          setWaNumber(data.number || null);
+          setWaPhone(data.phone || null);
+          setWaProfileName(data.profile_name || null);
           stopPolling();
           toast.success("WhatsApp conectado!");
         }
       } catch {}
     }, 5000);
-  };
+  }, [stopPolling]);
+
+  // ── WhatsApp: mount check ──
+  useEffect(() => {
+    if (!collaborator?.id) { setWaInstanceStatus("loading"); return; }
+    const collabId = collaborator.id;
+    (async () => {
+      setWaInstanceStatus("loading");
+      try {
+        const { data, error } = await supabase.functions.invoke("create-whatsapp-instance", {
+          body: { action: "status", collaborator_id: collabId },
+        });
+        if (error || data?.error) { setWaInstanceStatus("no_instance"); return; }
+        if (data?.connected) {
+          setWaInstanceStatus("connected");
+          setWaPhone(data.phone || null);
+          setWaProfileName(data.profile_name || null);
+        } else if (data?.has_instance) {
+          // Has instance but disconnected → auto fetch QR
+          await fetchQrCode(collabId);
+          startPolling(collabId);
+        } else {
+          setWaInstanceStatus("no_instance");
+        }
+      } catch { setWaInstanceStatus("no_instance"); }
+    })();
+    return () => stopPolling();
+  }, [collaborator?.id, fetchQrCode, startPolling, stopPolling]);
+
+  // ── WhatsApp: start polling when connecting ──
+  useEffect(() => {
+    if (waInstanceStatus === "connecting" && waQrCode && collaborator?.id) {
+      startPolling(collaborator.id);
+    }
+  }, [waInstanceStatus, waQrCode, collaborator?.id, startPolling]);
 
   const handleConnectWa = async () => {
-    if (!collabId) { toast.error("Colaborador não encontrado"); return; }
-    setWaConnecting(true);
+    if (!collaborator?.id) { toast.error("Colaborador não encontrado"); return; }
+    setWaInstanceStatus("connecting");
     try {
       const { data, error } = await supabase.functions.invoke("create-whatsapp-instance", {
-        body: { action: "auto", collaborator_id: collabId, collaborator_name: collabName },
+        body: { collaborator_id: collaborator.id },
       });
       if (error || data?.error) {
-        toast.error(data?.error || error?.message || "Erro ao conectar WhatsApp");
+        toast.error(data?.error || error?.message || "Erro ao criar instância");
+        setWaInstanceStatus("no_instance");
       } else if (data?.connected) {
-        setWaConnected(true);
-        setWaQrCode(null);
-        setWaNumber(data.number || null);
+        setWaInstanceStatus("connected");
+        setWaPhone(data.phone || null);
         toast.success("WhatsApp conectado!");
       } else if (data?.qr_code) {
         setWaQrCode(data.qr_code);
-        setWaConnected(false);
-        startPolling();
+        startPolling(collaborator.id);
       }
     } catch (e: any) {
       toast.error(e.message || "Erro de conexão");
+      setWaInstanceStatus("no_instance");
     }
-    setWaConnecting(false);
   };
 
   const handleRefreshQr = async () => {
-    setWaConnecting(true);
-    await checkWaStatus();
-    if (!waConnected) {
-      try {
-        const { data } = await supabase.functions.invoke("create-whatsapp-instance", {
-          body: { action: "auto", collaborator_id: collabId, collaborator_name: collabName },
-        });
-        if (data?.qr_code) {
-          setWaQrCode(data.qr_code);
-          startPolling();
-        } else if (data?.connected) {
-          setWaConnected(true);
-          setWaQrCode(null);
-          setWaNumber(data.number || null);
-          stopPolling();
-          toast.success("WhatsApp conectado!");
-        }
-      } catch {}
-    }
-    setWaConnecting(false);
+    if (!collaborator?.id) return;
+    await fetchQrCode(collaborator.id);
   };
 
   // ── Bot helpers ──
@@ -595,17 +572,20 @@ export default function Bots() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {waLoading ? (
+            {waInstanceStatus === "loading" ? (
               <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-            ) : waConnected ? (
+            ) : waInstanceStatus === "connected" ? (
               <div className="flex items-center gap-4 py-4">
                 <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-sm px-3 py-1">🟢 Conectado</Badge>
-                {waNumber && <span className="text-foreground font-medium">{waNumber}</span>}
-                <Button size="sm" variant="outline" onClick={async () => { setWaConnecting(true); await checkWaStatus(); setWaConnecting(false); }} disabled={waConnecting}>
-                  {waConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Atualizar Status"}
+                <div>
+                  {waProfileName && <span className="text-foreground font-medium">{waProfileName}</span>}
+                  {waPhone && <span className="text-muted-foreground text-sm ml-2">{waPhone}</span>}
+                </div>
+                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive gap-2" onClick={() => toast.info("Desconectar em breve")}>
+                  <Power className="h-4 w-4" /> Desconectar
                 </Button>
               </div>
-            ) : waQrCode ? (
+            ) : (waInstanceStatus === "connecting" && waQrCode) ? (
               <div className="flex flex-col items-center gap-5 py-6">
                 <div className="bg-white p-4 rounded-2xl shadow-lg border-2 border-emerald-500/20">
                   <img src={waQrCode} alt="QR Code WhatsApp" width={220} height={220} className="rounded-lg" />
@@ -614,21 +594,18 @@ export default function Bots() {
                   <p className="text-sm font-medium text-foreground">Escaneie com WhatsApp Business</p>
                   <p className="text-xs text-muted-foreground">Configurações &gt; Aparelhos conectados &gt; Conectar aparelho</p>
                 </div>
-                <Button size="sm" variant="outline" onClick={handleRefreshQr} disabled={waConnecting} className="gap-2">
-                  {waConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><RefreshCw className="h-4 w-4" /> Atualizar QR</>}
+                <Button size="sm" variant="outline" onClick={handleRefreshQr} className="gap-2">
+                  <RefreshCw className="h-4 w-4" /> Atualizar QR
                 </Button>
               </div>
-            ) : !collabId ? (
-              <div className="text-center py-8 space-y-3">
-                <Smartphone className="h-10 w-10 text-muted-foreground mx-auto" />
-                <p className="text-muted-foreground text-sm">Aguardando configuração UAZAPI</p>
-              </div>
+            ) : waInstanceStatus === "connecting" ? (
+              <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
             ) : (
               <div className="text-center py-8 space-y-3">
                 <Smartphone className="h-10 w-10 text-muted-foreground mx-auto" />
                 <p className="text-muted-foreground text-sm">Nenhuma instância WhatsApp vinculada</p>
-                <Button onClick={handleConnectWa} disabled={waConnecting} className="gap-2">
-                  {waConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><QrCode className="h-4 w-4" /> Conectar WhatsApp</>}
+                <Button onClick={handleConnectWa} className="gap-2">
+                  <QrCode className="h-4 w-4" /> Conectar WhatsApp
                 </Button>
               </div>
             )}
