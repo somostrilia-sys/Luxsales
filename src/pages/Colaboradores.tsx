@@ -596,8 +596,8 @@ export default function Colaboradores() {
                   const status = getInviteStatus(invite);
                   return (
                     <TableRow key={invite.id} className="table-row-hover">
-                      <TableCell className="font-medium">{getCompanyName(invite.company_id)}</TableCell>
-                      <TableCell>{getRoleName(invite.role)}</TableCell>
+                      <TableCell className="font-medium">{invite.company_id ? getCompanyName(invite.company_id) : <span className="text-muted-foreground italic">Escolha livre</span>}</TableCell>
+                      <TableCell>{invite.role ? getRoleName(invite.role) : <span className="text-muted-foreground italic">Escolha livre</span>}</TableCell>
                       <TableCell>{invite.current_uses ?? 0}/{invite.max_uses ?? "∞"}</TableCell>
                       <TableCell className="text-sm">
                         {invite.expires_at ? format(new Date(invite.expires_at), "dd/MM/yy HH:mm") : "Nunca"}
