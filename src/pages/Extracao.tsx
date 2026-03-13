@@ -36,6 +36,9 @@ export default function Extracao() {
   }, []);
 
   if (roleLevel > 1) return <Navigate to="/" replace />;
+
+  const formatCep = (val: string) => {
+    const digits = val.replace(/\D/g, "").slice(0, 8);
     if (digits.length > 5) return digits.slice(0, 5) + "-" + digits.slice(5);
     return digits;
   };
