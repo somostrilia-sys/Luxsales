@@ -195,12 +195,17 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
     setChips(prev => prev.map(c => c.id === chipId ? { ...c, [field]: value } : c));
   };
 
-  const handleConnect = async (chip: DisposableChip) => {
+  const handleConnect = async (chip: DisposableChip, retryCount = 0) => {
     setConnecting(chip.id);
     try {
-      // If no instance_token, the Edge Function will auto-create the UAZAPI instance first
       const result = await callEdge({ action: "connect", chip_id: chip.id });
       if (result?.error) {
+        // If error but within retries, wait 2s and try once more (instance may have just been created)
+        if (retryCount < 2) {
+          toast.info("Criando instância, aguarde...");
+          await new Promise(r => setTimeout(r, 2500));
+          return handleConnect(chip, retryCount + 1);
+        }
         toast.error("Erro ao conectar: " + result.error);
         setConnecting(null);
         return;
@@ -211,13 +216,21 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         : c
       ));
       if (qrCode) {
-        toast.info("QR gerado — escaneie no WhatsApp");
+        toast.info("QR pronto — escaneie agora no WhatsApp");
         startStatusPolling(chip.id);
+      } else if (retryCount < 2) {
+        // No QR yet — instance just created, retry immediately
+        await new Promise(r => setTimeout(r, 2000));
+        return handleConnect(chip, retryCount + 1);
       } else {
-        toast.warning("QR não retornado — tente novamente em instantes");
+        toast.warning("QR não retornado. Tente clicar Conectar novamente.");
         setConnecting(null);
       }
     } catch (e) {
+      if (retryCount < 1) {
+        await new Promise(r => setTimeout(r, 2000));
+        return handleConnect(chip, retryCount + 1);
+      }
       toast.error("Falha ao conectar chip. Tente novamente.");
       setConnecting(null);
     }
