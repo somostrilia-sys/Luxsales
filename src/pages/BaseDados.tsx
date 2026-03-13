@@ -69,6 +69,11 @@ const IMPORT_FIELDS = ["name", "phone", "email", "document", "city", "state"] as
 type ImportField = typeof IMPORT_FIELDS[number];
 
 export default function BaseDados() {
+  const { roleLevel } = useCollaborator();
+
+  if (roleLevel > 1) return <Navigate to="/" replace />;
+
+
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
