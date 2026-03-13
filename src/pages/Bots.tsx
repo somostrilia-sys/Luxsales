@@ -469,6 +469,50 @@ export default function Bots() {
             )}
           </TabsContent>
         </Tabs>
+
+        {/* ════════════════════ MEU WHATSAPP ════════════════════ */}
+        <Card className="border-emerald-500/30">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Smartphone className="h-5 w-5 text-emerald-500" />
+              Meu WhatsApp
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {waLoading ? (
+              <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            ) : !myWhatsAppBot ? (
+              <div className="text-center py-8 space-y-2">
+                <Smartphone className="h-10 w-10 text-muted-foreground mx-auto" />
+                <p className="text-muted-foreground text-sm">Aguardando configuração UAZAPI</p>
+                <p className="text-xs text-muted-foreground">Nenhuma instância WhatsApp vinculada ao seu perfil.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground text-xs">Número</span>
+                  <p className="font-medium text-foreground">{myWhatsAppBot.whatsapp_number || "—"}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-xs">Status</span>
+                  <div className="mt-1">
+                    <Badge variant="outline" className={myWhatsAppBot.whatsapp_status === "connected" ? "text-emerald-400 border-emerald-500/30" : "text-amber-400 border-amber-500/30"}>
+                      {myWhatsAppBot.whatsapp_status === "connected" ? "🟢 Online" : "🟡 Offline"}
+                    </Badge>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-xs">Instância UAZAPI</span>
+                  <p className="font-medium text-foreground truncate">{myWhatsAppBot.uazapi_instance_id || "—"}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-xs">Último acesso</span>
+                  <p className="font-medium text-foreground">{myWhatsAppBot.last_seen_at ? new Date(myWhatsAppBot.last_seen_at).toLocaleString("pt-BR") : "Nunca"}</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* ════════════════════ MODAL BOT ════════════════════ */}
