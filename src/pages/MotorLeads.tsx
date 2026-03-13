@@ -657,6 +657,8 @@ function DashboardTab() {
                 <TableHead className="text-center">Pendentes</TableHead>
                 <TableHead className="text-center">Disparados</TableHead>
                 <TableHead className="text-center">Taxa</TableHead>
+                <TableHead className="text-center">Disparados</TableHead>
+                <TableHead className="text-center">Taxa</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
