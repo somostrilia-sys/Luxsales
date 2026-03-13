@@ -561,40 +561,52 @@ export type Database = {
       }
       lead_batches: {
         Row: {
-          assigned_to: string | null
-          company_id: string | null
-          created_at: string | null
-          created_by: string | null
-          filters: Json | null
+          assigned_to: string
+          company_id: string
+          created_at: string
+          created_by: string
+          filtro_cidade: string | null
+          filtro_ddd: string | null
+          filtro_fonte: string | null
           id: string
-          sent_leads: number | null
+          is_auto_refill: boolean
+          quantidade: number
           status: string
-          total_leads: number | null
-          updated_at: string | null
+          total_convertidos: number
+          total_enviados: number
+          total_responderam: number
         }
         Insert: {
-          assigned_to?: string | null
-          company_id?: string | null
-          created_at?: string | null
-          created_by?: string | null
-          filters?: Json | null
+          assigned_to: string
+          company_id: string
+          created_at?: string
+          created_by: string
+          filtro_cidade?: string | null
+          filtro_ddd?: string | null
+          filtro_fonte?: string | null
           id?: string
-          sent_leads?: number | null
+          is_auto_refill?: boolean
+          quantidade?: number
           status?: string
-          total_leads?: number | null
-          updated_at?: string | null
+          total_convertidos?: number
+          total_enviados?: number
+          total_responderam?: number
         }
         Update: {
-          assigned_to?: string | null
-          company_id?: string | null
-          created_at?: string | null
-          created_by?: string | null
-          filters?: Json | null
+          assigned_to?: string
+          company_id?: string
+          created_at?: string
+          created_by?: string
+          filtro_cidade?: string | null
+          filtro_ddd?: string | null
+          filtro_fonte?: string | null
           id?: string
-          sent_leads?: number | null
+          is_auto_refill?: boolean
+          quantidade?: number
           status?: string
-          total_leads?: number | null
-          updated_at?: string | null
+          total_convertidos?: number
+          total_enviados?: number
+          total_responderam?: number
         }
         Relationships: [
           {
@@ -622,45 +634,67 @@ export type Database = {
       }
       lead_items: {
         Row: {
+          assigned_at: string | null
+          assigned_by: string | null
           assigned_to: string | null
           batch_id: string | null
-          city: string | null
-          created_at: string | null
+          cidade: string | null
+          company_id: string
+          created_at: string
           ddd: string | null
           dispatched_at: string | null
+          estado: string | null
+          fonte: string | null
           id: string
-          name: string | null
-          phone: string
-          state: string | null
+          nome: string
           status: string
+          telefone: string
+          updated_at: string
         }
         Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
           assigned_to?: string | null
           batch_id?: string | null
-          city?: string | null
-          created_at?: string | null
+          cidade?: string | null
+          company_id: string
+          created_at?: string
           ddd?: string | null
           dispatched_at?: string | null
+          estado?: string | null
+          fonte?: string | null
           id?: string
-          name?: string | null
-          phone: string
-          state?: string | null
+          nome: string
           status?: string
+          telefone: string
+          updated_at?: string
         }
         Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
           assigned_to?: string | null
           batch_id?: string | null
-          city?: string | null
-          created_at?: string | null
+          cidade?: string | null
+          company_id?: string
+          created_at?: string
           ddd?: string | null
           dispatched_at?: string | null
+          estado?: string | null
+          fonte?: string | null
           id?: string
-          name?: string | null
-          phone?: string
-          state?: string | null
+          nome?: string
           status?: string
+          telefone?: string
+          updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "lead_items_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "lead_items_assigned_to_fkey"
             columns: ["assigned_to"]
@@ -673,6 +707,13 @@ export type Database = {
             columns: ["batch_id"]
             isOneToOne: false
             referencedRelation: "lead_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_items_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -1062,7 +1103,36 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_and_auto_refill: {
+        Args: { p_bolt_collaborator_id: string }
+        Returns: Json
+      }
+      distribute_leads: {
+        Args: {
+          p_assigned_by: string
+          p_assigned_to: string
+          p_company_id: string
+          p_filtro_cidade?: string
+          p_filtro_ddd?: string
+          p_is_auto_refill?: boolean
+          p_quantidade?: number
+        }
+        Returns: Json
+      }
       get_contact_leads_stats: { Args: never; Returns: Json }
+      get_lead_stats_by_collaborator: {
+        Args: { p_company_id?: string }
+        Returns: {
+          collaborator_id: string
+          collaborator_name: string
+          role_slug: string
+          total_atribuidos: number
+          total_convertidos: number
+          total_enviados: number
+          total_pendentes: number
+          total_responderam: number
+        }[]
+      }
       increment_metric: {
         Args: { p_consultant_id: string; p_metric: string; p_value?: number }
         Returns: undefined
