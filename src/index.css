@@ -117,10 +117,10 @@
 
 /* Glassmorphism card */
 .card-glass {
-  background: hsl(240 14% 6% / 0.6);
+  background: hsl(222 41% 7% / 0.6);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-color: hsl(240 12% 16% / 0.5);
+  border-color: hsl(222 30% 18% / 0.5);
 }
 
 /* ─── KPI stat icon containers ─── */
