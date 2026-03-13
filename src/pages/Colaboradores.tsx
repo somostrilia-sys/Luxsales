@@ -611,7 +611,7 @@ export default function Colaboradores() {
                           <Button variant="ghost" size="sm" onClick={() => shareWhatsApp(invite.token)} title="WhatsApp">
                             <MessageCircle className="h-4 w-4" />
                           </Button>
-                          {invite.is_active && (
+                          {invite.active && (
                             <Button variant="ghost" size="sm" onClick={() => deactivateInvite(invite.id)} title="Desativar" className="text-destructive hover:text-destructive">
                               <XCircle className="h-4 w-4" />
                             </Button>

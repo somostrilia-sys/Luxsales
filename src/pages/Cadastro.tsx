@@ -472,7 +472,7 @@ export default function Cadastro() {
                                 <Button variant="ghost" size="sm" onClick={() => window.open(`/convite/${invite.token}`, '_blank')} title="Abrir link">
                                   <ExternalLink className="h-4 w-4" />
                                 </Button>
-                                {invite.is_active && (
+                                {invite.active && (
                                   <Button variant="ghost" size="sm" onClick={() => deactivateInvite(invite.id)} title="Desativar" className="text-destructive hover:text-destructive">
                                     <Trash2 className="h-4 w-4" />
                                   </Button>

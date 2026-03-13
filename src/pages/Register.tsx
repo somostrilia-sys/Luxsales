@@ -242,7 +242,7 @@ function InviteRegistration({ token }: { token: string }) {
 
       await supabase
         .from("invite_links")
-        .update({ current_uses: (invite.current_uses || 0) + 1 })
+        .update({ used_count: (invite.used_count || 0) + 1 })
         .eq("id", invite.id);
 
       const firstName = nome.split(" ")[0];
