@@ -20,7 +20,6 @@ interface ConfigValues {
   api_key_agent_2: string;
   api_key_agent_3: string;
   api_key_agent_4: string;
-  anthropic_api_key_staff: string;
 }
 
 const DEFAULT_VALUES: ConfigValues = {
@@ -30,7 +29,6 @@ const DEFAULT_VALUES: ConfigValues = {
   api_key_agent_2: "",
   api_key_agent_3: "",
   api_key_agent_4: "",
-  anthropic_api_key_staff: "",
 };
 
 export function ConfigCards() {
