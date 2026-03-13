@@ -148,7 +148,7 @@ export default function BaseDados() {
     if (filterStatus !== "all") query = query.eq("status", filterStatus);
     if (search) query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
     if (citySearch) query = query.ilike("city", `%${citySearch}%`);
-    if (dddFilter && dddFilter.length === 2) query = query.like("phone", `${dddFilter}%`);
+    if (dddFilter && dddFilter.length === 2) query = query.like("phone", `(${dddFilter})%`);
 
     const { data } = await query
       .range(page * perPage, (page + 1) * perPage - 1);
@@ -240,7 +240,7 @@ export default function BaseDados() {
     if (filterStatus !== "all") query = query.eq("status", filterStatus);
     if (search) query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
     if (citySearch) query = query.ilike("city", `%${citySearch}%`);
-    if (dddFilter && dddFilter.length === 2) query = query.like("phone", `${dddFilter}%`);
+    if (dddFilter && dddFilter.length === 2) query = query.like("phone", `(${dddFilter})%`);
 
     const { data } = await query.limit(10000);
     const items = data || [];

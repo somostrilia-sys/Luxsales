@@ -81,7 +81,7 @@ export default function Metricas() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
-                        <p className="text-2xl font-bold mt-1">{s.value}</p>
+                        <p className="text-2xl font-bold mt-1">{typeof s.value === "number" ? s.value.toLocaleString("pt-BR") : s.value}</p>
                       </div>
                       <div className="p-2.5 rounded-lg bg-muted"><s.icon className="h-5 w-5 text-muted-foreground" /></div>
                     </div>

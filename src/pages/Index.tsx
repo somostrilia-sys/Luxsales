@@ -120,7 +120,7 @@ export default function Index() {
                     {loading ? (
                       <Skeleton className="h-7 w-16 mt-1" />
                     ) : (
-                      <p className="text-2xl font-bold mt-1">{s.value}</p>
+                      <p className="text-2xl font-bold mt-1">{typeof s.value === "number" ? s.value.toLocaleString("pt-BR") : s.value}</p>
                     )}
                   </div>
                   <div className={`p-2.5 rounded-lg bg-muted ${s.color}`}>
