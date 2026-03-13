@@ -657,15 +657,12 @@ function DashboardTab() {
                 <TableHead className="text-center">Pendentes</TableHead>
                 <TableHead className="text-center">Disparados</TableHead>
                 <TableHead className="text-center">Taxa</TableHead>
-                <TableHead className="text-center">Disparados</TableHead>
-                <TableHead className="text-center">Taxa</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {collabStats.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                     Nenhum colaborador com leads
                   </TableCell>
                 </TableRow>
