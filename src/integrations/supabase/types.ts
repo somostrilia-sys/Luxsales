@@ -101,6 +101,7 @@ export type Database = {
       }
       collaborators: {
         Row: {
+          bot_training: string | null
           company_id: string | null
           created_at: string | null
           email: string | null
@@ -112,6 +113,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          bot_training?: string | null
           company_id?: string | null
           created_at?: string | null
           email?: string | null
@@ -123,6 +125,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          bot_training?: string | null
           company_id?: string | null
           created_at?: string | null
           email?: string | null
@@ -642,6 +645,47 @@ export type Database = {
           value?: string
         }
         Relationships: []
+      }
+      whatsapp_bot_conversations: {
+        Row: {
+          collaborator_id: string
+          contact_name: string | null
+          contact_phone: string
+          created_at: string | null
+          history: Json
+          id: string
+          last_message_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          collaborator_id: string
+          contact_name?: string | null
+          contact_phone: string
+          created_at?: string | null
+          history?: Json
+          id?: string
+          last_message_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          collaborator_id?: string
+          contact_name?: string | null
+          contact_phone?: string
+          created_at?: string | null
+          history?: Json
+          id?: string
+          last_message_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_bot_conversations_collaborator_id_fkey"
+            columns: ["collaborator_id"]
+            isOneToOne: false
+            referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
