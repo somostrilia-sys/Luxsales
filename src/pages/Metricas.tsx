@@ -32,9 +32,9 @@ export default function Metricas() {
     const collabIds = collabs.map((c: any) => c.id);
 
     // Leads count
-    let leadsQuery = supabase.from("contact_leads").select("id", { count: "exact", head: true });
-    if (selectedCompanyId !== "all") leadsQuery = leadsQuery.eq("company_target", selectedCompanyId);
-    const { count: leadsCount } = await leadsQuery;
+    // Use RPC for leads count instead of HEAD query
+    const { data: leadsStats } = await supabase.rpc('get_contact_leads_stats');
+    const leadsCount = leadsStats?.total || 0;
 
     setTotals({ collaborators: collabIds.length, leads: leadsCount || 0 });
 
