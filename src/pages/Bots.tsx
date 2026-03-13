@@ -677,9 +677,11 @@ export default function Bots() {
             <TabsTrigger value="bots" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
               <Bot className="h-4 w-4" /> Bots
             </TabsTrigger>
-            <TabsTrigger value="apikeys" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <Key className="h-4 w-4" /> API Keys
-            </TabsTrigger>
+            {roleLevel <= 1 && (
+              <TabsTrigger value="apikeys" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+                <Key className="h-4 w-4" /> API Keys
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* ════════════════════ ABA BOTS ════════════════════ */}
