@@ -236,7 +236,7 @@ export default function Cadastro() {
   };
 
   const copyInviteLink = (token: string) => {
-    const link = `${window.location.origin}/convite/${token}`;
+    const link = `${window.location.origin}/register?token=${token}`;
     navigator.clipboard.writeText(link);
     toast.success("Link copiado!");
   };
