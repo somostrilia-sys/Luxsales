@@ -27,30 +27,50 @@ export default function Index() {
 
   const loadDashboard = async () => {
     setLoading(true);
-    const companyFilter = selectedCompanyId !== "all" ? selectedCompanyId : collaborator?.company_id;
     const today = startOfDay(new Date()).toISOString();
     const daysAgo = subDays(new Date(), parseInt(period)).toISOString();
+    const isConsultor = roleLevel >= 2;
+    const consultantId = collaborator?.id;
 
-    // Parallel queries
-    // Use RPC for leads count instead of HEAD query on contact_leads
-    const leadsCountPromise = supabase.rpc('get_contact_leads_stats');
+    // --- Leads count ---
+    let leadsCount = 0;
+    if (isConsultor && consultantId) {
+      // Only leads assigned to this consultant
+      const { count } = await supabase
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .eq("consultant_id", consultantId);
+      leadsCount = count || 0;
+    } else {
+      const { data: leadsStatsRes } = await supabase.rpc('get_contact_leads_stats');
+      leadsCount = leadsStatsRes?.total || 0;
+    }
 
+    // --- Agents ---
     let agentsQ = supabase.from("agent_definitions").select("id", { count: "exact", head: true }).eq("active", true);
     if (selectedCompanyId !== "all") agentsQ = agentsQ.eq("company_id", selectedCompanyId);
 
-    const [leadsStatsRes, agentsRes, msgsRes, companiesRes] = await Promise.all([
-      leadsCountPromise,
+    // --- Messages today ---
+    let msgsQ = supabase.from("prospection_messages").select("id", { count: "exact", head: true })
+      .gte("created_at", today);
+    if (isConsultor && consultantId) msgsQ = msgsQ.eq("consultant_id", consultantId);
+
+    const [agentsRes, msgsRes, companiesRes] = await Promise.all([
       agentsQ,
-      supabase.from("agent_messages").select("id", { count: "exact", head: true })
-        .gte("created_at", today),
-      supabase.from("companies").select("id"),
+      msgsQ,
+      isCEO ? supabase.from("companies").select("id") : Promise.resolve({ data: [] }),
     ]);
 
-    // Daily chart - run in parallel with main queries above
-    let dailyQuery = supabase.from("contact_leads").select("created_at").gte("created_at", daysAgo).limit(1000);
-    if (selectedCompanyId !== "all") dailyQuery = dailyQuery.eq("company_target", selectedCompanyId);
+    // --- Daily chart ---
+    let dailyQuery = isConsultor && consultantId
+      ? supabase.from("leads").select("created_at").eq("consultant_id", consultantId).gte("created_at", daysAgo).limit(1000)
+      : supabase.from("contact_leads").select("created_at").gte("created_at", daysAgo).limit(1000);
 
-    // Usage limits query (conditional)
+    if (!isConsultor && selectedCompanyId !== "all") {
+      dailyQuery = dailyQuery.eq("company_target", selectedCompanyId);
+    }
+
+    // Usage limits (conditional)
     const usageLimitsPromise = (roleLevel === 3 && collaborator?.role_id)
       ? supabase.from("roles").select("usage_limits").eq("id", collaborator.role_id).single()
       : Promise.resolve({ data: null });
@@ -68,7 +88,7 @@ export default function Index() {
     setDailyData(Object.entries(dayCounts).map(([day, count]) => ({ day, leads: count })));
 
     setStats({
-      leads: leadsStatsRes.data?.total || 0,
+      leads: leadsCount,
       agents: agentsRes.count || 0,
       messagestoday: msgsRes.count || 0,
       companies: (companiesRes.data || []).length,
@@ -77,9 +97,7 @@ export default function Index() {
     // Usage limits for consultants
     if (roleData?.usage_limits) {
       setUsageLimits(roleData.usage_limits);
-      // Use RPC for today's leads count
-      const { data: todayStats } = await supabase.rpc('get_contact_leads_stats');
-      setUsageCounts({ leads: todayStats?.total || 0, extractions: 0 });
+      setUsageCounts({ leads: leadsCount, extractions: 0 });
     }
 
     setLoading(false);
