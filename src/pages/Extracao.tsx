@@ -291,11 +291,11 @@ export default function Extracao() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   <div>
                     <Label className="text-xs">Buscar nome</Label>
-                    <Input type="search" autoComplete="off" name="search_lead_name_xyz" placeholder="Nome do lead..." value={searchName} onChange={e => setSearchName(e.target.value)} className="h-8 text-sm" />
+                    <Input ref={nameInputRef} type="search" autoComplete="new-password" name="search_lead_name_xyz" placeholder="Nome do lead (min 3 chars)..." value={searchName} onChange={e => setSearchName(e.target.value)} className="h-8 text-sm" />
                   </div>
                   <div>
                     <Label className="text-xs">Cidade</Label>
-                    <Input type="search" autoComplete="off" name="search_lead_city_xyz" placeholder="Filtrar cidade..." value={filterCity} onChange={e => setFilterCity(e.target.value)} className="h-8 text-sm" />
+                    <Input ref={cityInputRef} type="search" autoComplete="new-password" name="search_lead_city_xyz" placeholder="Filtrar cidade (min 3 chars)..." value={filterCity} onChange={e => setFilterCity(e.target.value)} className="h-8 text-sm" />
                   </div>
                   <div>
                     <Label className="text-xs">Estado</Label>
