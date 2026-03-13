@@ -206,6 +206,8 @@ export default function Extracao() {
     };
   }, []);
 
+  if (roleLevel > 1) return <Navigate to="/" replace />;
+
   const handleExtract = async () => {
     const digits = cep.replace("-", "");
     if (digits.length !== 8) { toast.error("CEP inválido"); return; }

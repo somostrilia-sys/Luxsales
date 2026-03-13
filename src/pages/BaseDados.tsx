@@ -181,6 +181,8 @@ export default function BaseDados() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  if (roleLevel > 1) return <Navigate to="/" replace />;
+
   const toggleSelect = (id: string) => {
     setSelected(prev => {
       const next = new Set(prev);
