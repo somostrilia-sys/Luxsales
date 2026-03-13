@@ -361,7 +361,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
 }
 
 export default function Bots() {
-  const { collaborator } = useCollaborator();
+  const { collaborator, roleLevel } = useCollaborator();
   const { user } = useAuth();
 
   // ── WhatsApp states ──
