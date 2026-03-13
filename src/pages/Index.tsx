@@ -32,10 +32,8 @@ export default function Index() {
     const isConsultor = roleLevel >= 2;
     const consultantId = collaborator?.id;
 
-    // --- Leads count ---
     let leadsCount = 0;
     if (isConsultor && consultantId) {
-      // Only leads assigned to this consultant
       const { count } = await supabase
         .from("leads")
         .select("id", { count: "exact", head: true })
@@ -46,11 +44,9 @@ export default function Index() {
       leadsCount = leadsStatsRes?.total || 0;
     }
 
-    // --- Agents ---
     let agentsQ = supabase.from("agent_definitions").select("id", { count: "exact", head: true }).eq("active", true);
     if (selectedCompanyId !== "all") agentsQ = agentsQ.eq("company_id", selectedCompanyId);
 
-    // --- Messages today ---
     let msgsQ = supabase.from("prospection_messages").select("id", { count: "exact", head: true })
       .gte("created_at", today);
     if (isConsultor && consultantId) msgsQ = msgsQ.eq("consultant_id", consultantId);
@@ -61,7 +57,6 @@ export default function Index() {
       isCEO ? supabase.from("companies").select("id") : Promise.resolve({ data: [] }),
     ]);
 
-    // --- Daily chart ---
     let dailyQuery = isConsultor && consultantId
       ? supabase.from("leads").select("created_at").eq("consultant_id", consultantId).gte("created_at", daysAgo).limit(1000)
       : supabase.from("contact_leads").select("created_at").gte("created_at", daysAgo).limit(1000);
@@ -70,7 +65,6 @@ export default function Index() {
       dailyQuery = dailyQuery.eq("company_target", selectedCompanyId);
     }
 
-    // Usage limits (conditional)
     const usageLimitsPromise = (roleLevel === 3 && collaborator?.role_id)
       ? supabase.from("roles").select("usage_limits").eq("id", collaborator.role_id).single()
       : Promise.resolve({ data: null });
@@ -94,7 +88,6 @@ export default function Index() {
       companies: (companiesRes.data || []).length,
     });
 
-    // Usage limits for consultants
     if (roleData?.usage_limits) {
       setUsageLimits(roleData.usage_limits);
       setUsageCounts({ leads: leadsCount, extractions: 0 });
@@ -104,19 +97,22 @@ export default function Index() {
   };
 
   const kpis = [
-    { label: "Agentes Ativos", value: stats.agents, icon: Bot, color: "text-primary" },
-    { label: "Leads Gerados", value: stats.leads, icon: Target, color: "text-success" },
-    { label: "Mensagens Hoje", value: stats.messagestoday, icon: MessageSquare, color: "text-warning" },
-    { label: isCEO ? "Empresas" : "Taxa Conversão", value: isCEO ? stats.companies : "0%", icon: TrendingUp, color: "text-muted-foreground" },
+    { label: "Agentes Ativos", value: stats.agents, icon: Bot, iconClass: "stat-icon-primary", accentClass: "card-accent-top" },
+    { label: "Leads Gerados", value: stats.leads, icon: Target, iconClass: "stat-icon-success", accentClass: "card-accent-top accent-green" },
+    { label: "Mensagens Hoje", value: stats.messagestoday, icon: MessageSquare, iconClass: "stat-icon-warning", accentClass: "card-accent-top accent-warning" },
+    { label: isCEO ? "Empresas" : "Taxa Conversão", value: isCEO ? stats.companies : "0%", icon: TrendingUp, iconClass: "stat-icon-muted", accentClass: "card-accent-top" },
   ];
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Visão geral do sistema</p>
+          </div>
           <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-[120px] h-8 text-xs">
+            <SelectTrigger className="w-[120px] h-8 text-xs bg-secondary/50 border-border">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -130,18 +126,18 @@ export default function Index() {
         {/* KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {kpis.map(s => (
-            <Card key={s.label} className="hover:bg-[hsl(var(--card-hover))] transition-colors">
+            <Card key={s.label} variant="gradient" className={s.accentClass}>
               <CardContent className="pt-5 pb-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
+                    <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">{s.label}</p>
                     {loading ? (
-                      <Skeleton className="h-7 w-16 mt-1" />
+                      <Skeleton className="h-8 w-20 mt-2" />
                     ) : (
-                      <p className="text-2xl font-bold mt-1">{typeof s.value === "number" ? s.value.toLocaleString("pt-BR") : s.value}</p>
+                      <p className="text-3xl font-bold mt-2 tracking-tight">{typeof s.value === "number" ? s.value.toLocaleString("pt-BR") : s.value}</p>
                     )}
                   </div>
-                  <div className={`p-2.5 rounded-lg bg-muted ${s.color}`}>
+                  <div className={`p-3 rounded-xl ${s.iconClass}`}>
                     <s.icon className="h-5 w-5" />
                   </div>
                 </div>
@@ -152,7 +148,7 @@ export default function Index() {
 
         {/* Usage Limits for Consultants */}
         {roleLevel === 3 && usageLimits && (
-          <Card>
+          <Card variant="gradient">
             <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Limites de Uso Hoje</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               {usageLimits.max_leads_day && usageLimits.max_leads_day !== -1 && (
@@ -178,19 +174,27 @@ export default function Index() {
         )}
 
         {/* Daily Chart */}
-        <Card>
+        <Card variant="gradient">
           <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Leads por Dia</CardTitle></CardHeader>
           <CardContent>
             {loading ? (
-              <Skeleton className="w-full h-[250px] rounded" />
+              <Skeleton className="w-full h-[260px] rounded" />
             ) : (
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={dailyData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", color: "hsl(var(--foreground))" }} />
-                  <Bar dataKey="leads" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 12% 12%)" />
+                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "hsl(240 10% 55%)" }} axisLine={{ stroke: "hsl(240 12% 12%)" }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "hsl(240 10% 55%)" }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(240 14% 8%)",
+                      border: "1px solid hsl(240 12% 16%)",
+                      borderRadius: "10px",
+                      color: "hsl(240 5% 96%)",
+                      boxShadow: "0 8px 32px -8px hsl(0 0% 0% / 0.5)",
+                    }}
+                  />
+                  <Bar dataKey="leads" fill="hsl(217 91% 53%)" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
