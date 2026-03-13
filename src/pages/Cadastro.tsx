@@ -10,12 +10,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { Loader2, Copy, Download, Upload } from "lucide-react";
+import { Loader2, Copy, Download, Upload, Link2, Trash2, ExternalLink } from "lucide-react";
+import { format } from "date-fns";
 
 interface RegisterResult {
   email: string;
   name: string;
   password: string;
+}
+
+interface InviteLink {
+  id: string;
+  token: string;
+  company_id: string | null;
+  role: string | null;
+  max_uses: number | null;
+  current_uses: number | null;
+  expires_at: string | null;
+  is_active: boolean | null;
+  created_at: string | null;
 }
 
 export default function Cadastro() {
@@ -36,7 +49,16 @@ export default function Cadastro() {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvSubmitting, setCsvSubmitting] = useState(false);
 
-  useEffect(() => { loadData(); }, []);
+  // Invite link state
+  const [inviteForm, setInviteForm] = useState({
+    company_id: "", role_id: "", max_uses: "10", expires_days: "7",
+  });
+  const [inviteCreating, setInviteCreating] = useState(false);
+  const [inviteLinks, setInviteLinks] = useState<InviteLink[]>([]);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [generatedLink, setGeneratedLink] = useState("");
+
+  useEffect(() => { loadData(); loadInvites(); }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -58,6 +80,17 @@ export default function Cadastro() {
     setLoading(false);
   };
 
+  const loadInvites = async () => {
+    setInviteLoading(true);
+    const { data } = await supabase
+      .from("invite_links")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    setInviteLinks(data || []);
+    setInviteLoading(false);
+  };
+
   const filteredRoles = roles.filter(r => !form.company_id || r.company_id === form.company_id);
   const filteredSectors = sectors.filter(s => !form.company_id || s.company_id === form.company_id);
   const filteredSupervisors = collaborators.filter(c => {
@@ -66,6 +99,8 @@ export default function Cadastro() {
     if (Array.isArray(c.company_ids) && c.company_ids.includes(form.company_id)) return true;
     return false;
   });
+
+  const inviteFilteredRoles = roles.filter(r => !inviteForm.company_id || r.company_id === inviteForm.company_id);
 
   const getDefaultPassword = (name: string) => {
     const firstName = name.trim().split(" ")[0];
@@ -94,20 +129,14 @@ export default function Cadastro() {
             "Authorization": `Bearer ${session?.access_token}`,
           },
           body: JSON.stringify({
-            name: form.name,
-            email: form.email,
-            phone: form.phone || null,
-            password,
-            company_id: form.company_id,
-            role_id: form.role_id,
-            sector_id: form.sector_id || null,
-            reports_to: form.reports_to || null,
+            name: form.name, email: form.email, phone: form.phone || null,
+            password, company_id: form.company_id, role_id: form.role_id,
+            sector_id: form.sector_id || null, reports_to: form.reports_to || null,
           }),
         }
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao cadastrar");
-
       if (data.results) {
         setResults(data.results);
         toast.success("Colaborador cadastrado com sucesso!");
@@ -131,7 +160,6 @@ export default function Cadastro() {
       const text = await csvFile.text();
       const lines = text.split("\n").filter(l => l.trim());
       if (lines.length < 2) { toast.error("CSV vazio"); return; }
-
       const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
       const rows = lines.slice(1).map(line => {
         const vals = line.split(",").map(v => v.trim().replace(/^"|"$/g, ""));
@@ -139,11 +167,9 @@ export default function Cadastro() {
         headers.forEach((h, i) => { obj[h] = vals[i] || ""; });
         return obj;
       });
-
       const { data: { session } } = await supabase.auth.getSession();
       const allResults: RegisterResult[] = [];
       const errors: string[] = [];
-
       for (const row of rows) {
         try {
           const password = row.password || getDefaultPassword(row.name || row.nome || "User");
@@ -151,19 +177,11 @@ export default function Cadastro() {
             `https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/register-collaborator`,
             {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${session?.access_token}`,
-              },
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
               body: JSON.stringify({
-                name: row.name || row.nome,
-                email: row.email,
-                phone: row.phone || row.telefone || null,
-                password,
-                company_id: row.company_id || row.empresa_id,
-                role_id: row.role_id || row.cargo_id,
-                sector_id: row.sector_id || row.setor_id || null,
-                reports_to: row.reports_to || row.superior_id || null,
+                name: row.name || row.nome, email: row.email, phone: row.phone || row.telefone || null,
+                password, company_id: row.company_id || row.empresa_id, role_id: row.role_id || row.cargo_id,
+                sector_id: row.sector_id || row.setor_id || null, reports_to: row.reports_to || row.superior_id || null,
               }),
             }
           );
@@ -175,7 +193,6 @@ export default function Cadastro() {
           errors.push(`${row.email}: ${e.message}`);
         }
       }
-
       setResults(allResults);
       if (errors.length > 0) toast.error(`${errors.length} erros no cadastro em massa`);
       else toast.success(`${allResults.length} colaboradores cadastrados!`);
@@ -185,6 +202,68 @@ export default function Cadastro() {
     } finally {
       setCsvSubmitting(false);
     }
+  };
+
+  // ─── Invite Link Functions ───
+  const handleCreateInvite = async () => {
+    if (!inviteForm.company_id || !inviteForm.role_id) {
+      toast.error("Selecione empresa e cargo para o convite");
+      return;
+    }
+    setInviteCreating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + parseInt(inviteForm.expires_days));
+
+      const { data, error } = await supabase.from("invite_links").insert({
+        company_id: inviteForm.company_id,
+        role: inviteForm.role_id,
+        max_uses: parseInt(inviteForm.max_uses),
+        expires_at: expiresAt.toISOString(),
+        created_by: session?.user?.id || null,
+      }).select("token").single();
+
+      if (error) throw error;
+
+      const link = `${window.location.origin}/convite/${data.token}`;
+      setGeneratedLink(link);
+      toast.success("Link de convite criado!");
+      loadInvites();
+    } catch (e: any) {
+      toast.error("Erro ao criar convite: " + e.message);
+    } finally {
+      setInviteCreating(false);
+    }
+  };
+
+  const copyInviteLink = (token: string) => {
+    const link = `${window.location.origin}/convite/${token}`;
+    navigator.clipboard.writeText(link);
+    toast.success("Link copiado!");
+  };
+
+  const deactivateInvite = async (id: string) => {
+    const { error } = await supabase.from("invite_links").update({ is_active: false }).eq("id", id);
+    if (error) toast.error("Erro ao desativar");
+    else { toast.success("Convite desativado"); loadInvites(); }
+  };
+
+  const getInviteStatus = (invite: InviteLink) => {
+    if (!invite.is_active) return { label: "Desativado", className: "bg-muted text-muted-foreground" };
+    if (invite.expires_at && new Date(invite.expires_at) < new Date()) return { label: "Expirado", className: "bg-destructive/20 text-destructive" };
+    if (invite.current_uses !== null && invite.max_uses !== null && invite.current_uses >= invite.max_uses) return { label: "Esgotado", className: "bg-warning/20 text-warning" };
+    return { label: "Ativo", className: "bg-success/20 text-success" };
+  };
+
+  const getCompanyName = (companyId: string | null) => {
+    if (!companyId) return "—";
+    return companies.find(c => c.id === companyId)?.name || "—";
+  };
+
+  const getRoleName = (roleId: string | null) => {
+    if (!roleId) return "—";
+    return roles.find(r => r.id === roleId)?.name || roleId;
   };
 
   const copyResults = () => {
@@ -207,18 +286,23 @@ export default function Cadastro() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Cadastro de Colaboradores</h1>
-          <p className="text-muted-foreground text-sm">Registre novos colaboradores no sistema</p>
+          <h1 className="text-2xl font-bold tracking-tight">Cadastro de Colaboradores</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">Registre novos colaboradores ou gere links de convite</p>
         </div>
 
         <Tabs defaultValue="individual">
           <TabsList>
             <TabsTrigger value="individual">Individual</TabsTrigger>
-            <TabsTrigger value="massa">Em Massa (CSV)</TabsTrigger>
+            <TabsTrigger value="massa">CSV em Massa</TabsTrigger>
+            <TabsTrigger value="convite" className="flex items-center gap-1.5">
+              <Link2 className="h-3.5 w-3.5" />
+              Link de Convite
+            </TabsTrigger>
           </TabsList>
 
+          {/* ─── Individual Registration ─── */}
           <TabsContent value="individual" className="space-y-4 mt-4">
-            <Card>
+            <Card variant="gradient">
               <CardContent className="pt-6 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div><Label>Nome Completo *</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Nome do colaborador" /></div>
@@ -229,7 +313,6 @@ export default function Cadastro() {
                     <Input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder={form.name ? getDefaultPassword(form.name) : "PrimeiroNome@2026"} />
                   </div>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label>Empresa *</Label>
@@ -260,7 +343,6 @@ export default function Cadastro() {
                     </Select>
                   </div>
                 </div>
-
                 <Button onClick={handleSubmit} disabled={submitting} className="btn-modern">
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Cadastrar Colaborador
@@ -269,8 +351,9 @@ export default function Cadastro() {
             </Card>
           </TabsContent>
 
+          {/* ─── CSV Upload ─── */}
           <TabsContent value="massa" className="space-y-4 mt-4">
-            <Card>
+            <Card variant="gradient">
               <CardContent className="pt-6 space-y-4">
                 <p className="text-sm text-muted-foreground">
                   Envie um CSV com colunas: name, email, phone, password, company_id, role_id, sector_id, reports_to
@@ -291,11 +374,129 @@ export default function Cadastro() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* ─── Invite Links ─── */}
+          <TabsContent value="convite" className="space-y-4 mt-4">
+            <Card variant="gradient" className="card-accent-top">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Link2 className="h-5 w-5 text-primary" />
+                  Gerar Link de Convite
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Crie um link que permite novos colaboradores se cadastrarem com empresa e cargo pré-definidos.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Empresa *</Label>
+                    <Select value={inviteForm.company_id} onValueChange={v => setInviteForm(prev => ({ ...prev, company_id: v, role_id: "" }))}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Cargo *</Label>
+                    <Select value={inviteForm.role_id} onValueChange={v => setInviteForm(prev => ({ ...prev, role_id: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>{inviteFilteredRoles.map(r => <SelectItem key={r.id} value={r.id}>{r.name} (Lv.{r.level})</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Máximo de usos</Label>
+                    <Input type="number" min="1" value={inviteForm.max_uses} onChange={e => setInviteForm(prev => ({ ...prev, max_uses: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label>Expira em (dias)</Label>
+                    <Input type="number" min="1" value={inviteForm.expires_days} onChange={e => setInviteForm(prev => ({ ...prev, expires_days: e.target.value }))} />
+                  </div>
+                </div>
+
+                <Button onClick={handleCreateInvite} disabled={inviteCreating} className="btn-modern">
+                  {inviteCreating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link2 className="h-4 w-4 mr-2" />}
+                  Gerar Link
+                </Button>
+
+                {generatedLink && (
+                  <div className="p-4 rounded-lg bg-secondary/50 border border-border space-y-2">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Link gerado</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-sm font-mono text-primary break-all">{generatedLink}</code>
+                      <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(generatedLink); toast.success("Link copiado!"); }}>
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Invite Links List */}
+            <Card variant="gradient">
+              <CardHeader>
+                <CardTitle className="text-lg">Convites Criados</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {inviteLoading ? (
+                  <div className="flex justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+                ) : inviteLinks.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground text-sm">Nenhum convite criado ainda</div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Empresa</TableHead>
+                        <TableHead>Cargo</TableHead>
+                        <TableHead>Usos</TableHead>
+                        <TableHead>Expira em</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {inviteLinks.map(invite => {
+                        const status = getInviteStatus(invite);
+                        return (
+                          <TableRow key={invite.id} className="table-row-hover">
+                            <TableCell className="font-medium">{getCompanyName(invite.company_id)}</TableCell>
+                            <TableCell>{getRoleName(invite.role)}</TableCell>
+                            <TableCell>{invite.current_uses ?? 0}/{invite.max_uses ?? "∞"}</TableCell>
+                            <TableCell className="text-sm">
+                              {invite.expires_at ? format(new Date(invite.expires_at), "dd/MM/yyyy HH:mm") : "Nunca"}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={status.className}>{status.label}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button variant="ghost" size="sm" onClick={() => copyInviteLink(invite.token)} title="Copiar link">
+                                  <Copy className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => window.open(`/convite/${invite.token}`, '_blank')} title="Abrir link">
+                                  <ExternalLink className="h-4 w-4" />
+                                </Button>
+                                {invite.is_active && (
+                                  <Button variant="ghost" size="sm" onClick={() => deactivateInvite(invite.id)} title="Desativar" className="text-destructive hover:text-destructive">
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
 
         {/* Results */}
         {results.length > 0 && (
-          <Card>
+          <Card variant="gradient">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Credenciais Geradas</CardTitle>
@@ -321,14 +522,15 @@ export default function Cadastro() {
                       <TableCell>{r.email}</TableCell>
                       <TableCell><code className="font-mono text-sm bg-muted px-2 py-1 rounded">{r.password}</code></TableCell>
                     </TableRow>
-                  ))}</TableBody>
+                  ))}
+                </TableBody>
               </Table>
             </CardContent>
           </Card>
         )}
 
         {/* Existing collaborators table */}
-        <Card>
+        <Card variant="gradient">
           <CardHeader><CardTitle className="text-lg">Colaboradores Cadastrados</CardTitle></CardHeader>
           <CardContent className="p-0">
             {loading ? (
@@ -354,12 +556,13 @@ export default function Cadastro() {
                       <TableCell>{c.role?.name || "—"}</TableCell>
                       <TableCell>{c.sector?.name || "—"}</TableCell>
                       <TableCell>
-                        <Badge className={c.active ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"}>
+                        <Badge className={c.active ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"}>
                           {c.active ? "Ativo" : "Inativo"}
                         </Badge>
                       </TableCell>
                     </TableRow>
-                  ))}</TableBody>
+                  ))}
+                </TableBody>
               </Table>
             )}
           </CardContent>

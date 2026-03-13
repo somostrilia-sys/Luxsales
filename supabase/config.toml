@@ -1,1 +1,4 @@
 project_id = "lqsxmrxbakotigfzqytk"
+
+[functions.manage-disposable-chip]
+verify_jwt = false

@@ -101,40 +101,97 @@ export type Database = {
       }
       collaborators: {
         Row: {
+          active: boolean | null
+          auth_user_id: string | null
+          bot_memory: string | null
           bot_training: string | null
           company_id: string | null
+          company_ids: Json | null
           created_at: string | null
+          deactivated_at: string | null
           email: string | null
           id: string
+          is_super_admin: boolean | null
+          last_agent_id: string | null
           name: string
+          phone: string | null
+          reports_to: string | null
           role: string | null
+          role_id: string | null
+          sector_id: string | null
           status: string | null
+          superior_id: string | null
+          telegram_id: string | null
+          uazapi_instance_name: string | null
+          unit: string | null
+          unit_id: string | null
+          unit_ids: Json | null
           updated_at: string | null
           user_id: string | null
+          whatsapp: string | null
+          whatsapp_comercial: string | null
         }
         Insert: {
+          active?: boolean | null
+          auth_user_id?: string | null
+          bot_memory?: string | null
           bot_training?: string | null
           company_id?: string | null
+          company_ids?: Json | null
           created_at?: string | null
+          deactivated_at?: string | null
           email?: string | null
           id?: string
+          is_super_admin?: boolean | null
+          last_agent_id?: string | null
           name: string
+          phone?: string | null
+          reports_to?: string | null
           role?: string | null
+          role_id?: string | null
+          sector_id?: string | null
           status?: string | null
+          superior_id?: string | null
+          telegram_id?: string | null
+          uazapi_instance_name?: string | null
+          unit?: string | null
+          unit_id?: string | null
+          unit_ids?: Json | null
           updated_at?: string | null
           user_id?: string | null
+          whatsapp?: string | null
+          whatsapp_comercial?: string | null
         }
         Update: {
+          active?: boolean | null
+          auth_user_id?: string | null
+          bot_memory?: string | null
           bot_training?: string | null
           company_id?: string | null
+          company_ids?: Json | null
           created_at?: string | null
+          deactivated_at?: string | null
           email?: string | null
           id?: string
+          is_super_admin?: boolean | null
+          last_agent_id?: string | null
           name?: string
+          phone?: string | null
+          reports_to?: string | null
           role?: string | null
+          role_id?: string | null
+          sector_id?: string | null
           status?: string | null
+          superior_id?: string | null
+          telegram_id?: string | null
+          uazapi_instance_name?: string | null
+          unit?: string | null
+          unit_id?: string | null
+          unit_ids?: Json | null
           updated_at?: string | null
           user_id?: string | null
+          whatsapp?: string | null
+          whatsapp_comercial?: string | null
         }
         Relationships: [
           {
@@ -280,6 +337,63 @@ export type Database = {
         }
         Relationships: []
       }
+      contact_leads: {
+        Row: {
+          category: string | null
+          city: string | null
+          created_at: string | null
+          document: string | null
+          email: string | null
+          id: string
+          name: string | null
+          phone: string | null
+          region: string | null
+          score: number | null
+          source: string | null
+          state: string | null
+          status: string | null
+          subcategory: string | null
+          tipo_pessoa: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          category?: string | null
+          city?: string | null
+          created_at?: string | null
+          document?: string | null
+          email?: string | null
+          id?: string
+          name?: string | null
+          phone?: string | null
+          region?: string | null
+          score?: number | null
+          source?: string | null
+          state?: string | null
+          status?: string | null
+          subcategory?: string | null
+          tipo_pessoa?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string | null
+          city?: string | null
+          created_at?: string | null
+          document?: string | null
+          email?: string | null
+          id?: string
+          name?: string | null
+          phone?: string | null
+          region?: string | null
+          score?: number | null
+          source?: string | null
+          state?: string | null
+          status?: string | null
+          subcategory?: string | null
+          tipo_pessoa?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           chip_id: string | null
@@ -353,6 +467,9 @@ export type Database = {
           collaborator_id: string
           created_at: string
           id: string
+          instance_name: string | null
+          instance_token: string | null
+          phone: string | null
           qr_code: string | null
           status: string
           uazapi_admin_token: string
@@ -364,6 +481,9 @@ export type Database = {
           collaborator_id: string
           created_at?: string
           id?: string
+          instance_name?: string | null
+          instance_token?: string | null
+          phone?: string | null
           qr_code?: string | null
           status?: string
           uazapi_admin_token?: string
@@ -375,6 +495,9 @@ export type Database = {
           collaborator_id?: string
           created_at?: string
           id?: string
+          instance_name?: string | null
+          instance_token?: string | null
+          phone?: string | null
           qr_code?: string | null
           status?: string
           uazapi_admin_token?: string
@@ -382,6 +505,177 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      invite_links: {
+        Row: {
+          company_id: string | null
+          created_at: string | null
+          created_by: string | null
+          current_uses: number | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          max_uses: number | null
+          role: string | null
+          token: string
+          used_at: string | null
+          used_by: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          current_uses?: number | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_uses?: number | null
+          role?: string | null
+          token?: string
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          current_uses?: number | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_uses?: number | null
+          role?: string | null
+          token?: string
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invite_links_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_batches: {
+        Row: {
+          assigned_to: string | null
+          company_id: string | null
+          created_at: string | null
+          created_by: string | null
+          filters: Json | null
+          id: string
+          sent_leads: number | null
+          status: string
+          total_leads: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          filters?: Json | null
+          id?: string
+          sent_leads?: number | null
+          status?: string
+          total_leads?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          filters?: Json | null
+          id?: string
+          sent_leads?: number | null
+          status?: string
+          total_leads?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_batches_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_batches_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_batches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_items: {
+        Row: {
+          assigned_to: string | null
+          batch_id: string | null
+          city: string | null
+          created_at: string | null
+          ddd: string | null
+          dispatched_at: string | null
+          id: string
+          name: string | null
+          phone: string
+          state: string | null
+          status: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          batch_id?: string | null
+          city?: string | null
+          created_at?: string | null
+          ddd?: string | null
+          dispatched_at?: string | null
+          id?: string
+          name?: string | null
+          phone: string
+          state?: string | null
+          status?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          batch_id?: string | null
+          city?: string | null
+          created_at?: string | null
+          ddd?: string | null
+          dispatched_at?: string | null
+          id?: string
+          name?: string | null
+          phone?: string
+          state?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_items_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_items_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "lead_batches"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       leads: {
         Row: {
@@ -603,24 +897,62 @@ export type Database = {
       }
       roles: {
         Row: {
+          active: boolean | null
+          can_manage_agents: boolean | null
+          can_view_all_units: boolean | null
+          can_view_own_only: boolean | null
+          can_view_own_unit: boolean | null
+          company_id: string | null
           created_at: string | null
           id: string
+          level: number | null
           name: string
           permissions: Json | null
+          sector_id: string | null
+          slug: string | null
+          usage_limits: Json | null
         }
         Insert: {
+          active?: boolean | null
+          can_manage_agents?: boolean | null
+          can_view_all_units?: boolean | null
+          can_view_own_only?: boolean | null
+          can_view_own_unit?: boolean | null
+          company_id?: string | null
           created_at?: string | null
           id?: string
+          level?: number | null
           name: string
           permissions?: Json | null
+          sector_id?: string | null
+          slug?: string | null
+          usage_limits?: Json | null
         }
         Update: {
+          active?: boolean | null
+          can_manage_agents?: boolean | null
+          can_view_all_units?: boolean | null
+          can_view_own_only?: boolean | null
+          can_view_own_unit?: boolean | null
+          company_id?: string | null
           created_at?: string | null
           id?: string
+          level?: number | null
           name?: string
           permissions?: Json | null
+          sector_id?: string | null
+          slug?: string | null
+          usage_limits?: Json | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "roles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       system_configs: {
         Row: {
@@ -645,6 +977,44 @@ export type Database = {
           value?: string
         }
         Relationships: []
+      }
+      units: {
+        Row: {
+          active: boolean | null
+          city: string | null
+          company_id: string | null
+          created_at: string | null
+          id: string
+          name: string
+          state: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          city?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          id?: string
+          name: string
+          state?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          city?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          state?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "units_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_bot_conversations: {
         Row: {
@@ -692,6 +1062,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_contact_leads_stats: { Args: never; Returns: Json }
       increment_metric: {
         Args: { p_consultant_id: string; p_metric: string; p_value?: number }
         Returns: undefined

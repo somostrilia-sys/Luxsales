@@ -121,8 +121,6 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
 
   // Form para novo chip (servidor + token)
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newServerUrl, setNewServerUrl] = useState("https://walkholding.uazapi.com");
-  const [newAdminToken, setNewAdminToken] = useState("");
 
   const fetchChips = useCallback(async () => {
     if (!collaboratorId) { setChips([]); setLoading(false); return; }
@@ -174,18 +172,16 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   }, [callEdge]);
 
   const addChip = async () => {
-    if (!collaboratorId) { toast.error("Colaborador não identificado"); return; }
+    if (!collaboratorId) { toast.error("Colaborador não encontrado"); return; }
     setAdding(true);
-    // Server URL e admin token vêm automaticamente do DB (system_configs) no backend
     const result = await callEdge({
       action: "create",
       collaborator_id: collaboratorId,
     });
     setAdding(false);
     if (result?.error) { toast.error("Erro: " + result.error); return; }
-    toast.success(`Chip #${result.chip?.chip_index} criado!`);
+    toast.success(`Chip #${result.chip?.chip_index} criado no UAZAPI!`);
     setShowAddForm(false);
-    setNewAdminToken("");
     fetchChips();
   };
 
@@ -272,14 +268,14 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         <div>
           <CardTitle className="text-lg flex items-center gap-2">
             <Smartphone className="h-5 w-5 text-amber-500" />
-            Chips Descartáveis
+            📱 Chips de Disparo
             {chips.length > 0 && <span className="text-sm text-muted-foreground font-normal">({chips.length}/5)</span>}
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">Números para disparo em massa — antibloco por rodízio</p>
         </div>
         <Button size="sm" onClick={() => setShowAddForm(v => !v)} disabled={!collaboratorId || chips.length >= 5} className="gap-2">
           <Plus className="h-4 w-4" />
-          Adicionar Chip
+          + Novo Chip
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -287,9 +283,6 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         {showAddForm && (
           <div className="border border-amber-500/30 rounded-lg p-4 space-y-3 bg-amber-500/5">
             <p className="text-sm font-medium text-amber-400">Novo Chip Descartável</p>
-            <p className="text-xs text-muted-foreground">
-              Cria um número de disparo dedicado. Após criar, clique em "Conectar" e escaneie o QR Code com o WhatsApp do chip.
-            </p>
             <div className="flex gap-2 justify-end">
               <Button size="sm" variant="outline" onClick={() => setShowAddForm(false)}>Cancelar</Button>
               <Button size="sm" onClick={addChip} disabled={adding} className="gap-2">
@@ -321,18 +314,15 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                   </div>
                   <div className="flex gap-2">
                     {chip.status !== "connected" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleConnect(chip)}
-                        disabled={connecting === chip.id}
-                        className="gap-1 text-xs"
+                      <Badge
+                        onClick={() => !connecting && handleConnect(chip)}
+                        className={`cursor-pointer gap-1 text-xs px-3 py-1 ${connecting === chip.id ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20'}`}
                       >
                         {connecting === chip.id
                           ? <Loader2 className="h-3 w-3 animate-spin" />
                           : <QrCode className="h-3 w-3" />}
-                        {connecting === chip.id ? "Aguardando..." : "Conectar"}
-                      </Button>
+                        {connecting === chip.id ? "Aguardando..." : "QR Code"}
+                      </Badge>
                     )}
                     <Button
                       size="sm"
@@ -362,13 +352,6 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                     <p className="text-xs text-muted-foreground animate-pulse">Aguardando conexão...</p>
                   </div>
                 )}
-
-                {/* Instância info */}
-                {chip.instance_name && (
-                  <p className="text-xs text-muted-foreground">Instância: {chip.instance_name}</p>
-                )}
-
-                {/* Campos de servidor — ocultos para usuários, gerenciados pelo backend */}
               </div>
             ))}
           </div>
