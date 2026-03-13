@@ -92,6 +92,165 @@ function maskKey(key: string) {
   return key.slice(0, 7) + "..." + key.slice(-5);
 }
 
+// ── Disposable Chips Section ──
+
+interface DisposableChip {
+  id: string;
+  collaborator_id: string;
+  chip_index: number;
+  status: string;
+  qr_code: string | null;
+  uazapi_server_url: string;
+  uazapi_admin_token: string;
+}
+
+function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | null }) {
+  const [chips, setChips] = useState<DisposableChip[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+
+  const fetchChips = useCallback(async () => {
+    if (!collaboratorId) { setChips([]); setLoading(false); return; }
+    setLoading(true);
+    const { data } = await supabase
+      .from("disposable_chips")
+      .select("*")
+      .eq("collaborator_id", collaboratorId)
+      .order("chip_index");
+    setChips((data as DisposableChip[]) || []);
+    setLoading(false);
+  }, [collaboratorId]);
+
+  useEffect(() => { fetchChips(); }, [fetchChips]);
+
+  const addChip = async () => {
+    if (!collaboratorId) return;
+    setAdding(true);
+    const nextIndex = chips.length > 0 ? Math.max(...chips.map(c => c.chip_index)) + 1 : 1;
+    const { error } = await supabase.from("disposable_chips").insert({
+      collaborator_id: collaboratorId,
+      chip_index: nextIndex,
+    } as any);
+    setAdding(false);
+    if (error) { toast.error("Erro ao adicionar chip: " + error.message); return; }
+    toast.success("Chip adicionado!");
+    fetchChips();
+  };
+
+  const updateField = async (chipId: string, field: string, value: string) => {
+    const { error } = await supabase.from("disposable_chips").update({ [field]: value, updated_at: new Date().toISOString() } as any).eq("id", chipId);
+    if (error) { toast.error("Erro ao salvar"); return; }
+    setChips(prev => prev.map(c => c.id === chipId ? { ...c, [field]: value } : c));
+  };
+
+  const handleConnect = async (chip: DisposableChip) => {
+    if (!chip.uazapi_server_url || !chip.uazapi_admin_token) {
+      toast.error("Preencha a URL do servidor e o Admin Token antes de conectar");
+      return;
+    }
+    // Save and set status to connecting
+    const { error } = await supabase.from("disposable_chips").update({
+      status: "connecting",
+      updated_at: new Date().toISOString(),
+    } as any).eq("id", chip.id);
+    if (error) { toast.error("Erro: " + error.message); return; }
+    setChips(prev => prev.map(c => c.id === chip.id ? { ...c, status: "connecting" } : c));
+    toast.info("Conectando chip...");
+    fetchChips();
+  };
+
+  const deleteChip = async (chipId: string) => {
+    const { error } = await supabase.from("disposable_chips").delete().eq("id", chipId);
+    if (error) { toast.error("Erro ao excluir"); return; }
+    toast.success("Chip removido");
+    fetchChips();
+  };
+
+  return (
+    <Card className="border-amber-500/30">
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Smartphone className="h-5 w-5 text-amber-500" />
+          Chips Descartáveis
+        </CardTitle>
+        <Button size="sm" onClick={addChip} disabled={adding || !collaboratorId} className="gap-2">
+          {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          Adicionar Chip
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        ) : chips.length === 0 ? (
+          <div className="text-center py-8 space-y-3">
+            <Smartphone className="h-10 w-10 text-muted-foreground mx-auto" />
+            <p className="text-muted-foreground text-sm">Nenhum chip descartável cadastrado</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {chips.map(chip => (
+              <div key={chip.id} className="border border-border rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-foreground">Chip #{chip.chip_index}</span>
+                    <Badge className={chip.status === "connected"
+                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                      : chip.status === "connecting"
+                        ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                        : "bg-red-500/20 text-red-400 border-red-500/30"
+                    }>
+                      {chip.status === "connected" ? "🟢 Conectado" : chip.status === "connecting" ? "🟡 Conectando" : "🔴 Desconectado"}
+                    </Badge>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => handleConnect(chip)} className="gap-1 text-xs">
+                      <QrCode className="h-3 w-3" /> Conectar
+                    </Button>
+                    <Button size="sm" variant="outline" className="gap-1 text-xs text-destructive hover:text-destructive" onClick={() => deleteChip(chip.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+
+                {chip.qr_code && (
+                  <div className="flex justify-center py-2">
+                    <div className="bg-white p-3 rounded-xl shadow border">
+                      <img src={chip.qr_code} alt={`QR Code Chip #${chip.chip_index}`} width={180} height={180} className="rounded" />
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">URL Servidor UAZAPI</Label>
+                    <Input
+                      value={chip.uazapi_server_url}
+                      onChange={e => setChips(prev => prev.map(c => c.id === chip.id ? { ...c, uazapi_server_url: e.target.value } : c))}
+                      onBlur={e => updateField(chip.id, "uazapi_server_url", e.target.value)}
+                      placeholder="https://..."
+                      className="bg-background border-border text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Admin Token UAZAPI</Label>
+                    <Input
+                      value={chip.uazapi_admin_token}
+                      onChange={e => setChips(prev => prev.map(c => c.id === chip.id ? { ...c, uazapi_admin_token: e.target.value } : c))}
+                      onBlur={e => updateField(chip.id, "uazapi_admin_token", e.target.value)}
+                      placeholder="Token..."
+                      className="bg-background border-border text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Bots() {
   const { collaborator } = useCollaborator();
   const { user } = useAuth();
@@ -611,6 +770,9 @@ export default function Bots() {
             )}
           </CardContent>
         </Card>
+
+        {/* ════════════════════ CHIPS DESCARTÁVEIS ════════════════════ */}
+        <DisposableChipsSection collaboratorId={collaborator?.id || null} />
       </div>
 
       {/* ════════════════════ MODAL BOT ════════════════════ */}

@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      disposable_chips: {
+        Row: {
+          chip_index: number
+          collaborator_id: string
+          created_at: string
+          id: string
+          qr_code: string | null
+          status: string
+          uazapi_admin_token: string
+          uazapi_server_url: string
+          updated_at: string
+        }
+        Insert: {
+          chip_index?: number
+          collaborator_id: string
+          created_at?: string
+          id?: string
+          qr_code?: string | null
+          status?: string
+          uazapi_admin_token?: string
+          uazapi_server_url?: string
+          updated_at?: string
+        }
+        Update: {
+          chip_index?: number
+          collaborator_id?: string
+          created_at?: string
+          id?: string
+          qr_code?: string | null
+          status?: string
+          uazapi_admin_token?: string
+          uazapi_server_url?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       system_configs: {
         Row: {
           description: string | null
