@@ -230,7 +230,7 @@ export default function Colaboradores() {
       expiresAt.setDate(expiresAt.getDate() + parseInt(inviteForm.expires_days || "7"));
       const { data, error } = await supabase.from("invite_links").insert({
         company_id: inviteForm.company_id || null,
-        role: inviteForm.role_id || null,
+        role_id: inviteForm.role_id || null,
         max_uses: parseInt(inviteForm.max_uses || "9999"),
         expires_at: expiresAt.toISOString(),
         created_by: session?.user?.id || null,
