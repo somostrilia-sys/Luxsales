@@ -1,138 +1,387 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useState, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Bot, Mail, Lock, User, Loader2 } from "lucide-react";
+import { Loader2, Copy, CheckCircle2, AlertTriangle, Link2, ArrowRight, ShieldAlert } from "lucide-react";
+
+interface InviteData {
+  id: string;
+  token: string;
+  company_id: string;
+  role: string;
+  max_uses: number;
+  current_uses: number;
+  expires_at: string;
+  is_active: boolean;
+}
 
 export default function Register() {
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("token");
+
+  // If no token, show "request link" page
+  if (!token) {
+    return <NoTokenPage />;
+  }
+
+  return <InviteRegistration token={token} />;
+}
+
+// ─── No Token Page ───
+function NoTokenPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 login-bg">
+      <Card variant="gradient" className="w-full max-w-md">
+        <CardHeader className="text-center space-y-4">
+          <div className="mx-auto w-14 h-14 rounded-2xl bg-warning/10 border border-warning/20 flex items-center justify-center">
+            <ShieldAlert className="h-7 w-7 text-warning" />
+          </div>
+          <CardTitle className="text-xl">Link de Cadastro Necessário</CardTitle>
+          <CardDescription>
+            Para se cadastrar, você precisa de um link de convite fornecido pelo administrador do sistema.
+          </CardDescription>
+        </CardHeader>
+        <CardFooter className="flex flex-col gap-3">
+          <Link to="/login" className="w-full">
+            <Button variant="outline" className="w-full">Ir para Login</Button>
+          </Link>
+          <p className="text-xs text-muted-foreground text-center">
+            Solicite um link de cadastro ao seu gestor ou administrador.
+          </p>
+        </CardFooter>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Invite Registration ───
+function InviteRegistration({ token }: { token: string }) {
+  const [invite, setInvite] = useState<InviteData | null>(null);
+  const [inviteError, setInviteError] = useState("");
+  const [loadingInvite, setLoadingInvite] = useState(true);
+
+  const [companyName, setCompanyName] = useState("");
+  const [roleName, setRoleName] = useState("");
+  const [roleLevel, setRoleLevel] = useState<number | null>(null);
+  const [sectors, setSectors] = useState<any[]>([]);
+  const [units, setUnits] = useState<any[]>([]);
+  const [collaborators, setCollaborators] = useState<any[]>([]);
+
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [sectorId, setSectorId] = useState("");
+  const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
+  const [reportsTo, setReportsTo] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signUp } = useAuth();
-  const navigate = useNavigate();
+  const [success, setSuccess] = useState(false);
+  const [generatedPassword, setGeneratedPassword] = useState("");
+
+  useEffect(() => { validateInvite(); }, [token]);
+
+  // Sync whatsapp with phone
+  useEffect(() => {
+    if (phone && !whatsapp) setWhatsapp(phone);
+  }, [phone]);
+
+  const validateInvite = async () => {
+    setLoadingInvite(true);
+    try {
+      const { data, error } = await supabase
+        .from("invite_links")
+        .select("*")
+        .eq("token", token)
+        .eq("is_active", true)
+        .single();
+
+      if (error || !data) {
+        setInviteError("Link inválido ou expirado.");
+        return;
+      }
+      if (data.expires_at && new Date(data.expires_at) < new Date()) {
+        setInviteError("Este link de cadastro expirou. Solicite um novo ao administrador.");
+        return;
+      }
+      if (data.current_uses >= data.max_uses) {
+        setInviteError("Este link já atingiu o limite de cadastros. Solicite um novo ao administrador.");
+        return;
+      }
+
+      setInvite(data);
+
+      // Load related data
+      const [compRes, roleRes, sectorRes, unitRes, collabRes] = await Promise.all([
+        supabase.from("companies").select("name").eq("id", data.company_id).single(),
+        supabase.from("roles").select("name, level").eq("id", data.role).single(),
+        supabase.from("sectors").select("id, name").eq("company_id", data.company_id).order("name"),
+        supabase.from("units").select("id, name").eq("company_id", data.company_id).eq("active", true).order("name"),
+        supabase.from("collaborators").select("id, name, company_id, company_ids, role:roles!collaborators_role_id_fkey(name)")
+          .eq("active", true).order("name").limit(1000),
+      ]);
+
+      setCompanyName(compRes.data?.name || "");
+      setRoleName(roleRes.data?.name || "");
+      setRoleLevel(roleRes.data?.level ?? null);
+      setSectors(sectorRes.data || []);
+      setUnits(unitRes.data || []);
+      setCollaborators(
+        (collabRes.data || []).filter((c: any) =>
+          c.company_id === data.company_id ||
+          (Array.isArray(c.company_ids) && c.company_ids.includes(data.company_id))
+        )
+      );
+    } catch {
+      setInviteError("Erro ao validar o link de cadastro.");
+    } finally {
+      setLoadingInvite(false);
+    }
+  };
+
+  const formatPhoneBR = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 11);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  };
+
+  const handlePhoneChange = (value: string) => {
+    const formatted = formatPhoneBR(value);
+    setPhone(formatted);
+  };
+
+  const handleWhatsappChange = (value: string) => {
+    setWhatsapp(formatPhoneBR(value));
+  };
+
+  const toggleUnit = (unitId: string) => {
+    setSelectedUnitIds(prev =>
+      prev.includes(unitId) ? prev.filter(id => id !== unitId) : [...prev, unitId]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (password !== confirmPassword) {
-      toast.error("As senhas não coincidem");
+    if (!nome || !email || !phone || !invite) {
+      toast.error("Preencha os campos obrigatórios");
       return;
     }
-    
-    if (password.length < 6) {
-      toast.error("A senha deve ter pelo menos 6 caracteres");
-      return;
-    }
-    
     setLoading(true);
-    const { error } = await signUp(email, password, nome);
-    
-    if (error) {
-      toast.error("Erro ao cadastrar", { description: error.message });
-    } else {
-      toast.success("Cadastro realizado!", { description: "Verifique seu e-mail para confirmar a conta." });
-      navigate("/login");
+    try {
+      const res = await fetch(
+        `https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/register-collaborator`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Public-Register": "true" },
+          body: JSON.stringify({
+            name: nome,
+            email,
+            phone: phone.replace(/\D/g, ""),
+            whatsapp: whatsapp ? whatsapp.replace(/\D/g, "") : undefined,
+            company_id: invite.company_id,
+            role_id: invite.role,
+            sector_id: sectorId || undefined,
+            unit_id: selectedUnitIds.length > 0 ? selectedUnitIds[0] : undefined,
+            unit_ids: selectedUnitIds.length > 0 ? selectedUnitIds : undefined,
+            reports_to: reportsTo || undefined,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Erro ao cadastrar");
+
+      // Increment invite usage
+      await supabase
+        .from("invite_links")
+        .update({ current_uses: (invite.current_uses || 0) + 1 })
+        .eq("id", invite.id);
+
+      const firstName = nome.split(" ")[0];
+      const pwd = data.results?.[0]?.password || `${firstName}@2026`;
+      setGeneratedPassword(pwd);
+      setSuccess(true);
+    } catch (err: any) {
+      toast.error("Erro ao cadastrar", { description: err.message });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative">
-      
-      <Card className="w-full max-w-md bg-card/80 backdrop-blur-md border-border/50 shadow-2xl animate-fade-in">
-        <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-kpi-from to-kpi-to flex items-center justify-center shadow-glow">
-            <Bot className="h-8 w-8 text-white" />
-          </div>
-          <div>
-            <CardTitle className="text-2xl font-bold">Criar conta</CardTitle>
-            <CardDescription>Preencha os dados para se cadastrar</CardDescription>
-          </div>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="nome">Nome completo</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="nome"
-                  type="text"
-                  placeholder="Seu nome"
-                  className="pl-10"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  required
-                />
-              </div>
+  const copyPassword = () => {
+    navigator.clipboard.writeText(generatedPassword);
+    toast.success("Senha copiada!");
+  };
+
+  if (loadingInvite) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 login-bg">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (inviteError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 login-bg">
+        <Card variant="gradient" className="w-full max-w-md">
+          <CardHeader className="text-center space-y-4">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center justify-center">
+              <AlertTriangle className="h-7 w-7 text-destructive" />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="seu@email.com"
-                  className="pl-10"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  className="pl-10"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirmar senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  placeholder="••••••••"
-                  className="pl-10"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full btn-shimmer bg-gradient-to-r from-kpi-from to-kpi-to" disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Criar conta
-            </Button>
-            <p className="text-sm text-muted-foreground text-center">
-              Já tem conta?{" "}
-              <Link to="/login" className="text-primary hover:underline font-medium">
-                Entrar
-              </Link>
-            </p>
+            <CardTitle className="text-xl">Link Inválido</CardTitle>
+            <CardDescription>{inviteError}</CardDescription>
+          </CardHeader>
+          <CardFooter className="justify-center">
+            <Link to="/login"><Button variant="outline">Ir para Login</Button></Link>
           </CardFooter>
-        </form>
-      </Card>
+        </Card>
+      </div>
+    );
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 login-bg">
+        <Card variant="gradient" className="w-full max-w-md">
+          <CardHeader className="text-center space-y-4">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-success/10 border border-success/20 flex items-center justify-center shadow-[var(--shadow-glow-accent)]">
+              <CheckCircle2 className="h-7 w-7 text-success" />
+            </div>
+            <CardTitle className="text-xl">Cadastro realizado com sucesso!</CardTitle>
+            <CardDescription>Sua senha de acesso ao sistema:</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary/50 border border-border">
+              <code className="flex-1 text-lg font-mono text-foreground">{generatedPassword}</code>
+              <Button variant="ghost" size="icon" onClick={copyPassword}><Copy className="h-4 w-4" /></Button>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              Guarde sua senha em local seguro. Use seu email e esta senha para fazer login.
+            </p>
+          </CardContent>
+          <CardFooter className="justify-center">
+            <Link to="/login">
+              <Button className="btn-modern">
+                Ir para Login <ArrowRight className="h-4 w-4 ml-1" />
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  // ─── Registration Form ───
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 login-bg">
+      <div className="w-full max-w-lg space-y-6">
+        <div className="text-center space-y-2">
+          <div className="mx-auto w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shadow-[var(--shadow-glow-primary)]">
+            <Link2 className="h-6 w-6 text-primary" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Cadastro de Colaborador</h1>
+          <p className="text-sm text-muted-foreground">
+            Você foi convidado para <span className="text-foreground font-medium">{companyName}</span> como <span className="text-foreground font-medium">{roleName}</span>
+          </p>
+        </div>
+
+        <Card variant="gradient" className="card-accent-top accent-green">
+          <form onSubmit={handleSubmit}>
+            <CardContent className="pt-6 space-y-4">
+              {/* Pre-filled info badges */}
+              <div className="flex flex-wrap gap-2">
+                <div className="px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs font-medium text-primary">
+                  🏢 {companyName}
+                </div>
+                <div className="px-3 py-1.5 rounded-full bg-success/10 border border-success/20 text-xs font-medium text-success">
+                  👤 {roleName}
+                </div>
+              </div>
+
+              {/* Always required fields */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome completo *</Label>
+                <Input value={nome} onChange={e => setNome(e.target.value)} placeholder="Seu nome completo" className="h-11 bg-secondary/50" required />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email *</Label>
+                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" className="h-11 bg-secondary/50" required />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Telefone *</Label>
+                  <Input value={phone} onChange={e => handlePhoneChange(e.target.value)} placeholder="(00) 00000-0000" className="h-11 bg-secondary/50" required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">WhatsApp pessoal</Label>
+                  <Input value={whatsapp} onChange={e => handleWhatsappChange(e.target.value)} placeholder="(00) 00000-0000" className="h-11 bg-secondary/50" />
+                </div>
+              </div>
+
+              {/* Conditional: Sector (show for all levels) */}
+              {sectors.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Setor</Label>
+                  <Select value={sectorId} onValueChange={setSectorId}>
+                    <SelectTrigger className="h-11 bg-secondary/50"><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
+                    <SelectContent>{sectors.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Conditional: Units (show for Gestor level 2 and Colaborador level 3) */}
+              {units.length > 0 && roleLevel !== null && roleLevel >= 2 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Unidades</Label>
+                  <div className="rounded-lg border border-border bg-secondary/30 max-h-48 overflow-y-auto">
+                    <div className="p-2 space-y-1">
+                      {units.map(u => (
+                        <label key={u.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted/50 transition-colors">
+                          <Checkbox checked={selectedUnitIds.includes(u.id)} onCheckedChange={() => toggleUnit(u.id)} />
+                          <span className="text-sm">{u.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  {selectedUnitIds.length > 0 && (
+                    <p className="text-xs text-muted-foreground">{selectedUnitIds.length} unidade(s)</p>
+                  )}
+                </div>
+              )}
+
+              {/* Conditional: Superior (show for Gestor level 2 and Colaborador level 3) */}
+              {collaborators.length > 0 && roleLevel !== null && roleLevel >= 2 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Superior Direto</Label>
+                  <Select value={reportsTo} onValueChange={setReportsTo}>
+                    <SelectTrigger className="h-11 bg-secondary/50"><SelectValue placeholder="Selecione o superior" /></SelectTrigger>
+                    <SelectContent>{collaborators.map(c => <SelectItem key={c.id} value={c.id}>{c.name}{c.role?.name ? ` - ${c.role.name}` : ""}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
+            </CardContent>
+            <CardFooter>
+              <Button type="submit" className="w-full h-11 btn-modern font-semibold" disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Cadastrar
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+
+        <p className="text-xs text-muted-foreground text-center">
+          Já tem conta?{" "}
+          <Link to="/login" className="text-primary hover:underline font-medium">Fazer Login</Link>
+        </p>
+      </div>
     </div>
   );
 }

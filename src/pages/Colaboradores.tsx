@@ -14,10 +14,23 @@ import { supabase } from "@/lib/supabase";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { toast } from "sonner";
-import { Plus, Pencil, Loader2, Trash2, UserX, UserCheck } from "lucide-react";
+import { Plus, Pencil, Loader2, Trash2, UserX, UserCheck, Link2, Copy, ExternalLink, XCircle, MessageCircle } from "lucide-react";
+import { format } from "date-fns";
+
+interface InviteLink {
+  id: string;
+  token: string;
+  company_id: string | null;
+  role: string | null;
+  max_uses: number | null;
+  current_uses: number | null;
+  expires_at: string | null;
+  is_active: boolean | null;
+  created_at: string | null;
+}
 
 export default function Colaboradores() {
-  const { isCEO } = useCollaborator();
+  const { isCEO, roleLevel, collaborator: currentCollab } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
   const [collaborators, setCollaborators] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +53,17 @@ export default function Colaboradores() {
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
   const [allCollaborators, setAllCollaborators] = useState<any[]>([]);
 
-  useEffect(() => { loadData(); }, [selectedCompanyId]);
+  // Invite link state
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ company_id: "", role_id: "", max_uses: "9999", expires_days: "7" });
+  const [inviteCreating, setInviteCreating] = useState(false);
+  const [generatedInviteLink, setGeneratedInviteLink] = useState("");
+  const [inviteLinks, setInviteLinks] = useState<InviteLink[]>([]);
+  const [inviteListOpen, setInviteListOpen] = useState(false);
+
+  const canManageInvites = roleLevel <= 1 || currentCollab?.is_super_admin;
+
+  useEffect(() => { loadData(); if (canManageInvites) loadInvites(); }, [selectedCompanyId]);
 
   const loadData = async () => {
     setLoading(true);
@@ -70,6 +93,15 @@ export default function Colaboradores() {
     setRoleAgentAccess(raaRes.data || []);
     setAllCollaborators(allCollabRes.data || []);
     setLoading(false);
+  };
+
+  const loadInvites = async () => {
+    const { data } = await supabase
+      .from("invite_links")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    setInviteLinks(data || []);
   };
 
   const filteredCollaborators = collaborators.filter(c => {
@@ -130,7 +162,6 @@ export default function Colaboradores() {
       toast.error("Preencha os campos obrigatórios");
       return;
     }
-
     const payload: any = {
       name: form.name, email: form.email, phone: form.phone || null,
       whatsapp: form.whatsapp || null, company_id: form.company_id,
@@ -140,7 +171,6 @@ export default function Colaboradores() {
       company_ids: selectedCompanyIds.length > 0 ? selectedCompanyIds : null,
       reports_to: form.reports_to || null,
     };
-
     let collabId: string;
     if (editing) {
       await supabase.from("collaborators").update(payload).eq("id", editing.id);
@@ -150,7 +180,6 @@ export default function Colaboradores() {
       if (error) { toast.error(error.message); return; }
       collabId = data.id;
     }
-
     await supabase.from("collaborator_agent_access").delete().eq("collaborator_id", collabId);
     const roleDefaults = new Set(roleAgentAccess.filter(r => r.role_id === form.role_id).map(r => r.agent_id));
     const overrides: any[] = [];
@@ -161,7 +190,6 @@ export default function Colaboradores() {
       if (!selectedAgents.has(agentId)) overrides.push({ collaborator_id: collabId, agent_id: agentId, has_access: false });
     });
     if (overrides.length > 0) await supabase.from("collaborator_agent_access").insert(overrides);
-
     toast.success(editing ? "Colaborador atualizado" : "Colaborador criado");
     setModalOpen(false);
     loadData();
@@ -187,6 +215,72 @@ export default function Colaboradores() {
     }
   };
 
+  // ─── Invite Functions ───
+  const openInviteDialog = () => {
+    setInviteForm({ company_id: "", role_id: "", max_uses: "9999", expires_days: "7" });
+    setGeneratedInviteLink("");
+    setInviteDialogOpen(true);
+  };
+
+  const handleCreateInvite = async () => {
+    if (!inviteForm.company_id || !inviteForm.role_id) {
+      toast.error("Selecione empresa e cargo");
+      return;
+    }
+    setInviteCreating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + parseInt(inviteForm.expires_days || "7"));
+      const { data, error } = await supabase.from("invite_links").insert({
+        company_id: inviteForm.company_id,
+        role: inviteForm.role_id,
+        max_uses: parseInt(inviteForm.max_uses || "9999"),
+        expires_at: expiresAt.toISOString(),
+        created_by: session?.user?.id || null,
+      }).select("token").single();
+      if (error) throw error;
+      const link = `${window.location.origin}/register?token=${data.token}`;
+      setGeneratedInviteLink(link);
+      toast.success("Link de convite gerado!");
+      loadInvites();
+    } catch (e: any) {
+      toast.error("Erro ao gerar convite: " + e.message);
+    } finally {
+      setInviteCreating(false);
+    }
+  };
+
+  const copyLink = (token: string) => {
+    const link = `${window.location.origin}/register?token=${token}`;
+    navigator.clipboard.writeText(link);
+    toast.success("Link copiado!");
+  };
+
+  const shareWhatsApp = (token: string) => {
+    const link = `${window.location.origin}/register?token=${token}`;
+    const text = encodeURIComponent(`Olá! Use este link para se cadastrar no sistema:\n${link}`);
+    window.open(`https://wa.me/?text=${text}`, "_blank");
+  };
+
+  const deactivateInvite = async (id: string) => {
+    const { error } = await supabase.from("invite_links").update({ is_active: false }).eq("id", id);
+    if (error) toast.error("Erro ao desativar");
+    else { toast.success("Convite desativado"); loadInvites(); }
+  };
+
+  const getInviteStatus = (invite: InviteLink) => {
+    if (!invite.is_active) return { label: "Desativado", cls: "bg-muted text-muted-foreground" };
+    if (invite.expires_at && new Date(invite.expires_at) < new Date()) return { label: "Expirado", cls: "bg-destructive/20 text-destructive" };
+    if (invite.current_uses !== null && invite.max_uses !== null && invite.current_uses >= invite.max_uses) return { label: "Esgotado", cls: "bg-warning/20 text-warning" };
+    return { label: "Ativo", cls: "bg-success/20 text-success" };
+  };
+
+  const getCompanyName = (id: string | null) => companies.find(c => c.id === id)?.name || "—";
+  const getRoleName = (id: string | null) => roles.find(r => r.id === id)?.name || "—";
+
+  const inviteFilteredRoles = roles.filter(r => !inviteForm.company_id || r.company_id === inviteForm.company_id);
+
   const filteredRoles = roles.filter(r => !form.company_id || r.company_id === form.company_id);
   const filteredUnits = units.filter(u => !form.company_id || u.company_id === form.company_id);
   const filteredAgents = agents.filter(a => !form.company_id || a.company_id === form.company_id);
@@ -207,8 +301,24 @@ export default function Colaboradores() {
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Colaboradores</h1>
-          <Button onClick={openCreate} className="btn-modern"><Plus className="h-4 w-4 mr-1" /> Novo Colaborador</Button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Colaboradores</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Gerencie a equipe e links de convite</p>
+          </div>
+          <div className="flex gap-2">
+            {canManageInvites && (
+              <>
+                <Button variant="outline" onClick={() => setInviteListOpen(true)} className="text-sm">
+                  Convites ({inviteLinks.filter(i => i.is_active && (!i.expires_at || new Date(i.expires_at) > new Date())).length})
+                </Button>
+                <Button variant="outline" onClick={openInviteDialog} className="text-sm">
+                  <Link2 className="h-4 w-4 mr-1.5" />
+                  Gerar Link de Cadastro
+                </Button>
+              </>
+            )}
+            <Button onClick={openCreate} className="btn-modern"><Plus className="h-4 w-4 mr-1" /> Novo Colaborador</Button>
+          </div>
         </div>
 
         <div className="flex gap-3">
@@ -228,7 +338,7 @@ export default function Colaboradores() {
           </Select>
         </div>
 
-        <Card>
+        <Card variant="gradient">
           <CardContent className="p-0">
             {loading ? (
               <div className="flex justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
@@ -262,7 +372,7 @@ export default function Colaboradores() {
                         })()}
                       </TableCell>
                       <TableCell>
-                        <Badge className={c.active ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"}>
+                        <Badge className={c.active ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"}>
                           {c.active ? "Ativo" : "Inativo"}
                         </Badge>
                       </TableCell>
@@ -292,6 +402,7 @@ export default function Colaboradores() {
         </Card>
       </div>
 
+      {/* ─── Edit/Create Collaborator Dialog ─── */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editing ? "Editar Colaborador" : "Novo Colaborador"}</DialogTitle></DialogHeader>
@@ -313,7 +424,7 @@ export default function Colaboradores() {
               <div>
                 <Label className="mb-1 block">Empresas adicionais</Label>
                 <p className="text-xs text-muted-foreground mb-1">Selecione empresas adicionais além da principal</p>
-                <div className="rounded-md border border-border bg-background max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(240 10% 58% / 0.3) transparent' }}>
+                <div className="rounded-md border border-border bg-background max-h-48 overflow-y-auto">
                   <div className="p-2 space-y-1">
                     {companies.filter(c => c.id !== form.company_id).map(c => (
                       <label key={c.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted/50 transition-colors">
@@ -328,7 +439,6 @@ export default function Colaboradores() {
                 )}
               </div>
             )}
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Cargo *</Label>
@@ -345,12 +455,11 @@ export default function Colaboradores() {
                 </Select>
               </div>
             </div>
-
             {filteredUnits.length > 0 && (
               <div>
                 <Label className="mb-1 block">Unidades</Label>
-                <p className="text-xs text-muted-foreground mb-1">Selecione as unidades (role para ver todas)</p>
-                <div className="rounded-md border border-border bg-background max-h-72 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(240 10% 58% / 0.3) transparent' }}>
+                <p className="text-xs text-muted-foreground mb-1">Selecione as unidades</p>
+                <div className="rounded-md border border-border bg-background max-h-72 overflow-y-auto">
                   <div className="p-2 space-y-1">
                     {filteredUnits.map(u => (
                       <label key={u.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted/50 transition-colors">
@@ -365,7 +474,6 @@ export default function Colaboradores() {
                 )}
               </div>
             )}
-
             {filteredAgents.length > 0 && (
               <div>
                 <Label className="mb-2 block">Agentes Permitidos</Label>
@@ -388,7 +496,6 @@ export default function Colaboradores() {
                 </div>
               </div>
             )}
-
             <div className="flex items-center gap-2">
               <Switch checked={form.active} onCheckedChange={v => setForm({ ...form, active: v })} />
               <Label>Ativo</Label>
@@ -398,6 +505,123 @@ export default function Colaboradores() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
             <Button onClick={save} className="btn-modern">{editing ? "Salvar" : "Criar"}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Generate Invite Link Dialog ─── */}
+      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="h-5 w-5 text-primary" />
+              Gerar Link de Cadastro
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Empresa *</Label>
+              <Select value={inviteForm.company_id} onValueChange={v => setInviteForm(prev => ({ ...prev, company_id: v, role_id: "" }))}>
+                <SelectTrigger><SelectValue placeholder="Selecione a empresa" /></SelectTrigger>
+                <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Cargo *</Label>
+              <Select value={inviteForm.role_id} onValueChange={v => setInviteForm(prev => ({ ...prev, role_id: v }))}>
+                <SelectTrigger><SelectValue placeholder="Selecione o cargo" /></SelectTrigger>
+                <SelectContent>{inviteFilteredRoles.map(r => <SelectItem key={r.id} value={r.id}>{r.name} (Lv.{r.level})</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Máximo de usos</Label>
+                <Input type="number" min="1" value={inviteForm.max_uses} onChange={e => setInviteForm(prev => ({ ...prev, max_uses: e.target.value }))} />
+              </div>
+              <div>
+                <Label>Expira em (dias)</Label>
+                <Input type="number" min="1" value={inviteForm.expires_days} onChange={e => setInviteForm(prev => ({ ...prev, expires_days: e.target.value }))} />
+              </div>
+            </div>
+
+            <Button onClick={handleCreateInvite} disabled={inviteCreating} className="w-full btn-modern">
+              {inviteCreating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link2 className="h-4 w-4 mr-2" />}
+              Gerar Link
+            </Button>
+
+            {generatedInviteLink && (
+              <div className="p-4 rounded-lg bg-secondary/50 border border-border space-y-3">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Link gerado</p>
+                <code className="block text-sm font-mono text-primary break-all">{generatedInviteLink}</code>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => { navigator.clipboard.writeText(generatedInviteLink); toast.success("Link copiado!"); }}>
+                    <Copy className="h-4 w-4 mr-1.5" /> Copiar Link
+                  </Button>
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => {
+                    const text = encodeURIComponent(`Olá! Use este link para se cadastrar no sistema:\n${generatedInviteLink}`);
+                    window.open(`https://wa.me/?text=${text}`, "_blank");
+                  }}>
+                    <MessageCircle className="h-4 w-4 mr-1.5" /> WhatsApp
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Invite Links List Dialog ─── */}
+      <Dialog open={inviteListOpen} onOpenChange={setInviteListOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Convites Criados</DialogTitle>
+          </DialogHeader>
+          {inviteLinks.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">Nenhum convite criado ainda</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Empresa</TableHead>
+                  <TableHead>Cargo</TableHead>
+                  <TableHead>Usos</TableHead>
+                  <TableHead>Expira</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {inviteLinks.map(invite => {
+                  const status = getInviteStatus(invite);
+                  return (
+                    <TableRow key={invite.id} className="table-row-hover">
+                      <TableCell className="font-medium">{getCompanyName(invite.company_id)}</TableCell>
+                      <TableCell>{getRoleName(invite.role)}</TableCell>
+                      <TableCell>{invite.current_uses ?? 0}/{invite.max_uses ?? "∞"}</TableCell>
+                      <TableCell className="text-sm">
+                        {invite.expires_at ? format(new Date(invite.expires_at), "dd/MM/yy HH:mm") : "Nunca"}
+                      </TableCell>
+                      <TableCell><Badge className={status.cls}>{status.label}</Badge></TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => copyLink(invite.token)} title="Copiar">
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => shareWhatsApp(invite.token)} title="WhatsApp">
+                            <MessageCircle className="h-4 w-4" />
+                          </Button>
+                          {invite.is_active && (
+                            <Button variant="ghost" size="sm" onClick={() => deactivateInvite(invite.id)} title="Desativar" className="text-destructive hover:text-destructive">
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </DialogContent>
       </Dialog>
     </DashboardLayout>
