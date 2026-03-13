@@ -23,11 +23,11 @@ interface InviteLink {
   id: string;
   token: string;
   company_id: string | null;
-  role: string | null;
+  role_id: string | null;
   max_uses: number | null;
-  current_uses: number | null;
+  used_count: number | null;
   expires_at: string | null;
-  is_active: boolean | null;
+  active: boolean | null;
   created_at: string | null;
 }
 
