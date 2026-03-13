@@ -107,8 +107,7 @@ function UploadTab() {
   const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
 
   const loadCounts = useCallback(async () => {
-    if (!companyId) return;
-    const { data, error } = await supabase.rpc("count_available_leads", { p_company_id: companyId });
+    const { data, error } = await supabase.rpc("count_available_leads", { p_company_id: companyId || null });
     if (error) { console.error(error); return; }
     const d = data as any;
     setCounts({

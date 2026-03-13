@@ -229,11 +229,13 @@ export default function Colaboradores() {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + parseInt(inviteForm.expires_days || "7"));
       const { data, error } = await supabase.from("invite_links").insert({
+        token: crypto.randomUUID(),
         company_id: inviteForm.company_id || null,
         role_id: inviteForm.role_id || null,
         max_uses: parseInt(inviteForm.max_uses || "9999"),
         expires_at: expiresAt.toISOString(),
         created_by: session?.user?.id || null,
+        active: true,
       }).select("token").single();
       if (error) throw error;
       const link = `${window.location.origin}/register?token=${data.token}`;

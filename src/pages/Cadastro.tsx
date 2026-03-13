@@ -213,16 +213,18 @@ export default function Cadastro() {
       expiresAt.setDate(expiresAt.getDate() + parseInt(inviteForm.expires_days));
 
       const { data, error } = await supabase.from("invite_links").insert({
+        token: crypto.randomUUID(),
         company_id: inviteForm.company_id || null,
         role_id: inviteForm.role_id || null,
         max_uses: parseInt(inviteForm.max_uses),
         expires_at: expiresAt.toISOString(),
         created_by: session?.user?.id || null,
+        active: true,
       }).select("token").single();
 
       if (error) throw error;
 
-      const link = `${window.location.origin}/convite/${data.token}`;
+      const link = `${window.location.origin}/register?token=${data.token}`;
       setGeneratedLink(link);
       toast.success("Link de convite criado!");
       loadInvites();
@@ -234,7 +236,7 @@ export default function Cadastro() {
   };
 
   const copyInviteLink = (token: string) => {
-    const link = `${window.location.origin}/convite/${token}`;
+    const link = `${window.location.origin}/register?token=${token}`;
     navigator.clipboard.writeText(link);
     toast.success("Link copiado!");
   };
@@ -475,7 +477,7 @@ export default function Cadastro() {
                                 <Button variant="ghost" size="sm" onClick={() => copyInviteLink(invite.token)} title="Copiar link">
                                   <Copy className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="sm" onClick={() => window.open(`/convite/${invite.token}`, '_blank')} title="Abrir link">
+                                <Button variant="ghost" size="sm" onClick={() => window.open(`/register?token=${invite.token}`, '_blank')} title="Abrir link">
                                   <ExternalLink className="h-4 w-4" />
                                 </Button>
                                 {invite.active && (
