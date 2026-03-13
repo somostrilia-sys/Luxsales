@@ -275,7 +275,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         </div>
         <Button size="sm" onClick={() => setShowAddForm(v => !v)} disabled={!collaboratorId || chips.length >= 5} className="gap-2">
           <Plus className="h-4 w-4" />
-          Adicionar Chip
+          + Novo Chip
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
