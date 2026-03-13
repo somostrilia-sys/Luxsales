@@ -14,6 +14,339 @@ export type Database = {
   }
   public: {
     Tables: {
+      bot_messages: {
+        Row: {
+          consultant_id: string | null
+          content: string
+          created_at: string | null
+          id: string
+          role: string
+        }
+        Insert: {
+          consultant_id?: string | null
+          content: string
+          created_at?: string | null
+          id?: string
+          role: string
+        }
+        Update: {
+          consultant_id?: string | null
+          content?: string
+          created_at?: string | null
+          id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_messages_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      channels: {
+        Row: {
+          consultant_id: string | null
+          created_at: string | null
+          daily_msg_count: number | null
+          id: string
+          instance_name: string | null
+          instance_token: string | null
+          last_msg_at: string | null
+          phone_number: string | null
+          status: string | null
+          total_msg_count: number | null
+          type: string
+          updated_at: string | null
+        }
+        Insert: {
+          consultant_id?: string | null
+          created_at?: string | null
+          daily_msg_count?: number | null
+          id?: string
+          instance_name?: string | null
+          instance_token?: string | null
+          last_msg_at?: string | null
+          phone_number?: string | null
+          status?: string | null
+          total_msg_count?: number | null
+          type: string
+          updated_at?: string | null
+        }
+        Update: {
+          consultant_id?: string | null
+          created_at?: string | null
+          daily_msg_count?: number | null
+          id?: string
+          instance_name?: string | null
+          instance_token?: string | null
+          last_msg_at?: string | null
+          phone_number?: string | null
+          status?: string | null
+          total_msg_count?: number | null
+          type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channels_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      collaborators: {
+        Row: {
+          bot_training: string | null
+          company_id: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          name: string
+          role: string | null
+          status: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          bot_training?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          role?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          bot_training?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          role?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collaborators_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      companies: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          slug: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          slug: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          slug?: string
+        }
+        Relationships: []
+      }
+      consultant_metrics: {
+        Row: {
+          closings: number | null
+          consultant_id: string | null
+          created_at: string | null
+          date: string
+          hot_leads: number | null
+          id: string
+          messages_sent: number | null
+          quotes: number | null
+          response_rate: number | null
+          responses: number | null
+          revenue: number | null
+        }
+        Insert: {
+          closings?: number | null
+          consultant_id?: string | null
+          created_at?: string | null
+          date?: string
+          hot_leads?: number | null
+          id?: string
+          messages_sent?: number | null
+          quotes?: number | null
+          response_rate?: number | null
+          responses?: number | null
+          revenue?: number | null
+        }
+        Update: {
+          closings?: number | null
+          consultant_id?: string | null
+          created_at?: string | null
+          date?: string
+          hot_leads?: number | null
+          id?: string
+          messages_sent?: number | null
+          quotes?: number | null
+          response_rate?: number | null
+          responses?: number | null
+          revenue?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultant_metrics_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultants: {
+        Row: {
+          activated_at: string | null
+          auth_user_id: string | null
+          company: string | null
+          created_at: string | null
+          deactivated_at: string | null
+          email: string | null
+          id: string
+          name: string
+          notification_instance_token: string | null
+          permissions: string[] | null
+          personal_phone: string | null
+          region: string | null
+          role: Database["public"]["Enums"]["user_role"] | null
+          status: string | null
+          tone: string | null
+          unit: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          activated_at?: string | null
+          auth_user_id?: string | null
+          company?: string | null
+          created_at?: string | null
+          deactivated_at?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          notification_instance_token?: string | null
+          permissions?: string[] | null
+          personal_phone?: string | null
+          region?: string | null
+          role?: Database["public"]["Enums"]["user_role"] | null
+          status?: string | null
+          tone?: string | null
+          unit?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          activated_at?: string | null
+          auth_user_id?: string | null
+          company?: string | null
+          created_at?: string | null
+          deactivated_at?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          notification_instance_token?: string | null
+          permissions?: string[] | null
+          personal_phone?: string | null
+          region?: string | null
+          role?: Database["public"]["Enums"]["user_role"] | null
+          status?: string | null
+          tone?: string | null
+          unit?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      conversations: {
+        Row: {
+          chip_id: string | null
+          chip_instance_token: string | null
+          consultant_id: string | null
+          created_at: string | null
+          id: string
+          last_message: string | null
+          last_message_at: string | null
+          lead_id: string | null
+          lead_phone: string
+          status: string | null
+          unread_count: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          chip_id?: string | null
+          chip_instance_token?: string | null
+          consultant_id?: string | null
+          created_at?: string | null
+          id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          lead_id?: string | null
+          lead_phone: string
+          status?: string | null
+          unread_count?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          chip_id?: string | null
+          chip_instance_token?: string | null
+          consultant_id?: string | null
+          created_at?: string | null
+          id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          lead_id?: string | null
+          lead_phone?: string
+          status?: string | null
+          unread_count?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_chip_id_fkey"
+            columns: ["chip_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       disposable_chips: {
         Row: {
           chip_index: number
@@ -50,6 +383,245 @@ export type Database = {
         }
         Relationships: []
       }
+      leads: {
+        Row: {
+          city: string | null
+          consultant_id: string | null
+          contacted_at: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          name: string | null
+          phone: string
+          region: string | null
+          responded_at: string | null
+          score: number | null
+          source: string | null
+          status: string | null
+          updated_at: string | null
+          vehicle_model: string | null
+          vehicle_type: string | null
+          vehicle_year: string | null
+        }
+        Insert: {
+          city?: string | null
+          consultant_id?: string | null
+          contacted_at?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          name?: string | null
+          phone: string
+          region?: string | null
+          responded_at?: string | null
+          score?: number | null
+          source?: string | null
+          status?: string | null
+          updated_at?: string | null
+          vehicle_model?: string | null
+          vehicle_type?: string | null
+          vehicle_year?: string | null
+        }
+        Update: {
+          city?: string | null
+          consultant_id?: string | null
+          contacted_at?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          name?: string | null
+          phone?: string
+          region?: string | null
+          responded_at?: string | null
+          score?: number | null
+          source?: string | null
+          status?: string | null
+          updated_at?: string | null
+          vehicle_model?: string | null
+          vehicle_type?: string | null
+          vehicle_year?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          channel_type: string | null
+          content: string | null
+          conversation_id: string | null
+          created_at: string | null
+          delivery_status: string | null
+          id: string
+          media_type: string | null
+          media_url: string | null
+          message_id: string | null
+          sender: string
+        }
+        Insert: {
+          channel_type?: string | null
+          content?: string | null
+          conversation_id?: string | null
+          created_at?: string | null
+          delivery_status?: string | null
+          id?: string
+          media_type?: string | null
+          media_url?: string | null
+          message_id?: string | null
+          sender: string
+        }
+        Update: {
+          channel_type?: string | null
+          content?: string | null
+          conversation_id?: string | null
+          created_at?: string | null
+          delivery_status?: string | null
+          id?: string
+          media_type?: string | null
+          media_url?: string | null
+          message_id?: string | null
+          sender?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+          role: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          role?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          role?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      prospection_messages: {
+        Row: {
+          chip_id: string | null
+          consultant_id: string | null
+          created_at: string | null
+          delivery_status: string | null
+          id: string
+          lead_id: string | null
+          lead_name: string | null
+          lead_phone: string | null
+          lead_source: string | null
+          message_id: string | null
+          message_sent: string | null
+          message_template: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          chip_id?: string | null
+          consultant_id?: string | null
+          created_at?: string | null
+          delivery_status?: string | null
+          id?: string
+          lead_id?: string | null
+          lead_name?: string | null
+          lead_phone?: string | null
+          lead_source?: string | null
+          message_id?: string | null
+          message_sent?: string | null
+          message_template?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          chip_id?: string | null
+          consultant_id?: string | null
+          created_at?: string | null
+          delivery_status?: string | null
+          id?: string
+          lead_id?: string | null
+          lead_name?: string | null
+          lead_phone?: string | null
+          lead_source?: string | null
+          message_id?: string | null
+          message_sent?: string | null
+          message_template?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospection_messages_chip_id_fkey"
+            columns: ["chip_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospection_messages_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospection_messages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          permissions: Json | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          permissions?: Json | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          permissions?: Json | null
+        }
+        Relationships: []
+      }
       system_configs: {
         Row: {
           description: string | null
@@ -74,15 +646,60 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_bot_conversations: {
+        Row: {
+          collaborator_id: string
+          contact_name: string | null
+          contact_phone: string
+          created_at: string | null
+          history: Json
+          id: string
+          last_message_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          collaborator_id: string
+          contact_name?: string | null
+          contact_phone: string
+          created_at?: string | null
+          history?: Json
+          id?: string
+          last_message_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          collaborator_id?: string
+          contact_name?: string | null
+          contact_phone?: string
+          created_at?: string | null
+          history?: Json
+          id?: string
+          last_message_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_bot_conversations_collaborator_id_fkey"
+            columns: ["collaborator_id"]
+            isOneToOne: false
+            referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_metric: {
+        Args: { p_consultant_id: string; p_metric: string; p_value?: number }
+        Returns: undefined
+      }
+      reset_daily_chip_counts: { Args: never; Returns: undefined }
     }
     Enums: {
-      [_ in never]: never
+      user_role: "admin" | "gestor" | "consultor" | "sdr"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -209,6 +826,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      user_role: ["admin", "gestor", "consultor", "sdr"],
+    },
   },
 } as const
