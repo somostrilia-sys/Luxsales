@@ -74,7 +74,7 @@ export function ConfigCards() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
+    <div className="grid gap-6 lg:grid-cols-2">
       {/* CEO Card - Gold border */}
       <Card className="border-2 border-yellow-500/60">
         <CardHeader className="pb-3">
