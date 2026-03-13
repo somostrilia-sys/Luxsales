@@ -193,9 +193,9 @@ input:focus, textarea:focus, [role="combobox"]:focus {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(240 12% 18%);
+  background: hsl(222 25% 20%);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(240 12% 24%);
+  background: hsl(222 25% 28%);
 }
