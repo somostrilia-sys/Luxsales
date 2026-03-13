@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
+import { Navigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -33,6 +35,9 @@ interface Lead {
 }
 
 export default function Extracao() {
+  const { roleLevel } = useCollaborator();
+  if (roleLevel > 1) return <Navigate to="/" replace />;
+
   const { companies } = useCompanyFilter();
 
   // Extraction form

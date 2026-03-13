@@ -15,6 +15,8 @@ import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
+import { Navigate } from "react-router-dom";
 import { Download, Upload, Trash2, Users, Building2, Briefcase, Car, MapPin, Database, Radio } from "lucide-react";
 import Papa from "papaparse";
 
@@ -67,6 +69,9 @@ const IMPORT_FIELDS = ["name", "phone", "email", "document", "city", "state"] as
 type ImportField = typeof IMPORT_FIELDS[number];
 
 export default function BaseDados() {
+  const { roleLevel } = useCollaborator();
+  if (roleLevel > 1) return <Navigate to="/" replace />;
+
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
