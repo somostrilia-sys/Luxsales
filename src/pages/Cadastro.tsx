@@ -213,16 +213,18 @@ export default function Cadastro() {
       expiresAt.setDate(expiresAt.getDate() + parseInt(inviteForm.expires_days));
 
       const { data, error } = await supabase.from("invite_links").insert({
+        token: crypto.randomUUID(),
         company_id: inviteForm.company_id || null,
         role_id: inviteForm.role_id || null,
         max_uses: parseInt(inviteForm.max_uses),
         expires_at: expiresAt.toISOString(),
         created_by: session?.user?.id || null,
+        active: true,
       }).select("token").single();
 
       if (error) throw error;
 
-      const link = `${window.location.origin}/convite/${data.token}`;
+      const link = `${window.location.origin}/register?token=${data.token}`;
       setGeneratedLink(link);
       toast.success("Link de convite criado!");
       loadInvites();
