@@ -16,19 +16,11 @@ import { ApiKeyInput } from "./ApiKeyInput";
 interface ConfigValues {
   anthropic_api_key_ceo: string;
   ceo_model: string;
-  api_key_agent_1: string;
-  api_key_agent_2: string;
-  api_key_agent_3: string;
-  api_key_agent_4: string;
 }
 
 const DEFAULT_VALUES: ConfigValues = {
   anthropic_api_key_ceo: "",
   ceo_model: "claude-opus-4-5",
-  api_key_agent_1: "",
-  api_key_agent_2: "",
-  api_key_agent_3: "",
-  api_key_agent_4: "",
 };
 
 export function ConfigCards() {
