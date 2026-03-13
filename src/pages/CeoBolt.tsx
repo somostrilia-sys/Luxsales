@@ -31,6 +31,7 @@ export default function CeoBolt() {
     { role: "assistant", content: "Olá! Sou o Bolt, seu assistente CEO. Como posso ajudar?" },
   ]);
   const [chatInput, setChatInput] = useState("");
+  const [sending, setSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
