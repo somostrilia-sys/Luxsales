@@ -38,8 +38,8 @@ export default function Index() {
     let agentsQ = supabase.from("agent_definitions").select("id", { count: "exact", head: true }).eq("active", true);
     if (selectedCompanyId !== "all") agentsQ = agentsQ.eq("company_id", selectedCompanyId);
 
-    const [leadsRes, agentsRes, msgsRes, companiesRes] = await Promise.all([
-      leadsQ,
+    const [leadsStatsRes, agentsRes, msgsRes, companiesRes] = await Promise.all([
+      leadsCountPromise,
       agentsQ,
       supabase.from("agent_messages").select("id", { count: "exact", head: true })
         .gte("created_at", today),
