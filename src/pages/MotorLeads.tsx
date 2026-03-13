@@ -463,17 +463,39 @@ function DistributeTab() {
 
   return (
     <>
-      <Card>
-        <CardContent className="pt-5 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10 text-primary"><Package className="h-5 w-5" /></div>
-            <div>
-              <p className="text-sm text-muted-foreground">Leads disponíveis com filtros aplicados</p>
-              <p className="text-2xl font-bold text-foreground">{availableCount.toLocaleString("pt-BR")}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10 text-primary"><Package className="h-5 w-5" /></div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total disponível para distribuição</p>
+                <p className="text-2xl font-bold text-foreground">{availableCount.toLocaleString("pt-BR")}</p>
+                {countDetails && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {countDetails.disponiveis.toLocaleString("pt-BR")} prontos · {countDetails.naoImportados.toLocaleString("pt-BR")} na base (auto-sync)
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5 pb-4 flex items-center justify-center">
+            <Button onClick={handleSyncBeforeDistribute} disabled={syncing} variant="outline" className="gap-2 w-full">
+              {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {syncing ? "Sincronizando..." : "Sincronizar Base Agora"}
+            </Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5 pb-4 flex items-center justify-center">
+            <Button onClick={() => countAvailable()} variant="ghost" className="gap-2 w-full">
+              <RefreshCw className="h-4 w-4" /> Atualizar Contadores
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card className="border-border">
         <CardHeader>
