@@ -154,9 +154,9 @@ function InviteRegistration({ token }: { token: string }) {
       }
 
       // If role is pre-set
-      if (data.role) {
-        setSelectedRoleId(data.role);
-        const role = (roleRes.data || []).find((r: any) => r.id === data.role);
+      if (data.role_id) {
+        setSelectedRoleId(data.role_id);
+        const role = (roleRes.data || []).find((r: any) => r.id === data.role_id);
         setPresetRoleName(role?.name || "");
         setPresetRoleLevel(role?.level ?? null);
         setRoleLevel(role?.level ?? null);
