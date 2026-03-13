@@ -98,16 +98,29 @@ interface DisposableChip {
   id: string;
   collaborator_id: string;
   chip_index: number;
+  instance_name: string | null;
+  instance_token: string | null;
   status: string;
   qr_code: string | null;
+  phone: string | null;
   uazapi_server_url: string;
   uazapi_admin_token: string;
 }
+
+const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
 function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | null }) {
   const [chips, setChips] = useState<DisposableChip[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [connecting, setConnecting] = useState<string | null>(null); // chip_id being connected
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const pollingRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+
+  // Form para novo chip (servidor + token)
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newServerUrl, setNewServerUrl] = useState("https://trilhoassist.uazapi.com");
+  const [newAdminToken, setNewAdminToken] = useState("");
 
   const fetchChips = useCallback(async () => {
     if (!collaboratorId) { setChips([]); setLoading(false); return; }
@@ -121,124 +134,220 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
     setLoading(false);
   }, [collaboratorId]);
 
-  useEffect(() => { fetchChips(); }, [fetchChips]);
+  useEffect(() => { fetchChips(); return () => { Object.values(pollingRefs.current).forEach(clearInterval); }; }, [fetchChips]);
+
+  const callEdge = async (body: Record<string, unknown>) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const resp = await fetch(`${EDGE_BASE}/manage-disposable-chip`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    return resp.json();
+  };
+
+  const startStatusPolling = useCallback((chipId: string) => {
+    if (pollingRefs.current[chipId]) clearInterval(pollingRefs.current[chipId]);
+    pollingRefs.current[chipId] = setInterval(async () => {
+      const result = await callEdge({ action: "status", chip_id: chipId });
+      if (result?.status === "connected") {
+        clearInterval(pollingRefs.current[chipId]);
+        delete pollingRefs.current[chipId];
+        setChips(prev => prev.map(c => c.id === chipId ? { ...c, status: "connected", qr_code: null, phone: result.phone || c.phone } : c));
+        setConnecting(null);
+        toast.success("Chip conectado com sucesso!");
+      }
+    }, 5000);
+  }, []);
 
   const addChip = async () => {
-    if (!collaboratorId) return;
+    if (!collaboratorId || !newAdminToken.trim()) { toast.error("Admin Token é obrigatório"); return; }
     setAdding(true);
-    const nextIndex = chips.length > 0 ? Math.max(...chips.map(c => c.chip_index)) + 1 : 1;
-    const { error } = await supabase.from("disposable_chips").insert({
+    const result = await callEdge({
+      action: "create",
       collaborator_id: collaboratorId,
-      chip_index: nextIndex,
-    } as any);
+      uazapi_server_url: newServerUrl.trim(),
+      uazapi_admin_token: newAdminToken.trim(),
+    });
     setAdding(false);
-    if (error) { toast.error("Erro ao adicionar chip: " + error.message); return; }
-    toast.success("Chip adicionado!");
+    if (result?.error) { toast.error("Erro: " + result.error); return; }
+    toast.success(`Chip #${result.chip?.chip_index} criado no UAZAPI!`);
+    setShowAddForm(false);
+    setNewAdminToken("");
     fetchChips();
   };
 
   const updateField = async (chipId: string, field: string, value: string) => {
-    const { error } = await supabase.from("disposable_chips").update({ [field]: value, updated_at: new Date().toISOString() } as any).eq("id", chipId);
-    if (error) { toast.error("Erro ao salvar"); return; }
+    await supabase.from("disposable_chips").update({ [field]: value, updated_at: new Date().toISOString() } as any).eq("id", chipId);
     setChips(prev => prev.map(c => c.id === chipId ? { ...c, [field]: value } : c));
   };
 
   const handleConnect = async (chip: DisposableChip) => {
-    if (!chip.uazapi_server_url || !chip.uazapi_admin_token) {
-      toast.error("Preencha a URL do servidor e o Admin Token antes de conectar");
-      return;
-    }
-    // Save and set status to connecting
-    const { error } = await supabase.from("disposable_chips").update({
-      status: "connecting",
-      updated_at: new Date().toISOString(),
-    } as any).eq("id", chip.id);
-    if (error) { toast.error("Erro: " + error.message); return; }
-    setChips(prev => prev.map(c => c.id === chip.id ? { ...c, status: "connecting" } : c));
-    toast.info("Conectando chip...");
+    if (!chip.instance_token) { toast.error("Instância não criada no UAZAPI"); return; }
+    setConnecting(chip.id);
+    const result = await callEdge({ action: "connect", chip_id: chip.id });
+    if (result?.error) { toast.error("Erro ao conectar: " + result.error); setConnecting(null); return; }
+    const qrCode = result?.qr_code;
+    setChips(prev => prev.map(c => c.id === chip.id ? { ...c, status: "connecting", qr_code: qrCode || c.qr_code } : c));
+    toast.info("Escaneie o QR code no WhatsApp");
+    startStatusPolling(chip.id);
+  };
+
+  const handleDelete = async (chip: DisposableChip) => {
+    setDeleting(chip.id);
+    const result = await callEdge({ action: "delete", chip_id: chip.id });
+    setDeleting(null);
+    if (result?.error) { toast.error("Erro: " + result.error); return; }
+    toast.success("Chip removido");
+    if (pollingRefs.current[chip.id]) { clearInterval(pollingRefs.current[chip.id]); delete pollingRefs.current[chip.id]; }
     fetchChips();
   };
 
-  const deleteChip = async (chipId: string) => {
-    const { error } = await supabase.from("disposable_chips").delete().eq("id", chipId);
-    if (error) { toast.error("Erro ao excluir"); return; }
-    toast.success("Chip removido");
-    fetchChips();
+  const statusBadge = (status: string) => {
+    if (status === "connected") return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">🟢 Conectado</Badge>;
+    if (status === "connecting") return <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">🟡 Aguardando QR</Badge>;
+    return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">🔴 Desconectado</Badge>;
   };
 
   return (
     <Card className="border-amber-500/30">
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Smartphone className="h-5 w-5 text-amber-500" />
-          Chips Descartáveis
-        </CardTitle>
-        <Button size="sm" onClick={addChip} disabled={adding || !collaboratorId} className="gap-2">
-          {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+        <div>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Smartphone className="h-5 w-5 text-amber-500" />
+            Chips Descartáveis
+            {chips.length > 0 && <span className="text-sm text-muted-foreground font-normal">({chips.length}/5)</span>}
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">Números para disparo em massa — antibloco por rodízio</p>
+        </div>
+        <Button size="sm" onClick={() => setShowAddForm(v => !v)} disabled={!collaboratorId || chips.length >= 5} className="gap-2">
+          <Plus className="h-4 w-4" />
           Adicionar Chip
         </Button>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {/* Formulário de novo chip */}
+        {showAddForm && (
+          <div className="border border-amber-500/30 rounded-lg p-4 space-y-3 bg-amber-500/5">
+            <p className="text-sm font-medium text-amber-400">Novo Chip Descartável</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">URL Servidor UAZAPI</Label>
+                <Input
+                  value={newServerUrl}
+                  onChange={e => setNewServerUrl(e.target.value)}
+                  placeholder="https://meuservidor.uazapi.com"
+                  className="bg-background border-border text-sm mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Admin Token UAZAPI *</Label>
+                <Input
+                  value={newAdminToken}
+                  onChange={e => setNewAdminToken(e.target.value)}
+                  placeholder="Token administrativo..."
+                  className="bg-background border-border text-sm mt-1"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button size="sm" variant="outline" onClick={() => { setShowAddForm(false); setNewAdminToken(""); }}>Cancelar</Button>
+              <Button size="sm" onClick={addChip} disabled={adding} className="gap-2">
+                {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                {adding ? "Criando..." : "Criar Chip"}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
         ) : chips.length === 0 ? (
           <div className="text-center py-8 space-y-3">
-            <Smartphone className="h-10 w-10 text-muted-foreground mx-auto" />
-            <p className="text-muted-foreground text-sm">Nenhum chip descartável cadastrado</p>
+            <Smartphone className="h-10 w-10 text-muted-foreground mx-auto opacity-40" />
+            <p className="text-muted-foreground text-sm">Nenhum chip cadastrado ainda</p>
+            <p className="text-xs text-muted-foreground/60">Adicione até 5 chips por consultor para disparo antibloco</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {chips.map(chip => (
               <div key={chip.id} className="border border-border rounded-lg p-4 space-y-3">
+                {/* Header do chip */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-foreground">Chip #{chip.chip_index}</span>
-                    <Badge className={chip.status === "connected"
-                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                      : chip.status === "connecting"
-                        ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                        : "bg-red-500/20 text-red-400 border-red-500/30"
-                    }>
-                      {chip.status === "connected" ? "🟢 Conectado" : chip.status === "connecting" ? "🟡 Conectando" : "🔴 Desconectado"}
-                    </Badge>
+                    <span className="text-sm font-semibold">Chip #{chip.chip_index}</span>
+                    {statusBadge(chip.status)}
+                    {chip.phone && <span className="text-xs text-muted-foreground">{chip.phone}</span>}
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => handleConnect(chip)} className="gap-1 text-xs">
-                      <QrCode className="h-3 w-3" /> Conectar
-                    </Button>
-                    <Button size="sm" variant="outline" className="gap-1 text-xs text-destructive hover:text-destructive" onClick={() => deleteChip(chip.id)}>
-                      <Trash2 className="h-3 w-3" />
+                    {chip.status !== "connected" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleConnect(chip)}
+                        disabled={connecting === chip.id}
+                        className="gap-1 text-xs"
+                      >
+                        {connecting === chip.id
+                          ? <Loader2 className="h-3 w-3 animate-spin" />
+                          : <QrCode className="h-3 w-3" />}
+                        {connecting === chip.id ? "Aguardando..." : "Conectar"}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1 text-xs text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(chip)}
+                      disabled={deleting === chip.id}
+                    >
+                      {deleting === chip.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                     </Button>
                   </div>
                 </div>
 
-                {chip.qr_code && (
-                  <div className="flex justify-center py-2">
+                {/* QR Code */}
+                {chip.qr_code && chip.status !== "connected" && (
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    <p className="text-xs text-amber-400">Escaneie com o WhatsApp</p>
                     <div className="bg-white p-3 rounded-xl shadow border">
-                      <img src={chip.qr_code} alt={`QR Code Chip #${chip.chip_index}`} width={180} height={180} className="rounded" />
+                      <img
+                        src={chip.qr_code.startsWith("data:") ? chip.qr_code : `data:image/png;base64,${chip.qr_code}`}
+                        alt={`QR Chip #${chip.chip_index}`}
+                        width={200}
+                        height={200}
+                        className="rounded"
+                      />
                     </div>
+                    <p className="text-xs text-muted-foreground animate-pulse">Aguardando conexão...</p>
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Instância info */}
+                {chip.instance_name && (
+                  <p className="text-xs text-muted-foreground">Instância: {chip.instance_name}</p>
+                )}
+
+                {/* Campos editáveis de servidor */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
-                    <Label className="text-xs">URL Servidor UAZAPI</Label>
+                    <Label className="text-xs text-muted-foreground">Servidor UAZAPI</Label>
                     <Input
-                      value={chip.uazapi_server_url}
+                      value={chip.uazapi_server_url || ""}
                       onChange={e => setChips(prev => prev.map(c => c.id === chip.id ? { ...c, uazapi_server_url: e.target.value } : c))}
                       onBlur={e => updateField(chip.id, "uazapi_server_url", e.target.value)}
-                      placeholder="https://..."
-                      className="bg-background border-border text-sm"
+                      className="bg-background border-border text-xs mt-1 h-8"
                     />
                   </div>
                   <div>
-                    <Label className="text-xs">Admin Token UAZAPI</Label>
+                    <Label className="text-xs text-muted-foreground">Admin Token</Label>
                     <Input
-                      value={chip.uazapi_admin_token}
+                      type="password"
+                      value={chip.uazapi_admin_token || ""}
                       onChange={e => setChips(prev => prev.map(c => c.id === chip.id ? { ...c, uazapi_admin_token: e.target.value } : c))}
                       onBlur={e => updateField(chip.id, "uazapi_admin_token", e.target.value)}
-                      placeholder="Token..."
-                      className="bg-background border-border text-sm"
+                      className="bg-background border-border text-xs mt-1 h-8"
                     />
                   </div>
                 </div>
