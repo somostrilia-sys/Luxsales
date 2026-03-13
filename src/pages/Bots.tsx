@@ -121,8 +121,6 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
 
   // Form para novo chip (servidor + token)
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newServerUrl, setNewServerUrl] = useState("https://walkholding.uazapi.com");
-  const [newAdminToken, setNewAdminToken] = useState("");
 
   const fetchChips = useCallback(async () => {
     if (!collaboratorId) { setChips([]); setLoading(false); return; }
@@ -174,19 +172,16 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   }, [callEdge]);
 
   const addChip = async () => {
-    if (!collaboratorId || !newAdminToken.trim()) { toast.error("Admin Token é obrigatório"); return; }
+    if (!collaboratorId) { toast.error("Colaborador não encontrado"); return; }
     setAdding(true);
     const result = await callEdge({
       action: "create",
       collaborator_id: collaboratorId,
-      uazapi_server_url: newServerUrl.trim(),
-      uazapi_admin_token: newAdminToken.trim(),
     });
     setAdding(false);
     if (result?.error) { toast.error("Erro: " + result.error); return; }
     toast.success(`Chip #${result.chip?.chip_index} criado no UAZAPI!`);
     setShowAddForm(false);
-    setNewAdminToken("");
     fetchChips();
   };
 
@@ -288,28 +283,8 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         {showAddForm && (
           <div className="border border-amber-500/30 rounded-lg p-4 space-y-3 bg-amber-500/5">
             <p className="text-sm font-medium text-amber-400">Novo Chip Descartável</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">URL Servidor UAZAPI</Label>
-                <Input
-                  value={newServerUrl}
-                  onChange={e => setNewServerUrl(e.target.value)}
-                  placeholder="https://meuservidor.uazapi.com"
-                  className="bg-background border-border text-sm mt-1"
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Admin Token UAZAPI *</Label>
-                <Input
-                  value={newAdminToken}
-                  onChange={e => setNewAdminToken(e.target.value)}
-                  placeholder="Token administrativo..."
-                  className="bg-background border-border text-sm mt-1"
-                />
-              </div>
-            </div>
             <div className="flex gap-2 justify-end">
-              <Button size="sm" variant="outline" onClick={() => { setShowAddForm(false); setNewAdminToken(""); }}>Cancelar</Button>
+              <Button size="sm" variant="outline" onClick={() => setShowAddForm(false)}>Cancelar</Button>
               <Button size="sm" onClick={addChip} disabled={adding} className="gap-2">
                 {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 {adding ? "Criando..." : "Criar Chip"}
