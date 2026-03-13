@@ -20,7 +20,6 @@ import Bots from "./pages/Bots";
 import Configuracoes from "./pages/Configuracoes";
 import IdentidadeVisual from "./pages/IdentidadeVisual";
 import CeoBolt from "./pages/CeoBolt";
-import MotorDisparo from "./pages/MotorDisparo";
 import MotorLeads from "./pages/MotorLeads";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
