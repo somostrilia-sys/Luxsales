@@ -13,8 +13,8 @@ import { Loader2, Copy, CheckCircle2, AlertTriangle, Link2, ArrowRight, ShieldAl
 interface InviteData {
   id: string;
   token: string;
-  company_id: string;
-  role: string;
+  company_id: string | null;
+  role: string | null;
   max_uses: number;
   current_uses: number;
   expires_at: string;
@@ -25,15 +25,10 @@ export default function Register() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
 
-  // If no token, show "request link" page
-  if (!token) {
-    return <NoTokenPage />;
-  }
-
+  if (!token) return <NoTokenPage />;
   return <InviteRegistration token={token} />;
 }
 
-// ─── No Token Page ───
 function NoTokenPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 login-bg">
@@ -60,15 +55,25 @@ function NoTokenPage() {
   );
 }
 
-// ─── Invite Registration ───
 function InviteRegistration({ token }: { token: string }) {
   const [invite, setInvite] = useState<InviteData | null>(null);
   const [inviteError, setInviteError] = useState("");
   const [loadingInvite, setLoadingInvite] = useState(true);
 
-  const [companyName, setCompanyName] = useState("");
-  const [roleName, setRoleName] = useState("");
+  // All companies and roles for dropdowns when not pre-set
+  const [allCompanies, setAllCompanies] = useState<any[]>([]);
+  const [allRoles, setAllRoles] = useState<any[]>([]);
+
+  // Pre-set names (when invite has them)
+  const [presetCompanyName, setPresetCompanyName] = useState("");
+  const [presetRoleName, setPresetRoleName] = useState("");
+  const [presetRoleLevel, setPresetRoleLevel] = useState<number | null>(null);
+
+  // Form fields
+  const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [selectedRoleId, setSelectedRoleId] = useState("");
   const [roleLevel, setRoleLevel] = useState<number | null>(null);
+
   const [sectors, setSectors] = useState<any[]>([]);
   const [units, setUnits] = useState<any[]>([]);
   const [collaborators, setCollaborators] = useState<any[]>([]);
@@ -84,12 +89,34 @@ function InviteRegistration({ token }: { token: string }) {
   const [success, setSuccess] = useState(false);
   const [generatedPassword, setGeneratedPassword] = useState("");
 
-  useEffect(() => { validateInvite(); }, [token]);
+  const companyFixed = !!invite?.company_id;
+  const roleFixed = !!invite?.role;
 
-  // Sync whatsapp with phone
+  useEffect(() => { validateInvite(); }, [token]);
+  useEffect(() => { if (phone && !whatsapp) setWhatsapp(phone); }, [phone]);
+
+  // When company changes, load related data
+  const effectiveCompanyId = companyFixed ? invite?.company_id : selectedCompanyId;
+  const effectiveRoleId = roleFixed ? invite?.role : selectedRoleId;
+
   useEffect(() => {
-    if (phone && !whatsapp) setWhatsapp(phone);
-  }, [phone]);
+    if (!effectiveCompanyId) {
+      setSectors([]); setUnits([]); setCollaborators([]);
+      return;
+    }
+    loadCompanyData(effectiveCompanyId);
+  }, [effectiveCompanyId]);
+
+  // When role changes (user-selected), update roleLevel
+  useEffect(() => {
+    if (roleFixed) {
+      setRoleLevel(presetRoleLevel);
+      return;
+    }
+    if (!selectedRoleId) { setRoleLevel(null); return; }
+    const role = allRoles.find(r => r.id === selectedRoleId);
+    setRoleLevel(role?.level ?? null);
+  }, [selectedRoleId, roleFixed, presetRoleLevel, allRoles]);
 
   const validateInvite = async () => {
     setLoadingInvite(true);
@@ -101,47 +128,63 @@ function InviteRegistration({ token }: { token: string }) {
         .eq("is_active", true)
         .single();
 
-      if (error || !data) {
-        setInviteError("Link inválido ou expirado.");
-        return;
-      }
+      if (error || !data) { setInviteError("Link inválido ou expirado."); return; }
       if (data.expires_at && new Date(data.expires_at) < new Date()) {
-        setInviteError("Este link de cadastro expirou. Solicite um novo ao administrador.");
-        return;
+        setInviteError("Este link de cadastro expirou. Solicite um novo ao administrador."); return;
       }
       if (data.current_uses >= data.max_uses) {
-        setInviteError("Este link já atingiu o limite de cadastros. Solicite um novo ao administrador.");
-        return;
+        setInviteError("Este link já atingiu o limite de cadastros. Solicite um novo ao administrador."); return;
       }
 
       setInvite(data);
 
-      // Load related data
-      const [compRes, roleRes, sectorRes, unitRes, collabRes] = await Promise.all([
-        supabase.from("companies").select("name").eq("id", data.company_id).single(),
-        supabase.from("roles").select("name, level").eq("id", data.role).single(),
-        supabase.from("sectors").select("id, name").eq("company_id", data.company_id).order("name"),
-        supabase.from("units").select("id, name").eq("company_id", data.company_id).eq("active", true).order("name"),
-        supabase.from("collaborators").select("id, name, company_id, company_ids, role:roles!collaborators_role_id_fkey(name)")
-          .eq("active", true).order("name").limit(1000),
+      // Load companies and roles lists for dropdowns
+      const [compRes, roleRes] = await Promise.all([
+        supabase.from("companies").select("id, name").order("name"),
+        supabase.from("roles").select("id, name, level, company_id").order("level"),
       ]);
+      setAllCompanies(compRes.data || []);
+      setAllRoles(roleRes.data || []);
 
-      setCompanyName(compRes.data?.name || "");
-      setRoleName(roleRes.data?.name || "");
-      setRoleLevel(roleRes.data?.level ?? null);
-      setSectors(sectorRes.data || []);
-      setUnits(unitRes.data || []);
-      setCollaborators(
-        (collabRes.data || []).filter((c: any) =>
-          c.company_id === data.company_id ||
-          (Array.isArray(c.company_ids) && c.company_ids.includes(data.company_id))
-        )
-      );
+      // If company is pre-set
+      if (data.company_id) {
+        setSelectedCompanyId(data.company_id);
+        const comp = (compRes.data || []).find((c: any) => c.id === data.company_id);
+        setPresetCompanyName(comp?.name || "");
+      }
+
+      // If role is pre-set
+      if (data.role) {
+        setSelectedRoleId(data.role);
+        const role = (roleRes.data || []).find((r: any) => r.id === data.role);
+        setPresetRoleName(role?.name || "");
+        setPresetRoleLevel(role?.level ?? null);
+        setRoleLevel(role?.level ?? null);
+      }
     } catch {
       setInviteError("Erro ao validar o link de cadastro.");
     } finally {
       setLoadingInvite(false);
     }
+  };
+
+  const loadCompanyData = async (companyId: string) => {
+    const [sectorRes, unitRes, collabRes] = await Promise.all([
+      supabase.from("sectors").select("id, name").eq("company_id", companyId).order("name"),
+      supabase.from("units").select("id, name").eq("company_id", companyId).eq("active", true).order("name"),
+      supabase.from("collaborators").select("id, name, company_id, company_ids, role:roles!collaborators_role_id_fkey(name)")
+        .eq("active", true).order("name").limit(1000),
+    ]);
+    setSectors(sectorRes.data || []);
+    setUnits(unitRes.data || []);
+    setCollaborators(
+      (collabRes.data || []).filter((c: any) =>
+        c.company_id === companyId ||
+        (Array.isArray(c.company_ids) && c.company_ids.includes(companyId))
+      )
+    );
+    // Reset dependent fields
+    setSectorId(""); setSelectedUnitIds([]); setReportsTo("");
   };
 
   const formatPhoneBR = (value: string) => {
@@ -151,14 +194,8 @@ function InviteRegistration({ token }: { token: string }) {
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   };
 
-  const handlePhoneChange = (value: string) => {
-    const formatted = formatPhoneBR(value);
-    setPhone(formatted);
-  };
-
-  const handleWhatsappChange = (value: string) => {
-    setWhatsapp(formatPhoneBR(value));
-  };
+  const handlePhoneChange = (value: string) => setPhone(formatPhoneBR(value));
+  const handleWhatsappChange = (value: string) => setWhatsapp(formatPhoneBR(value));
 
   const toggleUnit = (unitId: string) => {
     setSelectedUnitIds(prev =>
@@ -166,11 +203,18 @@ function InviteRegistration({ token }: { token: string }) {
     );
   };
 
+  const filteredRoles = allRoles.filter(r => !effectiveCompanyId || r.company_id === effectiveCompanyId);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nome || !email || !phone || !invite) {
-      toast.error("Preencha os campos obrigatórios");
-      return;
+      toast.error("Preencha os campos obrigatórios"); return;
+    }
+    if (!effectiveCompanyId) {
+      toast.error("Selecione uma empresa"); return;
+    }
+    if (!effectiveRoleId) {
+      toast.error("Selecione um cargo"); return;
     }
     setLoading(true);
     try {
@@ -184,8 +228,8 @@ function InviteRegistration({ token }: { token: string }) {
             email,
             phone: phone.replace(/\D/g, ""),
             whatsapp: whatsapp ? whatsapp.replace(/\D/g, "") : undefined,
-            company_id: invite.company_id,
-            role_id: invite.role,
+            company_id: effectiveCompanyId,
+            role_id: effectiveRoleId,
             sector_id: sectorId || undefined,
             unit_id: selectedUnitIds.length > 0 ? selectedUnitIds[0] : undefined,
             unit_ids: selectedUnitIds.length > 0 ? selectedUnitIds : undefined,
@@ -196,7 +240,6 @@ function InviteRegistration({ token }: { token: string }) {
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || "Erro ao cadastrar");
 
-      // Increment invite usage
       await supabase
         .from("invite_links")
         .update({ current_uses: (invite.current_uses || 0) + 1 })
@@ -277,7 +320,14 @@ function InviteRegistration({ token }: { token: string }) {
     );
   }
 
-  // ─── Registration Form ───
+  // Derive display names
+  const displayCompanyName = companyFixed
+    ? presetCompanyName
+    : allCompanies.find(c => c.id === selectedCompanyId)?.name || "";
+  const displayRoleName = roleFixed
+    ? presetRoleName
+    : allRoles.find(r => r.id === selectedRoleId)?.name || "";
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 login-bg">
       <div className="w-full max-w-lg space-y-6">
@@ -286,35 +336,47 @@ function InviteRegistration({ token }: { token: string }) {
             <Link2 className="h-6 w-6 text-primary" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Cadastro de Colaborador</h1>
-          <p className="text-sm text-muted-foreground">
-            Você foi convidado para <span className="text-foreground font-medium">{companyName}</span> como <span className="text-foreground font-medium">{roleName}</span>
-          </p>
+          {(displayCompanyName || displayRoleName) && (
+            <p className="text-sm text-muted-foreground">
+              {displayCompanyName && <>Empresa: <span className="text-foreground font-medium">{displayCompanyName}</span></>}
+              {displayCompanyName && displayRoleName && " · "}
+              {displayRoleName && <>Cargo: <span className="text-foreground font-medium">{displayRoleName}</span></>}
+            </p>
+          )}
         </div>
 
         <Card variant="gradient" className="card-accent-top accent-green">
           <form onSubmit={handleSubmit}>
             <CardContent className="pt-6 space-y-4">
-              {/* Pre-filled info badges */}
-              <div className="flex flex-wrap gap-2">
-                <div className="px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs font-medium text-primary">
-                  🏢 {companyName}
+              {/* Pre-filled badges (only for fixed values) */}
+              {(companyFixed || roleFixed) && (
+                <div className="flex flex-wrap gap-2">
+                  {companyFixed && (
+                    <div className="px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs font-medium text-primary">
+                      🏢 {presetCompanyName}
+                    </div>
+                  )}
+                  {roleFixed && (
+                    <div className="px-3 py-1.5 rounded-full bg-success/10 border border-success/20 text-xs font-medium text-success">
+                      👤 {presetRoleName}
+                    </div>
+                  )}
                 </div>
-                <div className="px-3 py-1.5 rounded-full bg-success/10 border border-success/20 text-xs font-medium text-success">
-                  👤 {roleName}
-                </div>
-              </div>
+              )}
 
-              {/* Always required fields */}
+              {/* Name */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome completo *</Label>
                 <Input value={nome} onChange={e => setNome(e.target.value)} placeholder="Seu nome completo" className="h-11 bg-secondary/50" required />
               </div>
 
+              {/* Email */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email *</Label>
                 <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" className="h-11 bg-secondary/50" required />
               </div>
 
+              {/* Phone / WhatsApp */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Telefone *</Label>
@@ -326,7 +388,37 @@ function InviteRegistration({ token }: { token: string }) {
                 </div>
               </div>
 
-              {/* Conditional: Sector (show for all levels) */}
+              {/* Company: fixed or dropdown */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Empresa *</Label>
+                {companyFixed ? (
+                  <Input value={presetCompanyName} disabled className="h-11 bg-muted/50" />
+                ) : (
+                  <Select value={selectedCompanyId} onValueChange={v => { setSelectedCompanyId(v); setSelectedRoleId(""); }}>
+                    <SelectTrigger className="h-11 bg-secondary/50"><SelectValue placeholder="Selecione a empresa" /></SelectTrigger>
+                    <SelectContent>
+                      {allCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {/* Role: fixed or dropdown */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Cargo *</Label>
+                {roleFixed ? (
+                  <Input value={presetRoleName} disabled className="h-11 bg-muted/50" />
+                ) : (
+                  <Select value={selectedRoleId} onValueChange={setSelectedRoleId}>
+                    <SelectTrigger className="h-11 bg-secondary/50"><SelectValue placeholder="Selecione o cargo" /></SelectTrigger>
+                    <SelectContent>
+                      {filteredRoles.map(r => <SelectItem key={r.id} value={r.id}>{r.name} (Nível {r.level})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {/* Sector */}
               {sectors.length > 0 && (
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Setor</Label>
@@ -337,7 +429,7 @@ function InviteRegistration({ token }: { token: string }) {
                 </div>
               )}
 
-              {/* Conditional: Units (show for Gestor level 2 and Colaborador level 3) */}
+              {/* Units (level >= 2) */}
               {units.length > 0 && roleLevel !== null && roleLevel >= 2 && (
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Unidades</Label>
@@ -357,7 +449,7 @@ function InviteRegistration({ token }: { token: string }) {
                 </div>
               )}
 
-              {/* Conditional: Superior (show for Gestor level 2 and Colaborador level 3) */}
+              {/* Superior (level >= 2) */}
               {collaborators.length > 0 && roleLevel !== null && roleLevel >= 2 && (
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Superior Direto</Label>
