@@ -294,6 +294,8 @@ function DistributeTab() {
   const [ddds, setDDDs] = useState<string[]>([]);
   const [commercialCollabs, setCommercialCollabs] = useState<{ id: string; name: string }[]>([]);
   const [availableCount, setAvailableCount] = useState(0);
+  const [countDetails, setCountDetails] = useState<{ disponiveis: number; naoImportados: number } | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   // For CEOs with "all" selected, use their own company_id as fallback
   const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
