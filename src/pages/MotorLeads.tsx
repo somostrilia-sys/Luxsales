@@ -123,11 +123,19 @@ function UploadTab() {
     if (!companyId) { toast.error("Empresa não encontrada"); return; }
     setSyncing(true);
     try {
-      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: companyId });
+      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: companyId, p_limit: 50000 });
       if (error) throw error;
       const r = data as any;
-      toast.success(`Sincronizado! ${r?.total ?? 0} novos leads importados`);
-      loadCounts();
+      const totalImported = r?.total ?? 0;
+      await loadCounts();
+      const remaining = counts?.naoImportados ?? 0;
+      if (remaining > 0 && totalImported > 0) {
+        toast.success(`Sincronizados ${totalImported.toLocaleString("pt-BR")} leads. Ainda restam ${remaining.toLocaleString("pt-BR")} na base.`);
+      } else if (totalImported > 0) {
+        toast.success(`Sincronizado! ${totalImported.toLocaleString("pt-BR")} novos leads importados`);
+      } else {
+        toast.info("Base já está sincronizada. Nenhum lead novo.");
+      }
     } catch (e: any) { toast.error("Erro: " + e.message); }
     finally { setSyncing(false); }
   }, [companyId, loadCounts]);
@@ -374,11 +382,12 @@ function DistributeTab() {
   };
 
   const countAvailable = useCallback(async () => {
-    if (!resolvedCompanyId) { setAvailableCount(0); setCountDetails(null); return; }
+    const cid = resolvedCompanyId || null;
     try {
-      const { data, error } = await supabase.rpc("count_available_leads", { p_company_id: resolvedCompanyId });
-      if (error) { console.error("count_available_leads error:", error); return; }
+      const { data, error } = await supabase.rpc("count_available_leads", { p_company_id: cid });
+      if (error) { console.error("count_available_leads error:", error); setAvailableCount(0); setCountDetails(null); return; }
       const d = data as any;
+      console.log("count_available_leads result:", d);
       const disponiveis = d?.lead_items_disponiveis ?? 0;
       const naoImportados = (d?.contact_leads_nao_importados ?? 0) + (d?.leads_nao_importados ?? 0);
       setCountDetails({ disponiveis, naoImportados });
@@ -393,11 +402,19 @@ function DistributeTab() {
     if (!resolvedCompanyId) return;
     setSyncing(true);
     try {
-      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: resolvedCompanyId });
+      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: resolvedCompanyId, p_limit: 50000 });
       if (error) throw error;
       const r = data as any;
-      toast.success(`Sincronizado! ${r?.total ?? 0} novos leads importados`);
+      const totalImported = r?.total ?? 0;
       await countAvailable();
+      const remaining = countDetails?.naoImportados ?? 0;
+      if (remaining > 0 && totalImported > 0) {
+        toast.success(`Sincronizados ${totalImported.toLocaleString("pt-BR")} leads. Ainda restam ${remaining.toLocaleString("pt-BR")} na base.`);
+      } else if (totalImported > 0) {
+        toast.success(`Sincronizado! ${totalImported.toLocaleString("pt-BR")} novos leads importados`);
+      } else {
+        toast.info("Base já está sincronizada. Nenhum lead novo.");
+      }
     } catch (e: any) { toast.error("Erro ao sincronizar: " + e.message); }
     finally { setSyncing(false); }
   }, [resolvedCompanyId, countAvailable]);
