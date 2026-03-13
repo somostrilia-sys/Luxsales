@@ -95,6 +95,10 @@ export default function Bots() {
   const { collaborator } = useCollaborator();
   const [myWhatsAppBot, setMyWhatsAppBot] = useState<BotInstance | null>(null);
   const [waLoading, setWaLoading] = useState(true);
+  const [waConnecting, setWaConnecting] = useState(false);
+  const [waQrCode, setWaQrCode] = useState<string | null>(null);
+  const [waConnected, setWaConnected] = useState(false);
+  const [waNumber, setWaNumber] = useState<string | null>(null);
   const [bots, setBots] = useState<BotInstance[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
   const [collaborators, setCollaborators] = useState<any[]>([]);
