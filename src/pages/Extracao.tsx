@@ -226,11 +226,11 @@ export default function Extracao() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   <div>
                     <Label className="text-xs">Buscar nome</Label>
-                    <Input placeholder="Nome do lead..." value={searchName} onChange={e => setSearchName(e.target.value)} className="h-8 text-sm" />
+                    <Input type="search" autoComplete="off" name="search_lead_name_xyz" placeholder="Nome do lead..." value={searchName} onChange={e => setSearchName(e.target.value)} className="h-8 text-sm" />
                   </div>
                   <div>
                     <Label className="text-xs">Cidade</Label>
-                    <Input placeholder="Filtrar cidade..." value={filterCity} onChange={e => setFilterCity(e.target.value)} className="h-8 text-sm" />
+                    <Input type="search" autoComplete="off" name="search_lead_city_xyz" placeholder="Filtrar cidade..." value={filterCity} onChange={e => setFilterCity(e.target.value)} className="h-8 text-sm" />
                   </div>
                   <div>
                     <Label className="text-xs">Estado</Label>
