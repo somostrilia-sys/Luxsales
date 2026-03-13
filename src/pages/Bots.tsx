@@ -174,19 +174,16 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   }, [callEdge]);
 
   const addChip = async () => {
-    if (!collaboratorId || !newAdminToken.trim()) { toast.error("Admin Token é obrigatório"); return; }
+    if (!collaboratorId) { toast.error("Colaborador não encontrado"); return; }
     setAdding(true);
     const result = await callEdge({
       action: "create",
       collaborator_id: collaboratorId,
-      uazapi_server_url: newServerUrl.trim(),
-      uazapi_admin_token: newAdminToken.trim(),
     });
     setAdding(false);
     if (result?.error) { toast.error("Erro: " + result.error); return; }
     toast.success(`Chip #${result.chip?.chip_index} criado no UAZAPI!`);
     setShowAddForm(false);
-    setNewAdminToken("");
     fetchChips();
   };
 
