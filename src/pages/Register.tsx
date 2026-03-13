@@ -97,7 +97,7 @@ function InviteRegistration({ token }: { token: string }) {
 
   // When company changes, load related data
   const effectiveCompanyId = companyFixed ? invite?.company_id : selectedCompanyId;
-  const effectiveRoleId = roleFixed ? invite?.role : selectedRoleId;
+  const effectiveRoleId = roleFixed ? invite?.role_id : selectedRoleId;
 
   useEffect(() => {
     if (!effectiveCompanyId) {
