@@ -1,3 +1,4 @@
+// v2.4 — Base de Dados restrito a CEO e Diretores
 import {
   LayoutDashboard, Users, FileSearch, Database,
   BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Zap
@@ -25,7 +26,7 @@ const managementItems: MenuItem[] = [
   { title: "Colaboradores", url: "/colaboradores", icon: Users, levels: [0, 1] },
   { title: "Cadastro", url: "/cadastro", icon: UserPlus, levels: [0, 1] },
   { title: "Extração de Leads", url: "/extracao", icon: FileSearch, levels: [0, 1] },
-  { title: "Base de Dados", url: "/base-dados", icon: Database, levels: [0, 1] },
+  { title: "Base de Dados ⚠️", url: "/base-dados", icon: Database, levels: [0, 1] },
   { title: "Métricas", url: "/metricas", icon: BarChart3, levels: [0, 1] },
   { title: "Identidade Visual", url: "/identidade-visual", icon: Palette, levels: [0] },
   { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0, 1] },
