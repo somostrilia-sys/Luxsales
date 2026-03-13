@@ -37,9 +37,6 @@ interface Lead {
 export default function Extracao() {
   const { roleLevel } = useCollaborator();
 
-  if (roleLevel > 1) return <Navigate to="/" replace />;
-
-
   const { companies } = useCompanyFilter();
 
   // Extraction form
