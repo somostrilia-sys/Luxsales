@@ -150,11 +150,11 @@ export default function BaseDados() {
     if (citySearch) query = query.ilike("city", `%${citySearch}%`);
     if (dddFilter && dddFilter.length === 2) query = query.like("phone", `${dddFilter}%`);
 
-    const { data, count } = await query
+    const { data } = await query
       .range(page * perPage, (page + 1) * perPage - 1);
 
     setLeads((data || []) as Lead[]);
-    setTotal(count || 0);
+    // Use stats from RPC loaded separately instead of count from query
     setLoading(false);
   }, [activeTab, filterType, filterStatus, search, citySearch, dddFilter, includeNoPhone, page]);
 
