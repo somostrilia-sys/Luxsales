@@ -226,7 +226,7 @@ export default function BaseDados() {
 
   const exportCSV = async () => {
     toast.info("Preparando exportação...");
-    let query = supabase.from("contact_leads").select("*");
+    let query = supabase.from("contact_leads").select("id,name,phone,email,tipo_pessoa,city,region,state,category,subcategory,source,score,status");
 
     if (activeTab === "objetivo-transporte") query = query.eq("category", "objetivo-transporte");
     else if (activeTab === "motorista-app") query = query.eq("subcategory", "motorista-aplicativo");

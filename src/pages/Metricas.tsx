@@ -39,7 +39,7 @@ export default function Metricas() {
     setTotals({ collaborators: collabIds.length, leads: leadsCount || 0 });
 
     // Bar chart leads by source
-    let sourceQuery = supabase.from("contact_leads").select("source");
+    let sourceQuery = supabase.from("contact_leads").select("source").limit(1000);
     if (selectedCompanyId !== "all") sourceQuery = sourceQuery.eq("company_target", selectedCompanyId);
     const { data: sourceData } = await sourceQuery;
     const sc: Record<string, number> = {};

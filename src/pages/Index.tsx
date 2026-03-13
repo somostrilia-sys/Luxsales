@@ -77,10 +77,9 @@ export default function Index() {
     // Usage limits for consultants
     if (roleData?.usage_limits) {
       setUsageLimits(roleData.usage_limits);
-      let todayLeads = supabase.from("contact_leads").select("id", { count: "exact", head: true }).gte("created_at", today);
-      if (companyFilter) todayLeads = todayLeads.eq("company_target", companyFilter);
-      const { count: lc } = await todayLeads;
-      setUsageCounts({ leads: lc || 0, extractions: 0 });
+      // Use RPC for today's leads count
+      const { data: todayStats } = await supabase.rpc('get_contact_leads_stats');
+      setUsageCounts({ leads: todayStats?.total || 0, extractions: 0 });
     }
 
     setLoading(false);

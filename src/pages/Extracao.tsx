@@ -133,7 +133,7 @@ export default function Extracao() {
       if (filterStatus !== "all") query = query.eq("status", filterStatus);
       if (debouncedSearchName) query = query.ilike("name", `%${debouncedSearchName}%`);
 
-      const { data, count, error } = await query
+      const { data, error } = await query
         .range(page * perPage, (page + 1) * perPage - 1)
         .limit(perPage);
 
@@ -151,7 +151,12 @@ export default function Extracao() {
         score: d.score || 0,
         status: d.status || "novo",
       })));
-      setTotalLeads(count || 0);
+
+      // Use RPC for count instead of HEAD query
+      try {
+        const { data: statsData } = await supabase.rpc('get_contact_leads_stats');
+        if (statsData) setTotalLeads(statsData.total || 0);
+      } catch { /* ignore count error */ }
     } catch (e: any) {
       toast.error("Erro ao carregar leads: " + e.message);
     } finally {
