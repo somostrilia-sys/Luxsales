@@ -897,20 +897,6 @@ export default function Bots() {
               <Input value={botForm.name} onChange={e => setBotForm({ ...botForm, name: e.target.value })} className="bg-[#0a0a0f] border-[#1E1E2E]" />
             </div>
             <div>
-              <Label>Empresa *</Label>
-              <Select value={botForm.company_id} onValueChange={v => { setBotForm({ ...botForm, company_id: v, collaborator_id: "" }); setSelectedAgentIds([]); }}>
-                <SelectTrigger className="bg-[#0a0a0f] border-[#1E1E2E]"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Colaborador vinculado</Label>
-              <Select value={botForm.collaborator_id} onValueChange={v => setBotForm({ ...botForm, collaborator_id: v })}>
-                <SelectTrigger className="bg-[#0a0a0f] border-[#1E1E2E]"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{filteredCollaborators.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
               <Label>Tipo</Label>
               <Select value={botForm.bot_type} onValueChange={v => setBotForm({ ...botForm, bot_type: v })}>
                 <SelectTrigger className="bg-[#0a0a0f] border-[#1E1E2E]"><SelectValue /></SelectTrigger>
