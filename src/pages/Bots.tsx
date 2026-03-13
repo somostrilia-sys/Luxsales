@@ -268,7 +268,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         <div>
           <CardTitle className="text-lg flex items-center gap-2">
             <Smartphone className="h-5 w-5 text-amber-500" />
-            Chips de Disparo
+            📱 Chips de Disparo
             {chips.length > 0 && <span className="text-sm text-muted-foreground font-normal">({chips.length}/5)</span>}
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">Números para disparo em massa — antibloco por rodízio</p>
