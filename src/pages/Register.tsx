@@ -125,7 +125,7 @@ function InviteRegistration({ token }: { token: string }) {
         .from("invite_links")
         .select("*")
         .eq("token", token)
-        .eq("is_active", true)
+        .eq("active", true)
         .single();
 
       if (error || !data) { setInviteError("Link inválido ou expirado."); return; }
