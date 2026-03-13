@@ -23,9 +23,15 @@ export default function Metricas() {
 
     // Get relevant collaborator IDs
     let collabQuery = supabase.from("collaborators").select("id, name").eq("active", true);
-    if (selectedCompanyId !== "all") collabQuery = collabQuery.eq("company_id", selectedCompanyId);
-    else if (roleLevel === 1 && collaborator?.sector_id) collabQuery = collabQuery.eq("sector_id", collaborator.sector_id);
-    else if (roleLevel === 2 && collaborator?.unit_id) collabQuery = collabQuery.eq("unit_id", collaborator.unit_id);
+    if (roleLevel === 3 && collaborator?.id) {
+      collabQuery = collabQuery.eq("id", collaborator.id);
+    } else if (selectedCompanyId !== "all") {
+      collabQuery = collabQuery.eq("company_id", selectedCompanyId);
+    } else if (roleLevel === 1 && collaborator?.sector_id) {
+      collabQuery = collabQuery.eq("sector_id", collaborator.sector_id);
+    } else if (roleLevel === 2 && collaborator?.unit_id) {
+      collabQuery = collabQuery.eq("unit_id", collaborator.unit_id);
+    }
 
     const { data: collabData } = await collabQuery;
     const collabs = collabData || [];
