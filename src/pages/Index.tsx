@@ -68,7 +68,7 @@ export default function Index() {
     setDailyData(Object.entries(dayCounts).map(([day, count]) => ({ day, leads: count })));
 
     setStats({
-      leads: leadsRes.count || 0,
+      leads: leadsStatsRes.data?.total || 0,
       agents: agentsRes.count || 0,
       messagestoday: msgsRes.count || 0,
       companies: (companiesRes.data || []).length,
