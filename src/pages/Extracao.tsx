@@ -60,9 +60,6 @@ export default function Extracao() {
     }
   };
 
-  const toggleSource = useCallback((s: string) => {
-    setSources(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
-  }, []);
 
   const handleExtract = async () => {
     const digits = cep.replace("-", "");
