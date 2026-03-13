@@ -71,22 +71,30 @@ export default function Conversas() {
   };
 
   const sendMessage = async () => {
-    if (!input.trim() || !conversationId) return;
+    if (!input.trim() || !conversationId || sending) return;
     setSending(true);
     const content = input.trim();
     setInput("");
     const tempMsg: Message = { id: crypto.randomUUID(), role: "user", content, created_at: new Date().toISOString() };
-    setMessages(prev => [...prev, tempMsg]);
-    const { error } = await supabase.from("agent_messages").insert({ conversation_id: conversationId, role: "user", content });
-    if (error) toast.error("Erro ao enviar mensagem");
-    else {
-      const assistantMsg: Message = {
-        id: crypto.randomUUID(), role: "assistant",
-        content: `Recebi: "${content}". (Integração com IA em breve)`,
-        created_at: new Date().toISOString(),
-      };
-      await supabase.from("agent_messages").insert({ conversation_id: conversationId, role: "assistant", content: assistantMsg.content });
-      setMessages(prev => [...prev, assistantMsg]);
+    const newMessages = [...messages, tempMsg];
+    setMessages(newMessages);
+    await supabase.from("agent_messages").insert({ conversation_id: conversationId, role: "user", content });
+    try {
+      const history = newMessages.map(m => ({ role: m.role, content: m.content }));
+      const { data, error } = await supabase.functions.invoke("ceo-chat", {
+        body: { message: content, history, key_type: "conversas" },
+      });
+      if (error || data?.error) {
+        toast.error(data?.error || error?.message || "Erro ao enviar");
+      } else if (data?.reply) {
+        const assistantMsg: Message = {
+          id: crypto.randomUUID(), role: "assistant", content: data.reply, created_at: new Date().toISOString(),
+        };
+        await supabase.from("agent_messages").insert({ conversation_id: conversationId, role: "assistant", content: data.reply });
+        setMessages(prev => [...prev, assistantMsg]);
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Erro de conexão");
     }
     setSending(false);
     setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);

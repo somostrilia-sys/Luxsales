@@ -188,8 +188,8 @@ export default function CeoBolt() {
                 className="flex-1"
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
               />
-              <Button onClick={sendMessage} size="icon">
-                <Send className="h-4 w-4" />
+              <Button onClick={sendMessage} size="icon" disabled={sending || !chatInput.trim()}>
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
           </CardContent>
