@@ -33,7 +33,7 @@ export default function Login() {
       <div className="w-full max-w-md space-y-8">
         {/* Logo area */}
         <div className="flex justify-center">
-          <img src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/assets/logos/logo-walk-holding-transparent.png" alt="Walk Holding" className="h-20 object-contain" />
+          <img src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/painel-agente/logos/logo-walk-holding-transparent.png" alt="Walk Holding" className="h-20 object-contain" />
         </div>
 
         <Card variant="gradient" className="card-accent-top">
