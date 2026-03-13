@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Crown, Users, ShieldCheck } from "lucide-react";
+import { Save, Crown, Users } from "lucide-react";
 import { ApiKeyInput } from "./ApiKeyInput";
 
 interface ConfigValues {
@@ -20,7 +20,6 @@ interface ConfigValues {
   api_key_agent_2: string;
   api_key_agent_3: string;
   api_key_agent_4: string;
-  anthropic_api_key_staff: string;
 }
 
 const DEFAULT_VALUES: ConfigValues = {
@@ -30,7 +29,6 @@ const DEFAULT_VALUES: ConfigValues = {
   api_key_agent_2: "",
   api_key_agent_3: "",
   api_key_agent_4: "",
-  anthropic_api_key_staff: "",
 };
 
 export function ConfigCards() {
@@ -76,7 +74,7 @@ export function ConfigCards() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
+    <div className="grid gap-6 lg:grid-cols-2">
       {/* CEO Card - Gold border */}
       <Card className="border-2 border-yellow-500/60">
         <CardHeader className="pb-3">
@@ -156,33 +154,6 @@ export function ConfigCards() {
         </CardContent>
       </Card>
 
-      {/* Staff Card - Green border */}
-      <Card className="border-2 border-green-500/60">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-green-500" />
-            API Key dos Colaboradores
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Usada pelos consultores e gestores no painel
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ApiKeyInput
-            label="API Key Anthropic"
-            value={values.anthropic_api_key_staff}
-            onChange={(v) => set("anthropic_api_key_staff", v)}
-          />
-          <Button
-            onClick={() => upsertKeys(["anthropic_api_key_staff"], "staff")}
-            disabled={saving === "staff"}
-            className="w-full gap-2"
-          >
-            <Save className="h-4 w-4" />
-            {saving === "staff" ? "Salvando..." : "Salvar"}
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }

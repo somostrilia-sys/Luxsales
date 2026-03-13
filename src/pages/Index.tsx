@@ -32,14 +32,14 @@ export default function Index() {
     const daysAgo = subDays(new Date(), parseInt(period)).toISOString();
 
     // Parallel queries
-    let leadsQ = supabase.from("contact_leads").select("id", { count: "exact", head: true });
-    if (selectedCompanyId !== "all") leadsQ = leadsQ.eq("company_target", selectedCompanyId);
+    // Use RPC for leads count instead of HEAD query on contact_leads
+    const leadsCountPromise = supabase.rpc('get_contact_leads_stats');
 
     let agentsQ = supabase.from("agent_definitions").select("id", { count: "exact", head: true }).eq("active", true);
     if (selectedCompanyId !== "all") agentsQ = agentsQ.eq("company_id", selectedCompanyId);
 
-    const [leadsRes, agentsRes, msgsRes, companiesRes] = await Promise.all([
-      leadsQ,
+    const [leadsStatsRes, agentsRes, msgsRes, companiesRes] = await Promise.all([
+      leadsCountPromise,
       agentsQ,
       supabase.from("agent_messages").select("id", { count: "exact", head: true })
         .gte("created_at", today),
@@ -47,7 +47,7 @@ export default function Index() {
     ]);
 
     // Daily chart - run in parallel with main queries above
-    let dailyQuery = supabase.from("contact_leads").select("created_at").gte("created_at", daysAgo);
+    let dailyQuery = supabase.from("contact_leads").select("created_at").gte("created_at", daysAgo).limit(1000);
     if (selectedCompanyId !== "all") dailyQuery = dailyQuery.eq("company_target", selectedCompanyId);
 
     // Usage limits query (conditional)
@@ -68,7 +68,7 @@ export default function Index() {
     setDailyData(Object.entries(dayCounts).map(([day, count]) => ({ day, leads: count })));
 
     setStats({
-      leads: leadsRes.count || 0,
+      leads: leadsStatsRes.data?.total || 0,
       agents: agentsRes.count || 0,
       messagestoday: msgsRes.count || 0,
       companies: (companiesRes.data || []).length,
@@ -77,10 +77,9 @@ export default function Index() {
     // Usage limits for consultants
     if (roleData?.usage_limits) {
       setUsageLimits(roleData.usage_limits);
-      let todayLeads = supabase.from("contact_leads").select("id", { count: "exact", head: true }).gte("created_at", today);
-      if (companyFilter) todayLeads = todayLeads.eq("company_target", companyFilter);
-      const { count: lc } = await todayLeads;
-      setUsageCounts({ leads: lc || 0, extractions: 0 });
+      // Use RPC for today's leads count
+      const { data: todayStats } = await supabase.rpc('get_contact_leads_stats');
+      setUsageCounts({ leads: todayStats?.total || 0, extractions: 0 });
     }
 
     setLoading(false);
