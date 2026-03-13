@@ -123,11 +123,19 @@ function UploadTab() {
     if (!companyId) { toast.error("Empresa não encontrada"); return; }
     setSyncing(true);
     try {
-      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: companyId });
+      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: companyId, p_limit: 50000 });
       if (error) throw error;
       const r = data as any;
-      toast.success(`Sincronizado! ${r?.total ?? 0} novos leads importados`);
-      loadCounts();
+      const totalImported = r?.total ?? 0;
+      await loadCounts();
+      const remaining = counts?.naoImportados ?? 0;
+      if (remaining > 0 && totalImported > 0) {
+        toast.success(`Sincronizados ${totalImported.toLocaleString("pt-BR")} leads. Ainda restam ${remaining.toLocaleString("pt-BR")} na base.`);
+      } else if (totalImported > 0) {
+        toast.success(`Sincronizado! ${totalImported.toLocaleString("pt-BR")} novos leads importados`);
+      } else {
+        toast.info("Base já está sincronizada. Nenhum lead novo.");
+      }
     } catch (e: any) { toast.error("Erro: " + e.message); }
     finally { setSyncing(false); }
   }, [companyId, loadCounts]);
