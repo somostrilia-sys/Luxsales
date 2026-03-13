@@ -145,127 +145,105 @@ export default function Bots() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Fetch collaborator ID from auth user
-  useEffect(() => {
-    if (!user) { setWaLoading(false); return; }
-    (async () => {
-      const { data: collab } = await supabase
-        .from("collaborators")
-        .select("id, name")
-        .eq("auth_user_id", user.id)
-        .single();
-      if (collab) {
-        setCollabId(collab.id);
-        setCollabName(collab.name);
-      } else {
-        setWaLoading(false);
-      }
-    })();
-  }, [user]);
-
-  // Check WhatsApp status on load when collabId is ready
-  useEffect(() => {
-    if (!collabId) return;
-    (async () => {
-      setWaLoading(true);
-      await checkWaStatus();
-      setWaLoading(false);
-    })();
-  }, [collabId]);
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+  // ── WhatsApp: helpers ──
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
   }, []);
 
-  const stopPolling = () => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-  };
-
-  const checkWaStatus = async () => {
-    if (!collabId) return;
+  const fetchQrCode = useCallback(async (collabId: string) => {
+    setWaInstanceStatus("connecting");
     try {
-      const { data, error } = await supabase.functions.invoke("create-whatsapp-instance", {
-        body: { action: "status", collaborator_id: collabId },
+      const { data } = await supabase.functions.invoke("create-whatsapp-instance", {
+        body: { action: "qrcode", collaborator_id: collabId },
       });
-      if (error || data?.error) return;
-      if (data?.connected) {
-        setWaConnected(true);
-        setWaQrCode(null);
-        setWaNumber(data.number || null);
-        stopPolling();
+      if (data?.qr_code) {
+        setWaQrCode(data.qr_code);
+      } else {
+        toast.error("Não foi possível gerar QR code");
       }
-    } catch {}
-  };
+    } catch { toast.error("Erro ao gerar QR code"); }
+  }, []);
 
-  const startPolling = () => {
+  const startPolling = useCallback((collabId: string) => {
     stopPolling();
     pollingRef.current = setInterval(async () => {
-      if (!collabId) return;
       try {
         const { data } = await supabase.functions.invoke("create-whatsapp-instance", {
           body: { action: "status", collaborator_id: collabId },
         });
         if (data?.connected) {
-          setWaConnected(true);
+          setWaInstanceStatus("connected");
           setWaQrCode(null);
-          setWaNumber(data.number || null);
+          setWaPhone(data.phone || null);
+          setWaProfileName(data.profile_name || null);
           stopPolling();
           toast.success("WhatsApp conectado!");
         }
       } catch {}
     }, 5000);
-  };
+  }, [stopPolling]);
+
+  // ── WhatsApp: mount check ──
+  useEffect(() => {
+    if (!collaborator?.id) { setWaInstanceStatus("loading"); return; }
+    const collabId = collaborator.id;
+    (async () => {
+      setWaInstanceStatus("loading");
+      try {
+        const { data, error } = await supabase.functions.invoke("create-whatsapp-instance", {
+          body: { action: "status", collaborator_id: collabId },
+        });
+        if (error || data?.error) { setWaInstanceStatus("no_instance"); return; }
+        if (data?.connected) {
+          setWaInstanceStatus("connected");
+          setWaPhone(data.phone || null);
+          setWaProfileName(data.profile_name || null);
+        } else if (data?.has_instance) {
+          // Has instance but disconnected → auto fetch QR
+          await fetchQrCode(collabId);
+          startPolling(collabId);
+        } else {
+          setWaInstanceStatus("no_instance");
+        }
+      } catch { setWaInstanceStatus("no_instance"); }
+    })();
+    return () => stopPolling();
+  }, [collaborator?.id, fetchQrCode, startPolling, stopPolling]);
+
+  // ── WhatsApp: start polling when connecting ──
+  useEffect(() => {
+    if (waInstanceStatus === "connecting" && waQrCode && collaborator?.id) {
+      startPolling(collaborator.id);
+    }
+  }, [waInstanceStatus, waQrCode, collaborator?.id, startPolling]);
 
   const handleConnectWa = async () => {
-    if (!collabId) { toast.error("Colaborador não encontrado"); return; }
-    setWaConnecting(true);
+    if (!collaborator?.id) { toast.error("Colaborador não encontrado"); return; }
+    setWaInstanceStatus("connecting");
     try {
       const { data, error } = await supabase.functions.invoke("create-whatsapp-instance", {
-        body: { action: "auto", collaborator_id: collabId, collaborator_name: collabName },
+        body: { collaborator_id: collaborator.id },
       });
       if (error || data?.error) {
-        toast.error(data?.error || error?.message || "Erro ao conectar WhatsApp");
+        toast.error(data?.error || error?.message || "Erro ao criar instância");
+        setWaInstanceStatus("no_instance");
       } else if (data?.connected) {
-        setWaConnected(true);
-        setWaQrCode(null);
-        setWaNumber(data.number || null);
+        setWaInstanceStatus("connected");
+        setWaPhone(data.phone || null);
         toast.success("WhatsApp conectado!");
       } else if (data?.qr_code) {
         setWaQrCode(data.qr_code);
-        setWaConnected(false);
-        startPolling();
+        startPolling(collaborator.id);
       }
     } catch (e: any) {
       toast.error(e.message || "Erro de conexão");
+      setWaInstanceStatus("no_instance");
     }
-    setWaConnecting(false);
   };
 
   const handleRefreshQr = async () => {
-    setWaConnecting(true);
-    await checkWaStatus();
-    if (!waConnected) {
-      try {
-        const { data } = await supabase.functions.invoke("create-whatsapp-instance", {
-          body: { action: "auto", collaborator_id: collabId, collaborator_name: collabName },
-        });
-        if (data?.qr_code) {
-          setWaQrCode(data.qr_code);
-          startPolling();
-        } else if (data?.connected) {
-          setWaConnected(true);
-          setWaQrCode(null);
-          setWaNumber(data.number || null);
-          stopPolling();
-          toast.success("WhatsApp conectado!");
-        }
-      } catch {}
-    }
-    setWaConnecting(false);
+    if (!collaborator?.id) return;
+    await fetchQrCode(collaborator.id);
   };
 
   // ── Bot helpers ──
