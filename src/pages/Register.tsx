@@ -14,11 +14,11 @@ interface InviteData {
   id: string;
   token: string;
   company_id: string | null;
-  role: string | null;
+  role_id: string | null;
   max_uses: number;
-  current_uses: number;
+  used_count: number;
   expires_at: string;
-  is_active: boolean;
+  active: boolean;
 }
 
 export default function Register() {
