@@ -93,7 +93,7 @@ export default function Extracao() {
   const loadLeads = useCallback(async () => {
     setLoadingLeads(true);
     try {
-      let query = supabase.from("contact_leads").select("*", { count: "exact" });
+      let query = supabase.from("contact_leads").select("id,name,phone,email,tipo_pessoa,city,state,category,source,score,status", { count: "exact" });
 
       if (filterCity) query = query.ilike("city", `%${filterCity}%`);
       if (filterState !== "all") query = query.eq("state", filterState);
@@ -102,8 +102,8 @@ export default function Extracao() {
       if (searchName) query = query.ilike("name", `%${searchName}%`);
 
       const { data, count, error } = await query
-        .order("created_at", { ascending: false })
-        .range(page * perPage, (page + 1) * perPage - 1);
+        .range(page * perPage, (page + 1) * perPage - 1)
+        .limit(perPage);
 
       if (error) throw error;
       setLeads((data || []).map((d: any) => ({
