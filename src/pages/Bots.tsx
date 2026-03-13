@@ -137,6 +137,22 @@ export default function Bots() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Load collaborator's WhatsApp bot
+  useEffect(() => {
+    if (!collaborator) { setWaLoading(false); return; }
+    (async () => {
+      setWaLoading(true);
+      const { data } = await supabase.from("bot_instances")
+        .select("*")
+        .eq("collaborator_id", collaborator.id)
+        .in("bot_type", ["whatsapp", "hybrid"])
+        .limit(1)
+        .maybeSingle();
+      setMyWhatsAppBot(data as BotInstance | null);
+      setWaLoading(false);
+    })();
+  }, [collaborator]);
+
   // ── Bot helpers ──
 
   const openNewBot = () => {
