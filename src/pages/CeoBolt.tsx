@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Crown, Bot } from "lucide-react";
+import { Send, Crown, Bot, Loader2 } from "lucide-react";
 import { ConfigCards } from "@/components/ceo/ConfigCards";
 
 interface AgentDef {
@@ -31,6 +31,7 @@ export default function CeoBolt() {
     { role: "assistant", content: "Olá! Sou o Bolt, seu assistente CEO. Como posso ajudar?" },
   ]);
   const [chatInput, setChatInput] = useState("");
+  const [sending, setSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -79,20 +80,30 @@ export default function CeoBolt() {
     );
   }
 
-  function sendMessage() {
-    if (!chatInput.trim()) return;
+  async function sendMessage() {
+    if (!chatInput.trim() || sending) return;
     const userMsg: ChatMessage = { role: "user", content: chatInput.trim() };
-    setMessages((prev) => [...prev, userMsg]);
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
     setChatInput("");
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `Recebi sua mensagem: "${userMsg.content}". A integração com a API está em desenvolvimento. 🚀`,
+    setSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ceo-chat", {
+        body: {
+          message: userMsg.content,
+          history: newMessages.map(({ role, content }) => ({ role, content })),
+          key_type: "ceo",
         },
-      ]);
-    }, 800);
+      });
+      if (error || data?.error) {
+        toast({ title: "Erro", description: data?.error || error?.message || "Erro ao enviar", variant: "destructive" });
+      } else if (data?.reply) {
+        setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
+      }
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message || "Erro de conexão", variant: "destructive" });
+    }
+    setSending(false);
   }
 
   return (
@@ -177,8 +188,8 @@ export default function CeoBolt() {
                 className="flex-1"
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
               />
-              <Button onClick={sendMessage} size="icon">
-                <Send className="h-4 w-4" />
+              <Button onClick={sendMessage} size="icon" disabled={sending || !chatInput.trim()}>
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
           </CardContent>
