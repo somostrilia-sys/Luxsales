@@ -572,17 +572,20 @@ export default function Bots() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {waLoading ? (
+            {waInstanceStatus === "loading" ? (
               <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-            ) : waConnected ? (
+            ) : waInstanceStatus === "connected" ? (
               <div className="flex items-center gap-4 py-4">
                 <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-sm px-3 py-1">🟢 Conectado</Badge>
-                {waNumber && <span className="text-foreground font-medium">{waNumber}</span>}
-                <Button size="sm" variant="outline" onClick={async () => { setWaConnecting(true); await checkWaStatus(); setWaConnecting(false); }} disabled={waConnecting}>
-                  {waConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Atualizar Status"}
+                <div>
+                  {waProfileName && <span className="text-foreground font-medium">{waProfileName}</span>}
+                  {waPhone && <span className="text-muted-foreground text-sm ml-2">{waPhone}</span>}
+                </div>
+                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive gap-2" onClick={() => toast.info("Desconectar em breve")}>
+                  <Power className="h-4 w-4" /> Desconectar
                 </Button>
               </div>
-            ) : waQrCode ? (
+            ) : (waInstanceStatus === "connecting" && waQrCode) ? (
               <div className="flex flex-col items-center gap-5 py-6">
                 <div className="bg-white p-4 rounded-2xl shadow-lg border-2 border-emerald-500/20">
                   <img src={waQrCode} alt="QR Code WhatsApp" width={220} height={220} className="rounded-lg" />
@@ -591,21 +594,18 @@ export default function Bots() {
                   <p className="text-sm font-medium text-foreground">Escaneie com WhatsApp Business</p>
                   <p className="text-xs text-muted-foreground">Configurações &gt; Aparelhos conectados &gt; Conectar aparelho</p>
                 </div>
-                <Button size="sm" variant="outline" onClick={handleRefreshQr} disabled={waConnecting} className="gap-2">
-                  {waConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><RefreshCw className="h-4 w-4" /> Atualizar QR</>}
+                <Button size="sm" variant="outline" onClick={handleRefreshQr} className="gap-2">
+                  <RefreshCw className="h-4 w-4" /> Atualizar QR
                 </Button>
               </div>
-            ) : !collabId ? (
-              <div className="text-center py-8 space-y-3">
-                <Smartphone className="h-10 w-10 text-muted-foreground mx-auto" />
-                <p className="text-muted-foreground text-sm">Aguardando configuração UAZAPI</p>
-              </div>
+            ) : waInstanceStatus === "connecting" ? (
+              <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
             ) : (
               <div className="text-center py-8 space-y-3">
                 <Smartphone className="h-10 w-10 text-muted-foreground mx-auto" />
                 <p className="text-muted-foreground text-sm">Nenhuma instância WhatsApp vinculada</p>
-                <Button onClick={handleConnectWa} disabled={waConnecting} className="gap-2">
-                  {waConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><QrCode className="h-4 w-4" /> Conectar WhatsApp</>}
+                <Button onClick={handleConnectWa} className="gap-2">
+                  <QrCode className="h-4 w-4" /> Conectar WhatsApp
                 </Button>
               </div>
             )}
