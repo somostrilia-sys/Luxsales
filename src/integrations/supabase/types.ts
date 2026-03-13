@@ -280,6 +280,63 @@ export type Database = {
         }
         Relationships: []
       }
+      contact_leads: {
+        Row: {
+          category: string | null
+          city: string | null
+          created_at: string | null
+          document: string | null
+          email: string | null
+          id: string
+          name: string | null
+          phone: string | null
+          region: string | null
+          score: number | null
+          source: string | null
+          state: string | null
+          status: string | null
+          subcategory: string | null
+          tipo_pessoa: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          category?: string | null
+          city?: string | null
+          created_at?: string | null
+          document?: string | null
+          email?: string | null
+          id?: string
+          name?: string | null
+          phone?: string | null
+          region?: string | null
+          score?: number | null
+          source?: string | null
+          state?: string | null
+          status?: string | null
+          subcategory?: string | null
+          tipo_pessoa?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string | null
+          city?: string | null
+          created_at?: string | null
+          document?: string | null
+          email?: string | null
+          id?: string
+          name?: string | null
+          phone?: string | null
+          region?: string | null
+          score?: number | null
+          source?: string | null
+          state?: string | null
+          status?: string | null
+          subcategory?: string | null
+          tipo_pessoa?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           chip_id: string | null
@@ -353,6 +410,9 @@ export type Database = {
           collaborator_id: string
           created_at: string
           id: string
+          instance_name: string | null
+          instance_token: string | null
+          phone: string | null
           qr_code: string | null
           status: string
           uazapi_admin_token: string
@@ -364,6 +424,9 @@ export type Database = {
           collaborator_id: string
           created_at?: string
           id?: string
+          instance_name?: string | null
+          instance_token?: string | null
+          phone?: string | null
           qr_code?: string | null
           status?: string
           uazapi_admin_token?: string
@@ -375,6 +438,9 @@ export type Database = {
           collaborator_id?: string
           created_at?: string
           id?: string
+          instance_name?: string | null
+          instance_token?: string | null
+          phone?: string | null
           qr_code?: string | null
           status?: string
           uazapi_admin_token?: string
@@ -692,6 +758,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_contact_leads_stats: { Args: never; Returns: Json }
       increment_metric: {
         Args: { p_consultant_id: string; p_metric: string; p_value?: number }
         Returns: undefined
