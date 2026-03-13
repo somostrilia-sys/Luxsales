@@ -23,11 +23,11 @@ interface InviteLink {
   id: string;
   token: string;
   company_id: string | null;
-  role: string | null;
+  role_id: string | null;
   max_uses: number | null;
-  current_uses: number | null;
+  used_count: number | null;
   expires_at: string | null;
-  is_active: boolean | null;
+  active: boolean | null;
   created_at: string | null;
 }
 
@@ -206,10 +206,6 @@ export default function Cadastro() {
 
   // ─── Invite Link Functions ───
   const handleCreateInvite = async () => {
-    if (!inviteForm.company_id || !inviteForm.role_id) {
-      toast.error("Selecione empresa e cargo para o convite");
-      return;
-    }
     setInviteCreating(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -217,8 +213,8 @@ export default function Cadastro() {
       expiresAt.setDate(expiresAt.getDate() + parseInt(inviteForm.expires_days));
 
       const { data, error } = await supabase.from("invite_links").insert({
-        company_id: inviteForm.company_id,
-        role: inviteForm.role_id,
+        company_id: inviteForm.company_id || null,
+        role_id: inviteForm.role_id || null,
         max_uses: parseInt(inviteForm.max_uses),
         expires_at: expiresAt.toISOString(),
         created_by: session?.user?.id || null,
@@ -244,15 +240,15 @@ export default function Cadastro() {
   };
 
   const deactivateInvite = async (id: string) => {
-    const { error } = await supabase.from("invite_links").update({ is_active: false }).eq("id", id);
+    const { error } = await supabase.from("invite_links").update({ active: false }).eq("id", id);
     if (error) toast.error("Erro ao desativar");
     else { toast.success("Convite desativado"); loadInvites(); }
   };
 
   const getInviteStatus = (invite: InviteLink) => {
-    if (!invite.is_active) return { label: "Desativado", className: "bg-muted text-muted-foreground" };
+    if (!invite.active) return { label: "Desativado", className: "bg-muted text-muted-foreground" };
     if (invite.expires_at && new Date(invite.expires_at) < new Date()) return { label: "Expirado", className: "bg-destructive/20 text-destructive" };
-    if (invite.current_uses !== null && invite.max_uses !== null && invite.current_uses >= invite.max_uses) return { label: "Esgotado", className: "bg-warning/20 text-warning" };
+    if (invite.used_count !== null && invite.max_uses !== null && invite.used_count >= invite.max_uses) return { label: "Esgotado", className: "bg-warning/20 text-warning" };
     return { label: "Ativo", className: "bg-success/20 text-success" };
   };
 
@@ -386,21 +382,27 @@ export default function Cadastro() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Crie um link que permite novos colaboradores se cadastrarem com empresa e cargo pré-definidos.
+                  Crie um link que permite novos colaboradores se cadastrarem. Empresa e cargo são opcionais.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label>Empresa *</Label>
-                    <Select value={inviteForm.company_id} onValueChange={v => setInviteForm(prev => ({ ...prev, company_id: v, role_id: "" }))}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                    <Label>Empresa <span className="text-xs text-muted-foreground">(opcional)</span></Label>
+                    <Select value={inviteForm.company_id || "none"} onValueChange={v => setInviteForm(prev => ({ ...prev, company_id: v === "none" ? "" : v, role_id: "" }))}>
+                      <SelectTrigger><SelectValue placeholder="Colaborador escolhe" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— Colaborador escolhe —</SelectItem>
+                        {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <Label>Cargo *</Label>
-                    <Select value={inviteForm.role_id} onValueChange={v => setInviteForm(prev => ({ ...prev, role_id: v }))}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>{inviteFilteredRoles.map(r => <SelectItem key={r.id} value={r.id}>{r.name} (Lv.{r.level})</SelectItem>)}</SelectContent>
+                    <Label>Cargo <span className="text-xs text-muted-foreground">(opcional)</span></Label>
+                    <Select value={inviteForm.role_id || "none"} onValueChange={v => setInviteForm(prev => ({ ...prev, role_id: v === "none" ? "" : v }))}>
+                      <SelectTrigger><SelectValue placeholder="Colaborador escolhe" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— Colaborador escolhe —</SelectItem>
+                        {inviteFilteredRoles.map(r => <SelectItem key={r.id} value={r.id}>{r.name} (Lv.{r.level})</SelectItem>)}
+                      </SelectContent>
                     </Select>
                   </div>
                   <div>
@@ -460,8 +462,8 @@ export default function Cadastro() {
                         return (
                           <TableRow key={invite.id} className="table-row-hover">
                             <TableCell className="font-medium">{getCompanyName(invite.company_id)}</TableCell>
-                            <TableCell>{getRoleName(invite.role)}</TableCell>
-                            <TableCell>{invite.current_uses ?? 0}/{invite.max_uses ?? "∞"}</TableCell>
+                            <TableCell>{getRoleName(invite.role_id)}</TableCell>
+                            <TableCell>{invite.used_count ?? 0}/{invite.max_uses ?? "∞"}</TableCell>
                             <TableCell className="text-sm">
                               {invite.expires_at ? format(new Date(invite.expires_at), "dd/MM/yyyy HH:mm") : "Nunca"}
                             </TableCell>
@@ -476,7 +478,7 @@ export default function Cadastro() {
                                 <Button variant="ghost" size="sm" onClick={() => window.open(`/convite/${invite.token}`, '_blank')} title="Abrir link">
                                   <ExternalLink className="h-4 w-4" />
                                 </Button>
-                                {invite.is_active && (
+                                {invite.active && (
                                   <Button variant="ghost" size="sm" onClick={() => deactivateInvite(invite.id)} title="Desativar" className="text-destructive hover:text-destructive">
                                     <Trash2 className="h-4 w-4" />
                                   </Button>

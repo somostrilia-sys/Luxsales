@@ -14,11 +14,11 @@ interface InviteData {
   id: string;
   token: string;
   company_id: string | null;
-  role: string | null;
+  role_id: string | null;
   max_uses: number;
-  current_uses: number;
+  used_count: number;
   expires_at: string;
-  is_active: boolean;
+  active: boolean;
 }
 
 export default function Register() {
@@ -90,14 +90,14 @@ function InviteRegistration({ token }: { token: string }) {
   const [generatedPassword, setGeneratedPassword] = useState("");
 
   const companyFixed = !!invite?.company_id;
-  const roleFixed = !!invite?.role;
+  const roleFixed = !!invite?.role_id;
 
   useEffect(() => { validateInvite(); }, [token]);
   useEffect(() => { if (phone && !whatsapp) setWhatsapp(phone); }, [phone]);
 
   // When company changes, load related data
   const effectiveCompanyId = companyFixed ? invite?.company_id : selectedCompanyId;
-  const effectiveRoleId = roleFixed ? invite?.role : selectedRoleId;
+  const effectiveRoleId = roleFixed ? invite?.role_id : selectedRoleId;
 
   useEffect(() => {
     if (!effectiveCompanyId) {
@@ -125,14 +125,14 @@ function InviteRegistration({ token }: { token: string }) {
         .from("invite_links")
         .select("*")
         .eq("token", token)
-        .eq("is_active", true)
+        .eq("active", true)
         .single();
 
       if (error || !data) { setInviteError("Link inválido ou expirado."); return; }
       if (data.expires_at && new Date(data.expires_at) < new Date()) {
         setInviteError("Este link de cadastro expirou. Solicite um novo ao administrador."); return;
       }
-      if (data.current_uses >= data.max_uses) {
+      if ((data.used_count ?? 0) >= data.max_uses) {
         setInviteError("Este link já atingiu o limite de cadastros. Solicite um novo ao administrador."); return;
       }
 
@@ -154,9 +154,9 @@ function InviteRegistration({ token }: { token: string }) {
       }
 
       // If role is pre-set
-      if (data.role) {
-        setSelectedRoleId(data.role);
-        const role = (roleRes.data || []).find((r: any) => r.id === data.role);
+      if (data.role_id) {
+        setSelectedRoleId(data.role_id);
+        const role = (roleRes.data || []).find((r: any) => r.id === data.role_id);
         setPresetRoleName(role?.name || "");
         setPresetRoleLevel(role?.level ?? null);
         setRoleLevel(role?.level ?? null);
@@ -242,7 +242,7 @@ function InviteRegistration({ token }: { token: string }) {
 
       await supabase
         .from("invite_links")
-        .update({ current_uses: (invite.current_uses || 0) + 1 })
+        .update({ used_count: (invite.used_count || 0) + 1 })
         .eq("id", invite.id);
 
       const firstName = nome.split(" ")[0];

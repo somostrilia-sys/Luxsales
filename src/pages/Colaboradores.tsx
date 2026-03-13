@@ -21,11 +21,11 @@ interface InviteLink {
   id: string;
   token: string;
   company_id: string | null;
-  role: string | null;
+  role_id: string | null;
   max_uses: number | null;
-  current_uses: number | null;
+  used_count: number | null;
   expires_at: string | null;
-  is_active: boolean | null;
+  active: boolean | null;
   created_at: string | null;
 }
 
@@ -230,7 +230,7 @@ export default function Colaboradores() {
       expiresAt.setDate(expiresAt.getDate() + parseInt(inviteForm.expires_days || "7"));
       const { data, error } = await supabase.from("invite_links").insert({
         company_id: inviteForm.company_id || null,
-        role: inviteForm.role_id || null,
+        role_id: inviteForm.role_id || null,
         max_uses: parseInt(inviteForm.max_uses || "9999"),
         expires_at: expiresAt.toISOString(),
         created_by: session?.user?.id || null,
@@ -260,15 +260,15 @@ export default function Colaboradores() {
   };
 
   const deactivateInvite = async (id: string) => {
-    const { error } = await supabase.from("invite_links").update({ is_active: false }).eq("id", id);
+    const { error } = await supabase.from("invite_links").update({ active: false }).eq("id", id);
     if (error) toast.error("Erro ao desativar");
     else { toast.success("Convite desativado"); loadInvites(); }
   };
 
   const getInviteStatus = (invite: InviteLink) => {
-    if (!invite.is_active) return { label: "Desativado", cls: "bg-muted text-muted-foreground" };
+    if (!invite.active) return { label: "Desativado", cls: "bg-muted text-muted-foreground" };
     if (invite.expires_at && new Date(invite.expires_at) < new Date()) return { label: "Expirado", cls: "bg-destructive/20 text-destructive" };
-    if (invite.current_uses !== null && invite.max_uses !== null && invite.current_uses >= invite.max_uses) return { label: "Esgotado", cls: "bg-warning/20 text-warning" };
+    if (invite.used_count !== null && invite.max_uses !== null && invite.used_count >= invite.max_uses) return { label: "Esgotado", cls: "bg-warning/20 text-warning" };
     return { label: "Ativo", cls: "bg-success/20 text-success" };
   };
 
@@ -305,7 +305,7 @@ export default function Colaboradores() {
             {canManageInvites && (
               <>
                 <Button variant="outline" onClick={() => setInviteListOpen(true)} className="text-sm">
-                  Convites ({inviteLinks.filter(i => i.is_active && (!i.expires_at || new Date(i.expires_at) > new Date())).length})
+                  Convites ({inviteLinks.filter(i => i.active && (!i.expires_at || new Date(i.expires_at) > new Date())).length})
                 </Button>
                 <Button variant="outline" onClick={openInviteDialog} className="text-sm">
                   <Link2 className="h-4 w-4 mr-1.5" />
@@ -597,8 +597,8 @@ export default function Colaboradores() {
                   return (
                     <TableRow key={invite.id} className="table-row-hover">
                       <TableCell className="font-medium">{invite.company_id ? getCompanyName(invite.company_id) : <span className="text-muted-foreground italic">Escolha livre</span>}</TableCell>
-                      <TableCell>{invite.role ? getRoleName(invite.role) : <span className="text-muted-foreground italic">Escolha livre</span>}</TableCell>
-                      <TableCell>{invite.current_uses ?? 0}/{invite.max_uses ?? "∞"}</TableCell>
+                      <TableCell>{invite.role_id ? getRoleName(invite.role_id) : <span className="text-muted-foreground italic">Escolha livre</span>}</TableCell>
+                      <TableCell>{invite.used_count ?? 0}/{invite.max_uses ?? "∞"}</TableCell>
                       <TableCell className="text-sm">
                         {invite.expires_at ? format(new Date(invite.expires_at), "dd/MM/yy HH:mm") : "Nunca"}
                       </TableCell>
@@ -611,7 +611,7 @@ export default function Colaboradores() {
                           <Button variant="ghost" size="sm" onClick={() => shareWhatsApp(invite.token)} title="WhatsApp">
                             <MessageCircle className="h-4 w-4" />
                           </Button>
-                          {invite.is_active && (
+                          {invite.active && (
                             <Button variant="ghost" size="sm" onClick={() => deactivateInvite(invite.id)} title="Desativar" className="text-destructive hover:text-destructive">
                               <XCircle className="h-4 w-4" />
                             </Button>
