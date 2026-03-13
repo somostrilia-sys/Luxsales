@@ -82,7 +82,7 @@ export default function Conversas() {
     try {
       const history = newMessages.map(m => ({ role: m.role, content: m.content }));
       const { data, error } = await supabase.functions.invoke("consultant-chat", {
-        body: { message: content, history, consultant_name: collaborator?.name || "Consultor" },
+        body: { message: content, history, consultant_name: collaborator?.name || "Consultor", agent_id: selectedAgent?.id || "" },
       });
       if (error || data?.error) {
         toast.error(data?.error || error?.message || "Erro ao enviar");
