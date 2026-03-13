@@ -515,17 +515,23 @@ export default function Colaboradores() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Empresa *</Label>
-              <Select value={inviteForm.company_id} onValueChange={v => setInviteForm(prev => ({ ...prev, company_id: v, role_id: "" }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione a empresa" /></SelectTrigger>
-                <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+              <Label>Empresa <span className="text-xs text-muted-foreground">(opcional — se vazio, colaborador escolhe)</span></Label>
+              <Select value={inviteForm.company_id || "none"} onValueChange={v => setInviteForm(prev => ({ ...prev, company_id: v === "none" ? "" : v, role_id: "" }))}>
+                <SelectTrigger><SelectValue placeholder="Colaborador escolhe" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Colaborador escolhe —</SelectItem>
+                  {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Cargo *</Label>
-              <Select value={inviteForm.role_id} onValueChange={v => setInviteForm(prev => ({ ...prev, role_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione o cargo" /></SelectTrigger>
-                <SelectContent>{inviteFilteredRoles.map(r => <SelectItem key={r.id} value={r.id}>{r.name} (Lv.{r.level})</SelectItem>)}</SelectContent>
+              <Label>Cargo <span className="text-xs text-muted-foreground">(opcional — se vazio, colaborador escolhe)</span></Label>
+              <Select value={inviteForm.role_id || "none"} onValueChange={v => setInviteForm(prev => ({ ...prev, role_id: v === "none" ? "" : v }))}>
+                <SelectTrigger><SelectValue placeholder="Colaborador escolhe" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Colaborador escolhe —</SelectItem>
+                  {inviteFilteredRoles.map(r => <SelectItem key={r.id} value={r.id}>{r.name} (Lv.{r.level})</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
