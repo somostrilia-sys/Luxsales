@@ -246,9 +246,9 @@ export default function Cadastro() {
   };
 
   const getInviteStatus = (invite: InviteLink) => {
-    if (!invite.is_active) return { label: "Desativado", className: "bg-muted text-muted-foreground" };
+    if (!invite.active) return { label: "Desativado", className: "bg-muted text-muted-foreground" };
     if (invite.expires_at && new Date(invite.expires_at) < new Date()) return { label: "Expirado", className: "bg-destructive/20 text-destructive" };
-    if (invite.current_uses !== null && invite.max_uses !== null && invite.current_uses >= invite.max_uses) return { label: "Esgotado", className: "bg-warning/20 text-warning" };
+    if (invite.used_count !== null && invite.max_uses !== null && invite.used_count >= invite.max_uses) return { label: "Esgotado", className: "bg-warning/20 text-warning" };
     return { label: "Ativo", className: "bg-success/20 text-success" };
   };
 
