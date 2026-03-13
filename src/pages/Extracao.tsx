@@ -125,7 +125,7 @@ export default function Extracao() {
   const loadLeads = useCallback(async () => {
     setLoadingLeads(true);
     try {
-      let query = supabase.from("contact_leads").select("id,name,phone,email,tipo_pessoa,city,state,category,source,score,status", { count: "exact" });
+      let query = supabase.from("contact_leads").select("id,name,phone,email,tipo_pessoa,city,state,category,source,score,status");
 
       if (debouncedFilterCity) query = query.ilike("city", `%${debouncedFilterCity}%`);
       if (filterState !== "all") query = query.eq("state", filterState);
