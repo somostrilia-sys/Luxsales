@@ -92,7 +92,6 @@ export default function CeoBolt() {
         body: {
           message: userMsg.content,
           history: newMessages.map(({ role, content }) => ({ role, content })),
-          key_type: "ceo",
         },
       });
       if (error || data?.error) {

@@ -33,8 +33,8 @@ export default function MeuBot() {
     setInput("");
     try {
       const history = newMessages.map(({ role, content }) => ({ role, content }));
-      const { data, error } = await supabase.functions.invoke("ceo-chat", {
-        body: { message: userMsg.content, history, key_type: "meubot" },
+      const { data, error } = await supabase.functions.invoke("meu-bot", {
+        body: { message: userMsg.content, history, consultant_name: "Usuário" },
       });
       if (error || data?.error) {
         toast.error(data?.error || error?.message || "Erro ao enviar");
