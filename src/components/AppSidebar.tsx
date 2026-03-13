@@ -71,22 +71,19 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarContent className="pt-6 bg-sidebar border-r border-sidebar-border">
         {/* Logo */}
-        <div className="px-4 mb-6 flex items-center gap-3">
+        <div className="px-4 mb-6 flex items-center justify-center">
           {collaborator?.company?.logo_url ? (
             <img
               src={collaborator.company.logo_url}
               alt={collaborator.company.name}
-              className="h-9 shrink-0 object-contain"
+              className="h-12 shrink-0 object-contain"
             />
           ) : (
             <img
               src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/assets/logos/logo-walk-holding-transparent.png"
               alt="Walk Holding"
-              className="h-14 w-auto object-contain max-w-[180px] shrink-0"
+              className="h-20 w-auto object-contain max-w-[200px] shrink-0 drop-shadow-[0_0_20px_hsl(217,91%,53%,0.1)]"
             />
-          )}
-          {!collapsed && !collaborator?.company?.logo_url && (
-            <span className="font-extrabold text-lg tracking-tight text-foreground">WALK</span>
           )}
         </div>
 

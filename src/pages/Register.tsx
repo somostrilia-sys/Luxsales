@@ -331,9 +331,9 @@ function InviteRegistration({ token }: { token: string }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 login-bg">
       <div className="w-full max-w-lg space-y-6">
-        <div className="text-center space-y-2">
-          <div className="mx-auto w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shadow-[var(--shadow-glow-primary)]">
-            <Link2 className="h-6 w-6 text-primary" />
+        <div className="text-center space-y-4">
+          <div className="flex justify-center">
+            <img src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/painel-agente/logos/logo-walk-holding-transparent.png" alt="Walk Holding" className="h-28 object-contain drop-shadow-[0_0_30px_hsl(217,91%,53%,0.15)]" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Cadastro de Colaborador</h1>
           {(displayCompanyName || displayRoleName) && (
