@@ -92,6 +92,9 @@ function maskKey(key: string) {
 }
 
 export default function Bots() {
+  const { collaborator } = useCollaborator();
+  const [myWhatsAppBot, setMyWhatsAppBot] = useState<BotInstance | null>(null);
+  const [waLoading, setWaLoading] = useState(true);
   const [bots, setBots] = useState<BotInstance[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
   const [collaborators, setCollaborators] = useState<any[]>([]);
