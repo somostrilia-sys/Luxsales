@@ -158,10 +158,20 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         delete pollingRefs.current[chipId];
         setChips(prev => prev.map(c => c.id === chipId ? { ...c, status: "connected", qr_code: null, phone: result.phone || c.phone } : c));
         setConnecting(null);
-        toast.success("Chip conectado com sucesso!");
+        toast.success("✅ Chip conectado com sucesso!");
+      } else if (result?.status === "connecting" && result?.qr_code) {
+        // QR refreshed on UAZAPI side — update display so user always sees fresh QR
+        setChips(prev => prev.map(c => c.id === chipId ? { ...c, qr_code: result.qr_code, status: "connecting" } : c));
+      } else if (result?.status === "disconnected" || result?.qr_expired) {
+        // QR timed out — auto-request a new one via connect action
+        const newQr = await callEdge({ action: "connect", chip_id: chipId });
+        if (newQr?.qr_code) {
+          setChips(prev => prev.map(c => c.id === chipId ? { ...c, qr_code: newQr.qr_code, status: "connecting" } : c));
+          toast.info("QR atualizado — escaneie agora");
+        }
       }
-    }, 5000);
-  }, []);
+    }, 8000); // poll every 8s — UAZAPI QR lasts ~20s, enough time to refresh
+  }, [callEdge]);
 
   const addChip = async () => {
     if (!collaboratorId || !newAdminToken.trim()) { toast.error("Admin Token é obrigatório"); return; }
