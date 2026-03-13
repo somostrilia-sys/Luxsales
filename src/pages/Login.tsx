@@ -32,12 +32,8 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-4 login-bg">
       <div className="w-full max-w-md space-y-8">
         {/* Logo area */}
-        <div className="text-center space-y-2">
-          <div className="mx-auto w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shadow-[var(--shadow-glow-primary)]">
-            <span className="text-primary font-extrabold text-xl">W</span>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">Bem-vindo de volta</h1>
-          <p className="text-sm text-muted-foreground">Entre na sua conta para continuar</p>
+        <div className="flex justify-center">
+          <img src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/assets/logos/logo-walk-holding-transparent.png" alt="Walk Holding" className="h-20 object-contain" />
         </div>
 
         <Card variant="gradient" className="card-accent-top">
