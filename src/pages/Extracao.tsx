@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -60,7 +60,39 @@ export default function Extracao() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchName, setSearchName] = useState("");
 
+  // Debounced filter values
+  const [debouncedSearchName, setDebouncedSearchName] = useState("");
+  const [debouncedFilterCity, setDebouncedFilterCity] = useState("");
+
   const perPage = 50;
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const cityInputRef = useRef<HTMLInputElement>(null);
+
+  // Clear autofill on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (nameInputRef.current) nameInputRef.current.value = "";
+      if (cityInputRef.current) cityInputRef.current.value = "";
+      setSearchName("");
+      setFilterCity("");
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Debounce search fields (600ms, min 3 chars)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchName(searchName.length >= 3 ? searchName : "");
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [searchName]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedFilterCity(filterCity.length >= 3 ? filterCity : "");
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [filterCity]);
 
   const formatCep = (val: string) => {
     const digits = val.replace(/\D/g, "").slice(0, 8);
@@ -95,11 +127,11 @@ export default function Extracao() {
     try {
       let query = supabase.from("contact_leads").select("id,name,phone,email,tipo_pessoa,city,state,category,source,score,status", { count: "exact" });
 
-      if (filterCity) query = query.ilike("city", `%${filterCity}%`);
+      if (debouncedFilterCity) query = query.ilike("city", `%${debouncedFilterCity}%`);
       if (filterState !== "all") query = query.eq("state", filterState);
       if (filterType !== "all") query = query.eq("tipo_pessoa", filterType);
       if (filterStatus !== "all") query = query.eq("status", filterStatus);
-      if (searchName) query = query.ilike("name", `%${searchName}%`);
+      if (debouncedSearchName) query = query.ilike("name", `%${debouncedSearchName}%`);
 
       const { data, count, error } = await query
         .range(page * perPage, (page + 1) * perPage - 1)
@@ -125,12 +157,45 @@ export default function Extracao() {
     } finally {
       setLoadingLeads(false);
     }
-  }, [page, filterCity, filterState, filterType, filterStatus, searchName]);
+  }, [page, debouncedFilterCity, filterState, filterType, filterStatus, debouncedSearchName]);
 
   useEffect(() => { loadLeads(); }, [loadLeads]);
 
   // Reset page when filters change
-  useEffect(() => { setPage(0); }, [filterCity, filterState, filterType, filterStatus, searchName]);
+  useEffect(() => { setPage(0); }, [debouncedFilterCity, filterState, filterType, filterStatus, debouncedSearchName]);
+
+  // Supabase Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("leads-realtime")
+      .on(
+        "postgres_changes" as any,
+        { event: "INSERT", schema: "public", table: "contact_leads" },
+        (payload: any) => {
+          const d = payload.new;
+          const newLead: Lead = {
+            id: d.id,
+            name: d.name || "—",
+            phone: d.phone || "—",
+            email: d.email,
+            tipo_pessoa: d.tipo_pessoa || "PJ",
+            city: d.city || "",
+            state: d.state || "",
+            category: d.category || "",
+            source: d.source || "pj_base",
+            score: d.score || 0,
+            status: d.status || "novo",
+          };
+          setLeads(prev => [newLead, ...prev].slice(0, 50));
+          setTotalLeads(p => p + 1);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const handleExtract = async () => {
     const digits = cep.replace("-", "");
@@ -226,11 +291,11 @@ export default function Extracao() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   <div>
                     <Label className="text-xs">Buscar nome</Label>
-                    <Input type="search" autoComplete="off" name="search_lead_name_xyz" placeholder="Nome do lead..." value={searchName} onChange={e => setSearchName(e.target.value)} className="h-8 text-sm" />
+                    <Input ref={nameInputRef} type="search" autoComplete="new-password" name="search_lead_name_xyz" placeholder="Nome do lead (min 3 chars)..." value={searchName} onChange={e => setSearchName(e.target.value)} className="h-8 text-sm" />
                   </div>
                   <div>
                     <Label className="text-xs">Cidade</Label>
-                    <Input type="search" autoComplete="off" name="search_lead_city_xyz" placeholder="Filtrar cidade..." value={filterCity} onChange={e => setFilterCity(e.target.value)} className="h-8 text-sm" />
+                    <Input ref={cityInputRef} type="search" autoComplete="new-password" name="search_lead_city_xyz" placeholder="Filtrar cidade (min 3 chars)..." value={filterCity} onChange={e => setFilterCity(e.target.value)} className="h-8 text-sm" />
                   </div>
                   <div>
                     <Label className="text-xs">Estado</Label>
