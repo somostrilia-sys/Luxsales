@@ -520,7 +520,7 @@ function DashboardTab() {
   const [togglingRefill, setTogglingRefill] = useState(false);
   const [stats, setStats] = useState<any[]>([]);
 
-  const companyId = selectedCompanyId || collaborator?.company_id;
+  const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
