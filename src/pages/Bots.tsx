@@ -938,21 +938,6 @@ export default function Bots() {
               <Input value={botForm.whatsapp_number} onChange={e => setBotForm({ ...botForm, whatsapp_number: e.target.value })} className="bg-[#0a0a0f] border-[#1E1E2E]" placeholder="+55..." />
             </div>
 
-            {botForm.company_id && (
-              <div>
-                <Label>Agentes vinculados {selectedAgentIds.length > 0 && <span className="text-primary">({selectedAgentIds.length})</span>}</Label>
-                <div className="mt-1 max-h-48 overflow-y-auto border border-[#1E1E2E] rounded-md p-2 space-y-1 bg-[#0a0a0f] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:rounded-full">
-                  {filteredAgents.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2 text-center">Nenhum agente nesta empresa</p>
-                  ) : filteredAgents.map(a => (
-                    <label key={a.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#1E1E2E] cursor-pointer text-sm">
-                      <Checkbox checked={selectedAgentIds.includes(a.id)} onCheckedChange={() => toggleAgentId(a.id)} />
-                      <span className="text-foreground">{a.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <div className="border border-[#1E1E2E] rounded-lg p-4 space-y-3">
               <h4 className="text-sm font-semibold text-foreground">Configuração Anti-Ban</h4>

@@ -36,7 +36,7 @@ const consultantItems: MenuItem[] = [
   { title: "Conversas", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
   { title: "Meu Bot", url: "/meu-bot", icon: Bot, levels: [0, 1, 2, 3] },
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
-  { title: "Métricas", url: "/metricas", icon: BarChart3, levels: [3] },
+  
 ];
 
 export function AppSidebar() {

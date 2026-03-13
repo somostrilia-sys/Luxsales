@@ -56,7 +56,7 @@ export default function Metricas() {
   };
 
   const kpis = [
-    { label: "Colaboradores", value: totals.collaborators, icon: Users },
+    ...(roleLevel <= 2 ? [{ label: "Colaboradores", value: totals.collaborators, icon: Users }] : []),
     { label: "Leads", value: totals.leads, icon: Target },
     { label: "Fontes", value: barData.length, icon: BarChart3 },
   ];
