@@ -456,7 +456,7 @@ export default function Cadastro() {
                         return (
                           <TableRow key={invite.id} className="table-row-hover">
                             <TableCell className="font-medium">{getCompanyName(invite.company_id)}</TableCell>
-                            <TableCell>{getRoleName(invite.role)}</TableCell>
+                            <TableCell>{getRoleName(invite.role_id)}</TableCell>
                             <TableCell>{invite.current_uses ?? 0}/{invite.max_uses ?? "∞"}</TableCell>
                             <TableCell className="text-sm">
                               {invite.expires_at ? format(new Date(invite.expires_at), "dd/MM/yyyy HH:mm") : "Nunca"}
