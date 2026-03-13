@@ -47,7 +47,7 @@ export default function Index() {
     ]);
 
     // Daily chart - run in parallel with main queries above
-    let dailyQuery = supabase.from("contact_leads").select("created_at").gte("created_at", daysAgo);
+    let dailyQuery = supabase.from("contact_leads").select("created_at").gte("created_at", daysAgo).limit(1000);
     if (selectedCompanyId !== "all") dailyQuery = dailyQuery.eq("company_target", selectedCompanyId);
 
     // Usage limits query (conditional)
