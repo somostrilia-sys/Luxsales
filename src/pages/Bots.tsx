@@ -186,24 +186,56 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   };
 
   const handleConnect = async (chip: DisposableChip) => {
-    if (!chip.instance_token) { toast.error("Instância não criada no UAZAPI"); return; }
     setConnecting(chip.id);
-    const result = await callEdge({ action: "connect", chip_id: chip.id });
-    if (result?.error) { toast.error("Erro ao conectar: " + result.error); setConnecting(null); return; }
-    const qrCode = result?.qr_code;
-    setChips(prev => prev.map(c => c.id === chip.id ? { ...c, status: "connecting", qr_code: qrCode || c.qr_code } : c));
-    toast.info("Escaneie o QR code no WhatsApp");
-    startStatusPolling(chip.id);
+    try {
+      // If no instance_token, the Edge Function will auto-create the UAZAPI instance first
+      const result = await callEdge({ action: "connect", chip_id: chip.id });
+      if (result?.error) {
+        toast.error("Erro ao conectar: " + result.error);
+        setConnecting(null);
+        return;
+      }
+      const qrCode = result?.qr_code;
+      setChips(prev => prev.map(c => c.id === chip.id
+        ? { ...c, status: "connecting", qr_code: qrCode || c.qr_code, instance_token: result?.instance_token || c.instance_token }
+        : c
+      ));
+      if (qrCode) {
+        toast.info("QR gerado — escaneie no WhatsApp");
+        startStatusPolling(chip.id);
+      } else {
+        toast.warning("QR não retornado — tente novamente em instantes");
+        setConnecting(null);
+      }
+    } catch (e) {
+      toast.error("Falha ao conectar chip. Tente novamente.");
+      setConnecting(null);
+    }
   };
 
   const handleDelete = async (chip: DisposableChip) => {
+    if (!window.confirm(`Remover Chip? Esta ação é irreversível.`)) return;
     setDeleting(chip.id);
-    const result = await callEdge({ action: "delete", chip_id: chip.id });
-    setDeleting(null);
-    if (result?.error) { toast.error("Erro: " + result.error); return; }
-    toast.success("Chip removido");
-    if (pollingRefs.current[chip.id]) { clearInterval(pollingRefs.current[chip.id]); delete pollingRefs.current[chip.id]; }
-    fetchChips();
+    // Stop polling first
+    if (pollingRefs.current[chip.id]) {
+      clearInterval(pollingRefs.current[chip.id]);
+      delete pollingRefs.current[chip.id];
+    }
+    try {
+      const result = await callEdge({ action: "delete", chip_id: chip.id });
+      if (result?.error) {
+        toast.error("Erro ao remover: " + result.error);
+        setDeleting(null);
+        return;
+      }
+      toast.success("Chip removido");
+      // Update chips list locally (removes deleted chip, re-numbers automatically via displayIdx)
+      setChips(prev => prev.filter(c => c.id !== chip.id));
+    } catch (e) {
+      toast.error("Falha ao remover chip.");
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const statusBadge = (status: string) => {
@@ -273,12 +305,12 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
           </div>
         ) : (
           <div className="space-y-3">
-            {chips.map(chip => (
+            {chips.map((chip, displayIdx) => (
               <div key={chip.id} className="border border-border rounded-lg p-4 space-y-3">
                 {/* Header do chip */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold">Chip #{chip.chip_index}</span>
+                    <span className="text-sm font-semibold">Chip #{displayIdx + 1}</span>
                     {statusBadge(chip.status)}
                     {chip.phone && <span className="text-xs text-muted-foreground">{chip.phone}</span>}
                   </div>
@@ -316,7 +348,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                     <div className="bg-white p-3 rounded-xl shadow border">
                       <img
                         src={chip.qr_code.startsWith("data:") ? chip.qr_code : `data:image/png;base64,${chip.qr_code}`}
-                        alt={`QR Chip #${chip.chip_index}`}
+                        alt={`QR Chip #${displayIdx + 1}`}
                         width={200}
                         height={200}
                         className="rounded"
