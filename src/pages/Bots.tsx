@@ -362,6 +362,198 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   );
 }
 
+// ── Bot Training Section ──
+
+function BotTrainingSection({ collaboratorId }: { collaboratorId: string | null }) {
+  const [trainingText, setTrainingText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!collaboratorId) { setLoading(false); return; }
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from("collaborators")
+        .select("bot_training")
+        .eq("id", collaboratorId)
+        .maybeSingle();
+      setTrainingText((data as any)?.bot_training || "");
+      setLoading(false);
+    })();
+  }, [collaboratorId]);
+
+  const handleSave = async () => {
+    if (!collaboratorId) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("collaborators")
+      .update({ bot_training: trainingText } as any)
+      .eq("id", collaboratorId);
+    setSaving(false);
+    if (error) { toast.error("Erro ao salvar: " + error.message); return; }
+    toast.success("Material de treino salvo!");
+  };
+
+  return (
+    <Card className="border-blue-500/30">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <BookOpen className="h-5 w-5 text-blue-500" />
+          Treinar meu Bot
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">Cole aqui material da empresa para treinar seu bot (textos, scripts, FAQ, etc.)</p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        ) : (
+          <>
+            <Textarea
+              value={trainingText}
+              onChange={e => setTrainingText(e.target.value)}
+              placeholder="Cole aqui o material de treinamento do seu bot..."
+              className="min-h-[200px] bg-background border-border"
+            />
+            <div className="flex justify-end">
+              <Button onClick={handleSave} disabled={saving} className="gap-2">
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Salvar Material
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── WhatsApp Conversations Section ──
+
+interface WaBotConversation {
+  id: string;
+  collaborator_id: string;
+  contact_name: string | null;
+  contact_phone: string;
+  history: Array<{ role: string; content: string }>;
+  last_message_at: string | null;
+  created_at: string | null;
+}
+
+function WhatsAppConversationsSection({ collaboratorId }: { collaboratorId: string | null }) {
+  const [conversations, setConversations] = useState<WaBotConversation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedConversation, setSelectedConversation] = useState<WaBotConversation | null>(null);
+
+  useEffect(() => {
+    if (!collaboratorId) { setConversations([]); setLoading(false); return; }
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from("whatsapp_bot_conversations")
+        .select("*")
+        .eq("collaborator_id", collaboratorId)
+        .order("last_message_at", { ascending: false });
+      setConversations((data as WaBotConversation[]) || []);
+      setLoading(false);
+    })();
+  }, [collaboratorId]);
+
+  return (
+    <>
+      <Card className="border-green-500/30">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <MessageCircle className="h-5 w-5 text-green-500" />
+            Conversas do WhatsApp
+            {conversations.length > 0 && (
+              <span className="text-sm text-muted-foreground font-normal">({conversations.length})</span>
+            )}
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">Histórico de conversas do bot com contatos</p>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          ) : conversations.length === 0 ? (
+            <div className="text-center py-8 space-y-3">
+              <MessageCircle className="h-10 w-10 text-muted-foreground mx-auto opacity-40" />
+              <p className="text-muted-foreground text-sm">Nenhuma conversa registrada ainda</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {conversations.map(conv => (
+                <button
+                  key={conv.id}
+                  onClick={() => setSelectedConversation(conv)}
+                  className="w-full text-left border border-border rounded-lg p-3 hover:border-green-500/40 hover:bg-muted/30 transition-colors flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
+                      <MessageCircle className="h-4 w-4 text-green-500" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm text-foreground truncate">
+                        {conv.contact_name || conv.contact_phone}
+                      </p>
+                      {conv.contact_name && (
+                        <p className="text-xs text-muted-foreground">{conv.contact_phone}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs text-muted-foreground">
+                      {conv.last_message_at
+                        ? new Date(conv.last_message_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+                        : "—"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{conv.history?.length || 0} msgs</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Modal de conversa */}
+      <Dialog open={!!selectedConversation} onOpenChange={open => !open && setSelectedConversation(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-green-500" />
+              {selectedConversation?.contact_name || selectedConversation?.contact_phone}
+            </DialogTitle>
+            {selectedConversation?.contact_name && (
+              <p className="text-xs text-muted-foreground">{selectedConversation.contact_phone}</p>
+            )}
+          </DialogHeader>
+          <ScrollArea className="flex-1 max-h-[60vh] px-1">
+            <div className="space-y-3 py-2">
+              {(selectedConversation?.history || []).map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === "user" ? "justify-start" : "justify-end"}`}>
+                  <div
+                    className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
+                      msg.role === "user"
+                        ? "bg-muted text-foreground rounded-bl-md"
+                        : "bg-primary text-primary-foreground rounded-br-md"
+                    }`}
+                  >
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+              {(selectedConversation?.history || []).length === 0 && (
+                <p className="text-center text-muted-foreground text-sm py-8">Nenhuma mensagem</p>
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export default function Bots() {
   const { collaborator, roleLevel } = useCollaborator();
   const { user } = useAuth();
