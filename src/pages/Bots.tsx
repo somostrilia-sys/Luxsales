@@ -119,7 +119,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
 
   // Form para novo chip (servidor + token)
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newServerUrl, setNewServerUrl] = useState("https://trilhoassist.uazapi.com");
+  const [newServerUrl, setNewServerUrl] = useState("https://walkholding.uazapi.com");
   const [newAdminToken, setNewAdminToken] = useState("");
 
   const fetchChips = useCallback(async () => {
@@ -925,15 +925,11 @@ export default function Bots() {
               <p className="text-xs text-muted-foreground mt-1">Cadastre keys na aba "API Keys"</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>ID Instância UAZAPI</Label>
-                <Input value={botForm.uazapi_instance_id} onChange={e => setBotForm({ ...botForm, uazapi_instance_id: e.target.value })} className="bg-[#0a0a0f] border-[#1E1E2E]" />
-              </div>
-              <div>
-                <Label>Token UAZAPI</Label>
-                <Input value={botForm.uazapi_token} onChange={e => setBotForm({ ...botForm, uazapi_token: e.target.value })} className="bg-[#0a0a0f] border-[#1E1E2E]" />
-              </div>
+            <div>
+              <p className="text-xs text-muted-foreground bg-muted/30 p-2 rounded">
+                ℹ️ Instância e token UAZAPI são configurados automaticamente pelo servidor <strong>trilhoassist</strong>. 
+                Para chips descartáveis, use a aba "Chips Descartáveis" em Meu WhatsApp.
+              </p>
             </div>
             <div>
               <Label>Número WhatsApp</Label>
