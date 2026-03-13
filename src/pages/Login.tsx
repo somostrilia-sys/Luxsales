@@ -8,7 +8,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { toast } from "sonner";
 import { Mail, Lock, Loader2 } from "lucide-react";
 
-const LOGO_URL = "https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/assets/logos/logo-walk-holding-transparent.png";
+const LOGO_URL = "https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/painel-agente/logos/logo-walk-holding-transparent.png";
 
 export default function Login() {
   const [email, setEmail] = useState("");
