@@ -93,7 +93,7 @@ export default function Extracao() {
   const loadLeads = useCallback(async () => {
     setLoadingLeads(true);
     try {
-      let query = supabase.from("contact_leads").select("*", { count: "exact" });
+      let query = supabase.from("contact_leads").select("id,name,phone,email,tipo_pessoa,city,state,category,source,score,status", { count: "exact" });
 
       if (filterCity) query = query.ilike("city", `%${filterCity}%`);
       if (filterState !== "all") query = query.eq("state", filterState);
@@ -102,8 +102,8 @@ export default function Extracao() {
       if (searchName) query = query.ilike("name", `%${searchName}%`);
 
       const { data, count, error } = await query
-        .order("created_at", { ascending: false })
-        .range(page * perPage, (page + 1) * perPage - 1);
+        .range(page * perPage, (page + 1) * perPage - 1)
+        .limit(perPage);
 
       if (error) throw error;
       setLeads((data || []).map((d: any) => ({
@@ -226,11 +226,11 @@ export default function Extracao() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   <div>
                     <Label className="text-xs">Buscar nome</Label>
-                    <Input placeholder="Nome do lead..." value={searchName} onChange={e => setSearchName(e.target.value)} className="h-8 text-sm" />
+                    <Input type="search" autoComplete="off" name="search_lead_name_xyz" placeholder="Nome do lead..." value={searchName} onChange={e => setSearchName(e.target.value)} className="h-8 text-sm" />
                   </div>
                   <div>
                     <Label className="text-xs">Cidade</Label>
-                    <Input placeholder="Filtrar cidade..." value={filterCity} onChange={e => setFilterCity(e.target.value)} className="h-8 text-sm" />
+                    <Input type="search" autoComplete="off" name="search_lead_city_xyz" placeholder="Filtrar cidade..." value={filterCity} onChange={e => setFilterCity(e.target.value)} className="h-8 text-sm" />
                   </div>
                   <div>
                     <Label className="text-xs">Estado</Label>
