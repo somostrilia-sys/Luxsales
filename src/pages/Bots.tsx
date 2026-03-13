@@ -546,18 +546,17 @@ export default function Bots() {
 
   const handleSaveBot = async () => {
     if (!botForm.name.trim()) { toast.error("Nome é obrigatório"); return; }
-    if (!botForm.company_id) { toast.error("Selecione uma empresa"); return; }
     setSavingBot(true);
     const payload: any = {
       name: botForm.name.trim(),
-      collaborator_id: botForm.collaborator_id || null,
-      company_id: botForm.company_id,
+      collaborator_id: collaborator?.id || null,
+      company_id: collaborator?.company_id || null,
       bot_type: botForm.bot_type,
       api_key_id: botForm.api_key_id || null,
       uazapi_instance_id: botForm.uazapi_instance_id || null,
       uazapi_token: botForm.uazapi_token || null,
       whatsapp_number: botForm.whatsapp_number || null,
-      agent_ids: selectedAgentIds.length > 0 ? selectedAgentIds : null,
+      agent_ids: null,
       max_msgs_per_day: botForm.max_msgs_per_day,
       msg_interval_min: botForm.msg_interval_min,
       msg_interval_max: botForm.msg_interval_max,
