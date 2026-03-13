@@ -678,7 +678,7 @@ function HistoryTab() {
   const [loading, setLoading] = useState(true);
   const [batches, setBatches] = useState<any[]>([]);
 
-  const companyId = selectedCompanyId || collaborator?.company_id;
+  const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
 
   useEffect(() => { loadHistory(); }, [companyId]);
 
