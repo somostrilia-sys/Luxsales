@@ -31,13 +31,14 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative">
-      
-      <Card className="w-full max-w-md bg-card/80 backdrop-blur-md border-border/50 shadow-2xl animate-fade-in">
-        <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-kpi-from to-kpi-to flex items-center justify-center shadow-glow">
-            <Bot className="h-8 w-8 text-white" />
-          </div>
+    <div className="min-h-screen flex items-center justify-center p-4 login-bg">
+      <div className="w-full max-w-md space-y-8">
+        <div className="flex justify-center">
+          <img src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/painel-agente/logos/logo-walk-holding-transparent.png" alt="Walk Holding" className="h-28 object-contain drop-shadow-[0_0_30px_hsl(217,91%,53%,0.15)]" />
+        </div>
+
+      <Card variant="gradient" className="card-accent-top">
+        <CardHeader className="text-center space-y-2">
           <div>
             <CardTitle className="text-2xl font-bold">Recuperar senha</CardTitle>
             <CardDescription>
