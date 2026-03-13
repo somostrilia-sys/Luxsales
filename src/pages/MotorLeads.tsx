@@ -1,9 +1,11 @@
 /**
- * Motor de Leads — Upload, Distribuição, Acompanhamento
- * Admin (level<=1): Upload CSV, Distribuição manual, Dashboard
- * Consultor (level>=2): Meus Leads, Resumo
+ * Motor de Leads — v3
+ * CEO/Diretor (level<=1): Dashboard com tabela de consultores + contagens via Edge Function
+ * Gestor/Consultor (level>=2): Meus Leads via Edge Function
+ * Tabela: consultant_lead_pool | Campo: collaborator_id
+ * Edge Function: lead-pool (actions: status, list_pending, mark_dispatched)
  */
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,13 +23,36 @@ import { toast } from "sonner";
 import Papa from "papaparse";
 import {
   Rocket, Upload, Send, Loader2, RefreshCw, Users, MapPin, Phone,
-  ArrowRight, Shuffle, Package, Eye, CheckCircle, MessageCircle,
+  Shuffle, Package, Eye, CheckCircle, MessageCircle,
   Copy, ExternalLink, Zap, TrendingUp
 } from "lucide-react";
 
-// Commercial role slugs
+const LEAD_POOL_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/lead-pool";
 const COMMERCIAL_SLUGS = ["comercial", "consultor", "gestor-comercial", "gestor-trilia", "gestora-essencia", "gestor-digitallux"];
 
+async function getAuthHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${session?.access_token || ""}`,
+  };
+}
+
+async function callLeadPool(action: string, params: Record<string, any> = {}) {
+  const headers = await getAuthHeaders();
+  const res = await fetch(LEAD_POOL_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ action, ...params }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Erro ${res.status}`);
+  return data;
+}
+
+// ═══════════════════════════════════════════
+// MAIN
+// ═══════════════════════════════════════════
 export default function MotorLeads() {
   const { collaborator, roleLevel } = useCollaborator();
   const isAdmin = roleLevel <= 1;
@@ -53,11 +78,10 @@ export default function MotorLeads() {
 }
 
 // ═══════════════════════════════════════════
-// ADMIN VIEW
+// ADMIN VIEW — Tabs: Upload, Distribuição, Dashboard
 // ═══════════════════════════════════════════
 function AdminView() {
-  /* v2 - sem lista individual */
-  const [activeTab, setActiveTab] = useState("distribute");
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -81,21 +105,13 @@ function AdminView() {
 }
 
 // ═══════════════════════════════════════════
-// UPLOAD TAB — Import CSV/XLSX
+// UPLOAD TAB — Import CSV
 // ═══════════════════════════════════════════
 function UploadTab() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [preview, setPreview] = useState<any[]>([]);
   const [fileName, setFileName] = useState("");
-  const [totalPending, setTotalPending] = useState<number | null>(null);
-
-  useEffect(() => { countPending(); }, []);
-
-  const countPending = async () => {
-    const { count } = await supabase.from("lead_items").select("id", { count: "exact", head: true }).eq("status", "pending").is("assigned_to", null);
-    setTotalPending(count);
-  };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -108,10 +124,7 @@ function UploadTab() {
       complete: (results) => {
         const rows = results.data as any[];
         setPreview(rows.slice(0, 5));
-        if (rows.length === 0) {
-          toast.error("Arquivo vazio ou formato inválido");
-          return;
-        }
+        if (rows.length === 0) { toast.error("Arquivo vazio"); return; }
         importLeads(rows);
       },
       error: (err) => toast.error("Erro ao ler arquivo: " + err.message),
@@ -121,24 +134,19 @@ function UploadTab() {
   const importLeads = async (rows: any[]) => {
     setImporting(true);
     try {
-      // Map columns flexibly
       const items = rows
         .filter(r => r.telefone || r.phone || r.tel)
         .map(r => ({
           phone: (r.telefone || r.phone || r.tel || "").toString().trim(),
-          name: (r.nome || r.name || r.Name || "").toString().trim() || null,
+          name: (r.nome || r.name || "").toString().trim() || null,
           city: (r.cidade || r.city || "").toString().trim() || null,
           state: (r.estado || r.state || r.uf || "").toString().trim() || null,
-          ddd: (r.ddd || "").toString().trim() || (r.telefone || r.phone || "").toString().match(/\((\d{2})\)/)?.[1] || null,
+          ddd: (r.ddd || "").toString().trim() || null,
           status: "pending",
         }));
 
-      if (items.length === 0) {
-        toast.error("Nenhum lead com telefone válido encontrado");
-        return;
-      }
+      if (items.length === 0) { toast.error("Nenhum lead com telefone válido"); return; }
 
-      // Insert in batches of 500
       let inserted = 0;
       for (let i = 0; i < items.length; i += 500) {
         const chunk = items.slice(i, i + 500);
@@ -147,116 +155,87 @@ function UploadTab() {
         inserted += chunk.length;
       }
 
-      toast.success(`${inserted.toLocaleString("pt-BR")} leads importados com sucesso!`);
+      toast.success(`${inserted.toLocaleString("pt-BR")} leads importados!`);
       setPreview([]);
       setFileName("");
       if (fileRef.current) fileRef.current.value = "";
-      countPending();
     } catch (e: any) {
-      toast.error("Erro na importação: " + e.message);
+      toast.error("Erro: " + e.message);
     } finally {
       setImporting(false);
     }
   };
 
   return (
-    <>
-      {totalPending !== null && (
-        <Card>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-warning/10 text-warning">
-                <Package className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Leads pendentes (não distribuídos)</p>
-                <p className="text-2xl font-bold text-foreground">{totalPending.toLocaleString("pt-BR")}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card variant="gradient" className="card-accent-top">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Upload className="h-5 w-5 text-primary" />
-            Importar Leads (CSV)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Envie um arquivo CSV com as colunas: <span className="font-mono text-xs text-foreground">nome, telefone, cidade, estado, ddd</span>
-          </p>
-
-          <div className="flex gap-3 items-center">
-            <input ref={fileRef} type="file" accept=".csv,.txt" onChange={handleFile} className="hidden" />
-            <Button onClick={() => fileRef.current?.click()} disabled={importing} className="gap-2 btn-modern">
-              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {importing ? "Importando..." : "Selecionar Arquivo"}
-            </Button>
-            {fileName && <span className="text-sm text-muted-foreground">{fileName}</span>}
-          </div>
-
-          {preview.length > 0 && (
-            <div className="border rounded-lg overflow-hidden">
-              <p className="text-xs text-muted-foreground p-2 bg-muted/30">Prévia (primeiras 5 linhas)</p>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {Object.keys(preview[0]).slice(0, 5).map(k => (
-                      <TableHead key={k} className="text-xs">{k}</TableHead>
+    <Card variant="gradient" className="card-accent-top">
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Upload className="h-5 w-5 text-primary" /> Importar Leads (CSV)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Colunas aceitas: <span className="font-mono text-xs text-foreground">nome, telefone, cidade, estado, ddd</span>
+        </p>
+        <div className="flex gap-3 items-center">
+          <input ref={fileRef} type="file" accept=".csv,.txt" onChange={handleFile} className="hidden" />
+          <Button onClick={() => fileRef.current?.click()} disabled={importing} className="gap-2 btn-modern">
+            {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {importing ? "Importando..." : "Selecionar Arquivo"}
+          </Button>
+          {fileName && <span className="text-sm text-muted-foreground">{fileName}</span>}
+        </div>
+        {preview.length > 0 && (
+          <div className="border rounded-lg overflow-hidden">
+            <p className="text-xs text-muted-foreground p-2 bg-muted/30">Prévia (primeiras 5 linhas)</p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {Object.keys(preview[0]).slice(0, 5).map(k => (
+                    <TableHead key={k} className="text-xs">{k}</TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {preview.map((row, i) => (
+                  <TableRow key={i}>
+                    {Object.values(row).slice(0, 5).map((v, j) => (
+                      <TableCell key={j} className="text-xs">{String(v || "—")}</TableCell>
                     ))}
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {preview.map((row, i) => (
-                    <TableRow key={i}>
-                      {Object.values(row).slice(0, 5).map((v, j) => (
-                        <TableCell key={j} className="text-xs">{String(v || "—")}</TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
 // ═══════════════════════════════════════════
-// DISTRIBUTE TAB — Manual Distribution
+// DISTRIBUTE TAB
 // ═══════════════════════════════════════════
 function DistributeTab() {
   const { collaborator: currentCollab } = useCollaborator();
   const [loading, setLoading] = useState(true);
   const [distributing, setDistributing] = useState(false);
   const [distributingAll, setDistributingAll] = useState(false);
-
-  // Filters
   const [filterCity, setFilterCity] = useState("all");
   const [filterDDD, setFilterDDD] = useState("all");
-  const [filterSource, setFilterSource] = useState("all");
   const [targetCollab, setTargetCollab] = useState("");
-
-  // Data
   const [cities, setCities] = useState<string[]>([]);
   const [ddds, setDDDs] = useState<string[]>([]);
-  const [sources, setSources] = useState<string[]>([]);
   const [commercialCollabs, setCommercialCollabs] = useState<{ id: string; name: string }[]>([]);
   const [availableCount, setAvailableCount] = useState(0);
   const [totalPending, setTotalPending] = useState(0);
 
   useEffect(() => { loadFilterOptions(); }, []);
-  useEffect(() => { countAvailable(); }, [filterCity, filterDDD, filterSource]);
+  useEffect(() => { countAvailable(); }, [filterCity, filterDDD]);
 
   const loadFilterOptions = async () => {
     setLoading(true);
     try {
-      // Get unique cities, DDDs from pending lead_items
       const { data: items } = await supabase.from("lead_items")
         .select("city,ddd")
         .eq("status", "pending")
@@ -272,45 +251,22 @@ function DistributeTab() {
       setCities(Array.from(citySet).sort());
       setDDDs(Array.from(dddSet).sort());
 
-      // Get commercial collaborators (roles with commercial slugs)
       const { data: roles } = await supabase.from("roles")
-        .select("id,slug,level")
-        .gte("level", 2)
-        .eq("active", true);
-
+        .select("id,slug,level").gte("level", 2).eq("active", true);
       const commercialRoleIds = (roles || [])
         .filter(r => r.slug && COMMERCIAL_SLUGS.some(s => r.slug.includes(s)))
         .map(r => r.id);
 
       if (commercialRoleIds.length > 0) {
         const { data: collabs } = await supabase.from("collaborators")
-          .select("id,name,role_id")
-          .in("role_id", commercialRoleIds)
-          .eq("active", true)
-          .order("name");
+          .select("id,name,role_id").in("role_id", commercialRoleIds).eq("active", true).order("name");
         setCommercialCollabs(collabs || []);
-      } else {
-        // Fallback: all active collaborators with level >= 2
-        const { data: allRoles } = await supabase.from("roles").select("id").gte("level", 2).eq("active", true);
-        const roleIds = (allRoles || []).map(r => r.id);
-        if (roleIds.length > 0) {
-          const { data: collabs } = await supabase.from("collaborators")
-            .select("id,name,role_id")
-            .in("role_id", roleIds)
-            .eq("active", true)
-            .order("name");
-          setCommercialCollabs(collabs || []);
-        }
       }
 
-      // Total pending count
       const { count } = await supabase.from("lead_items").select("id", { count: "exact", head: true }).eq("status", "pending").is("assigned_to", null);
       setTotalPending(count || 0);
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: any) { toast.error(e.message); }
+    finally { setLoading(false); }
   };
 
   const countAvailable = async () => {
@@ -336,17 +292,15 @@ function DistributeTab() {
       if (fetchErr) throw fetchErr;
       if (!leads || leads.length === 0) { toast.error("Nenhum lead disponível"); return; }
 
-      // Create batch
       const { data: batch, error: batchErr } = await supabase.from("lead_batches").insert({
         created_by: currentCollab?.id || null,
         assigned_to: targetCollab,
         total_leads: leads.length,
         status: "pending",
-        filters: { city: filterCity, ddd: filterDDD, source: filterSource },
+        filters: { city: filterCity, ddd: filterDDD },
       }).select("id").single();
       if (batchErr) throw batchErr;
 
-      // Update lead_items
       const ids = leads.map(l => l.id);
       for (let i = 0; i < ids.length; i += 500) {
         const chunk = ids.slice(i, i + 500);
@@ -361,40 +315,31 @@ function DistributeTab() {
       toast.success(`${leads.length} leads enviados para ${collabName}!`);
       countAvailable();
       loadFilterOptions();
-    } catch (e: any) {
-      toast.error("Erro: " + e.message);
-    } finally {
-      setDistributing(false);
-    }
+    } catch (e: any) { toast.error("Erro: " + e.message); }
+    finally { setDistributing(false); }
   };
 
   const handleDistributeAll = async () => {
-    if (commercialCollabs.length === 0) { toast.error("Nenhum consultor comercial encontrado"); return; }
+    if (commercialCollabs.length === 0) { toast.error("Nenhum consultor encontrado"); return; }
     setDistributingAll(true);
     try {
-      // Fetch all pending leads (up to max per collab * collab count)
       const batchSize = 500;
-      const totalToDistribute = batchSize * commercialCollabs.length;
-
-      const { data: leads, error: fetchErr } = await buildFilteredQuery().limit(totalToDistribute);
+      const { data: leads, error: fetchErr } = await buildFilteredQuery().limit(batchSize * commercialCollabs.length);
       if (fetchErr) throw fetchErr;
       if (!leads || leads.length === 0) { toast.error("Nenhum lead disponível"); return; }
 
       const perCollab = Math.ceil(leads.length / commercialCollabs.length);
-
       for (let i = 0; i < commercialCollabs.length; i++) {
         const slice = leads.slice(i * perCollab, (i + 1) * perCollab);
         if (slice.length === 0) continue;
-
         const { data: batch, error: batchErr } = await supabase.from("lead_batches").insert({
           created_by: currentCollab?.id || null,
           assigned_to: commercialCollabs[i].id,
           total_leads: slice.length,
           status: "pending",
-          filters: { city: filterCity, ddd: filterDDD, source: filterSource },
+          filters: { city: filterCity, ddd: filterDDD },
         }).select("id").single();
         if (batchErr) throw batchErr;
-
         const ids = slice.map(l => l.id);
         for (let j = 0; j < ids.length; j += 500) {
           const chunk = ids.slice(j, j + 500);
@@ -405,24 +350,17 @@ function DistributeTab() {
           }).in("id", chunk);
         }
       }
-
       toast.success(`${leads.length} leads distribuídos para ${commercialCollabs.length} consultores!`);
       countAvailable();
       loadFilterOptions();
-    } catch (e: any) {
-      toast.error("Erro: " + e.message);
-    } finally {
-      setDistributingAll(false);
-    }
+    } catch (e: any) { toast.error("Erro: " + e.message); }
+    finally { setDistributingAll(false); }
   };
 
-  if (loading) {
-    return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
-  }
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
   return (
     <>
-      {/* Pending count */}
       <Card>
         <CardContent className="pt-5 pb-4">
           <div className="flex items-center gap-3">
@@ -438,12 +376,10 @@ function DistributeTab() {
       <Card variant="gradient" className="card-accent-top">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Shuffle className="h-5 w-5 text-primary" />
-            Distribuição Manual
+            <Shuffle className="h-5 w-5 text-primary" /> Distribuição Manual
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Filters */}
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Filtros</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -474,8 +410,6 @@ function DistributeTab() {
               </div>
             </div>
           </div>
-
-          {/* Target */}
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Destinatário</p>
             <Select value={targetCollab} onValueChange={setTargetCollab}>
@@ -485,8 +419,6 @@ function DistributeTab() {
               </SelectContent>
             </Select>
           </div>
-
-          {/* Actions */}
           <div className="flex flex-wrap gap-3">
             <Button onClick={handleSendBatch} disabled={distributing || !targetCollab || availableCount === 0} className="gap-2 btn-modern">
               {distributing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -497,12 +429,6 @@ function DistributeTab() {
               Distribuir para Todos ({commercialCollabs.length})
             </Button>
           </div>
-
-          {commercialCollabs.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              "Distribuir para Todos" envia ~{Math.ceil(Math.min(availableCount, 500 * commercialCollabs.length) / commercialCollabs.length)} leads por consultor (lotes de 500)
-            </p>
-          )}
         </CardContent>
       </Card>
     </>
@@ -510,14 +436,14 @@ function DistributeTab() {
 }
 
 // ═══════════════════════════════════════════
-// DASHBOARD TAB — Overview + Auto-refill toggle
+// DASHBOARD TAB — Overview via Edge Function lead-pool
 // ═══════════════════════════════════════════
 function DashboardTab() {
   const [loading, setLoading] = useState(true);
   const [autoRefill, setAutoRefill] = useState(false);
   const [togglingRefill, setTogglingRefill] = useState(false);
-  const [stats, setStats] = useState({ pending: 0, distributed: 0, dispatched: 0, total: 0 });
-  const [collabStats, setCollabStats] = useState<{ id: string; name: string; distributed: number; dispatched: number }[]>([]);
+  const [globalStats, setGlobalStats] = useState({ pending: 0, sent: 0, responded: 0, converted: 0 });
+  const [collabRows, setCollabRows] = useState<{ id: string; name: string; pending: number; sent: number; responded: number; converted: number }[]>([]);
 
   useEffect(() => { loadDashboard(); }, []);
 
@@ -528,64 +454,54 @@ function DashboardTab() {
       const { data: cfg } = await supabase.from("system_configs").select("value").eq("key", "auto_refill_enabled").single();
       setAutoRefill(cfg?.value === "true");
 
-      // Counts via head:true (no data transfer)
-      const [pendingRes, distributedRes, dispatchedRes, totalRes] = await Promise.all([
-        supabase.from("lead_items").select("id", { count: "exact", head: true }).eq("status", "pending").is("assigned_to", null),
-        supabase.from("lead_items").select("id", { count: "exact", head: true }).eq("status", "distributed"),
-        supabase.from("lead_items").select("id", { count: "exact", head: true }).eq("status", "dispatched"),
-        supabase.from("lead_items").select("id", { count: "exact", head: true }),
-      ]);
-      setStats({
-        pending: pendingRes.count || 0,
-        distributed: distributedRes.count || 0,
-        dispatched: dispatchedRes.count || 0,
-        total: totalRes.count || 0,
-      });
+      // Global status from edge function (no collaborator_id = all)
+      const statusData = await callLeadPool("status");
 
-      // Per-collaborator stats: get batches which already have assigned_to + total_leads
-      const { data: batches } = await supabase.from("lead_batches")
-        .select("assigned_to, total_leads, status");
+      // statusData can be: { totals: {...}, by_collaborator: [{...}] } or flat
+      if (statusData?.by_collaborator) {
+        // Structured response
+        setGlobalStats({
+          pending: statusData.totals?.pending || 0,
+          sent: statusData.totals?.sent || statusData.totals?.dispatched || 0,
+          responded: statusData.totals?.responded || 0,
+          converted: statusData.totals?.converted || 0,
+        });
 
-      // Also get per-collab dispatched counts (only assigned collabs)
-      const collabMap = new Map<string, { distributed: number; dispatched: number }>();
-      (batches || []).forEach(b => {
-        if (!b.assigned_to) return;
-        if (!collabMap.has(b.assigned_to)) collabMap.set(b.assigned_to, { distributed: 0, dispatched: 0 });
-        const entry = collabMap.get(b.assigned_to)!;
-        entry.distributed += (b.total_leads || 0);
-      });
-
-      // Get actual dispatched count per collaborator
-      const collabIds = Array.from(collabMap.keys());
-      if (collabIds.length > 0) {
-        // Get dispatched counts per collab
-        for (const cid of collabIds) {
-          const { count } = await supabase.from("lead_items")
-            .select("id", { count: "exact", head: true })
-            .eq("assigned_to", cid)
-            .eq("status", "dispatched");
-          const entry = collabMap.get(cid)!;
-          entry.dispatched = count || 0;
-          // distributed = total assigned - dispatched
-          entry.distributed = Math.max(0, entry.distributed - entry.dispatched);
+        const collabIds = statusData.by_collaborator.map((c: any) => c.collaborator_id).filter(Boolean);
+        let nameMap = new Map<string, string>();
+        if (collabIds.length > 0) {
+          const { data: collabs } = await supabase.from("collaborators").select("id,name").in("id", collabIds);
+          nameMap = new Map((collabs || []).map((c: any) => [c.id, c.name]));
         }
 
-        const { data: collabs } = await supabase.from("collaborators").select("id,name").in("id", collabIds);
-        const nameMap = new Map((collabs || []).map(c => [c.id, c.name]));
-        setCollabStats(
-          collabIds
-            .map(id => ({ id, name: nameMap.get(id) || "—", ...collabMap.get(id)! }))
-            .filter(c => c.distributed + c.dispatched > 0)
-            .sort((a, b) => (b.distributed + b.dispatched) - (a.distributed + a.dispatched))
+        setCollabRows(
+          statusData.by_collaborator.map((c: any) => ({
+            id: c.collaborator_id,
+            name: nameMap.get(c.collaborator_id) || "—",
+            pending: c.pending || 0,
+            sent: c.sent || c.dispatched || 0,
+            responded: c.responded || 0,
+            converted: c.converted || 0,
+          }))
+          .filter((c: any) => c.pending + c.sent + c.responded + c.converted > 0)
+          .sort((a: any, b: any) => (b.pending + b.sent) - (a.pending + a.sent))
         );
+      } else {
+        // Flat response — single totals
+        setGlobalStats({
+          pending: statusData?.pending || 0,
+          sent: statusData?.sent || statusData?.dispatched || 0,
+          responded: statusData?.responded || 0,
+          converted: statusData?.converted || 0,
+        });
+        setCollabRows([]);
       }
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Erro ao carregar dashboard: " + e.message);
     } finally {
       setLoading(false);
     }
   };
-
 
   const toggleAutoRefill = async (enabled: boolean) => {
     setTogglingRefill(true);
@@ -597,25 +513,23 @@ function DashboardTab() {
       if (error) throw error;
       setAutoRefill(enabled);
       toast.success(enabled ? "Reposição automática ativada" : "Reposição automática desativada");
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setTogglingRefill(false);
-    }
+    } catch (e: any) { toast.error(e.message); }
+    finally { setTogglingRefill(false); }
   };
 
-  if (loading) {
-    return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
-  }
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+
+  const totalAll = globalStats.pending + globalStats.sent + globalStats.responded + globalStats.converted;
 
   return (
     <>
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SummaryCard icon={<Package className="h-5 w-5" />} label="Pendentes" value={stats.pending} color="yellow" />
-        <SummaryCard icon={<Send className="h-5 w-5" />} label="Distribuídos" value={stats.distributed} />
-        <SummaryCard icon={<CheckCircle className="h-5 w-5" />} label="Disparados" value={stats.dispatched} color="green" />
-        <SummaryCard icon={<TrendingUp className="h-5 w-5" />} label="Total" value={stats.total} />
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <SummaryCard icon={<Package className="h-5 w-5" />} label="Pendentes" value={globalStats.pending} color="yellow" />
+        <SummaryCard icon={<Send className="h-5 w-5" />} label="Enviados" value={globalStats.sent} />
+        <SummaryCard icon={<MessageCircle className="h-5 w-5" />} label="Responderam" value={globalStats.responded} color="green" />
+        <SummaryCard icon={<CheckCircle className="h-5 w-5" />} label="Convertidos" value={globalStats.converted} color="green" />
+        <SummaryCard icon={<TrendingUp className="h-5 w-5" />} label="Total" value={totalAll} />
       </div>
 
       {/* Auto-refill toggle */}
@@ -623,21 +537,13 @@ function DashboardTab() {
         <CardContent className="pt-5 pb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                <Zap className="h-5 w-5" />
-              </div>
+              <div className="p-2 rounded-lg bg-primary/10 text-primary"><Zap className="h-5 w-5" /></div>
               <div>
                 <p className="font-medium text-foreground">Reposição Automática (Bolt)</p>
-                <p className="text-xs text-muted-foreground">
-                  Quando ativado, o Bolt repõe automaticamente leads quando o estoque cai abaixo do threshold
-                </p>
+                <p className="text-xs text-muted-foreground">Repõe leads automaticamente quando estoque cai abaixo do threshold</p>
               </div>
             </div>
-            <Switch
-              checked={autoRefill}
-              onCheckedChange={toggleAutoRefill}
-              disabled={togglingRefill}
-            />
+            <Switch checked={autoRefill} onCheckedChange={toggleAutoRefill} disabled={togglingRefill} />
           </div>
         </CardContent>
       </Card>
@@ -656,31 +562,35 @@ function DashboardTab() {
               <TableRow>
                 <TableHead>Colaborador</TableHead>
                 <TableHead className="text-center">Pendentes</TableHead>
-                <TableHead className="text-center">Disparados</TableHead>
+                <TableHead className="text-center">Enviados</TableHead>
+                <TableHead className="text-center">Responderam</TableHead>
+                <TableHead className="text-center">Convertidos</TableHead>
                 <TableHead className="text-center">Taxa</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {collabStats.length === 0 ? (
+              {collabRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     Nenhum colaborador com leads
                   </TableCell>
                 </TableRow>
-              ) : collabStats.map(c => {
-                const total = c.distributed + c.dispatched;
-                const rate = total > 0 ? Math.round((c.dispatched / total) * 100) : 0;
+              ) : collabRows.map(c => {
+                const total = c.pending + c.sent + c.responded + c.converted;
+                const rate = total > 0 ? Math.round(((c.responded + c.converted) / total) * 100) : 0;
                 return (
                   <TableRow key={c.id} className="table-row-hover">
                     <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="text-center"><Badge variant="secondary">{c.pending}</Badge></TableCell>
+                    <TableCell className="text-center">{c.sent}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="secondary">{c.distributed}</Badge>
+                      {c.responded > 0 ? <Badge className="bg-primary/20 text-primary">{c.responded}</Badge> : "0"}
                     </TableCell>
                     <TableCell className="text-center">
-                      {c.dispatched > 0 ? <Badge className="bg-success/20 text-success">{c.dispatched}</Badge> : "0"}
+                      {c.converted > 0 ? <Badge className="bg-success/20 text-success">{c.converted}</Badge> : "0"}
                     </TableCell>
                     <TableCell className="text-center">
-                      <span className={rate > 50 ? "text-success font-semibold" : "text-muted-foreground"}>{rate}%</span>
+                      <span className={rate > 30 ? "text-success font-semibold" : "text-muted-foreground"}>{rate}%</span>
                     </TableCell>
                   </TableRow>
                 );
@@ -696,8 +606,6 @@ function DashboardTab() {
 // ═══════════════════════════════════════════
 // CONSULTOR VIEW — Meus Leads via Edge Function lead-pool
 // ═══════════════════════════════════════════
-const LEAD_POOL_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/lead-pool";
-
 function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -706,54 +614,23 @@ function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
   const [markingAll, setMarkingAll] = useState(false);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
-  const [counts, setCounts] = useState({ pending: 0, dispatched: 0, responded: 0, converted: 0, total: 0 });
+  const [counts, setCounts] = useState({ pending: 0, sent: 0, responded: 0, converted: 0 });
 
   useEffect(() => { if (collaboratorId) fetchAll(); }, [collaboratorId, page]);
-
-  const getAuthHeaders = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${session?.access_token || ""}`,
-    };
-  };
 
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const headers = await getAuthHeaders();
-
-      const [leadsRes, statusRes] = await Promise.all([
-        fetch(LEAD_POOL_URL, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            action: "list_pending",
-            collaborator_id: collaboratorId,
-            page,
-            page_size: PAGE_SIZE,
-          }),
-        }),
-        fetch(LEAD_POOL_URL, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            action: "status",
-            collaborator_id: collaboratorId,
-          }),
-        }),
+      const [leadsData, statusData] = await Promise.all([
+        callLeadPool("list_pending", { collaborator_id: collaboratorId, page, page_size: PAGE_SIZE }),
+        callLeadPool("status", { collaborator_id: collaboratorId }),
       ]);
-
-      const leadsData = await leadsRes.json();
-      const statusData = await statusRes.json();
-
       setLeads(leadsData?.leads || leadsData?.data || []);
       setCounts({
         pending: statusData?.pending || 0,
-        dispatched: statusData?.dispatched || 0,
+        sent: statusData?.sent || statusData?.dispatched || 0,
         responded: statusData?.responded || 0,
         converted: statusData?.converted || 0,
-        total: (statusData?.pending || 0) + (statusData?.dispatched || 0) + (statusData?.responded || 0) + (statusData?.converted || 0),
       });
     } catch (e: any) {
       toast.error("Erro ao carregar leads: " + e.message);
@@ -772,41 +649,24 @@ function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
 
   const markAsDispatched = async (id: string) => {
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(LEAD_POOL_URL, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ action: "mark_dispatched", id }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Erro");
+      await callLeadPool("mark_dispatched", { id });
       fetchAll();
-    } catch (e: any) {
-      toast.error(e.message);
-    }
+    } catch (e: any) { toast.error(e.message); }
   };
 
   const markSelectedAsDispatched = async () => {
     if (selected.size === 0) return;
     setMarkingAll(true);
     try {
-      const headers = await getAuthHeaders();
       const ids = Array.from(selected);
       for (const id of ids) {
-        await fetch(LEAD_POOL_URL, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ action: "mark_dispatched", id }),
-        });
+        await callLeadPool("mark_dispatched", { id });
       }
       toast.success(`${ids.length} leads marcados como enviados`);
       setSelected(new Set());
       fetchAll();
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setMarkingAll(false);
-    }
+    } catch (e: any) { toast.error(e.message); }
+    finally { setMarkingAll(false); }
   };
 
   const toggleSelect = (id: string) => {
@@ -819,30 +679,26 @@ function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
     else setSelected(new Set(pendingIds));
   };
 
-  const copyPhone = (phone: string) => {
-    navigator.clipboard.writeText(phone);
-    toast.success("Telefone copiado!");
-  };
+  const copyPhone = (phone: string) => { navigator.clipboard.writeText(phone); toast.success("Copiado!"); };
 
   const openWhatsApp = (phone: string) => {
     const digits = phone.replace(/\D/g, "");
-    const num = digits.startsWith("55") ? digits : `55${digits}`;
-    window.open(`https://wa.me/${num}`, "_blank");
+    window.open(`https://wa.me/${digits.startsWith("55") ? digits : `55${digits}`}`, "_blank");
   };
 
   const statusLabel = (s: string) => {
     switch (s) {
       case "pending": case "distributed": return "Pendente";
-      case "dispatched": return "Enviado";
+      case "dispatched": case "sent": return "Enviado";
       case "responded": return "Respondeu";
       case "converted": return "Convertido";
       default: return s;
     }
   };
 
-  const statusBadge = (s: string) => {
+  const statusBadgeClass = (s: string) => {
     switch (s) {
-      case "dispatched": return "bg-success/20 text-success";
+      case "dispatched": case "sent": return "bg-success/20 text-success";
       case "responded": return "bg-primary/20 text-primary";
       case "converted": return "bg-accent/20 text-accent-foreground";
       default: return "";
@@ -851,15 +707,13 @@ function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
 
   return (
     <>
-      {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <SummaryCard icon={<Package className="h-5 w-5" />} label="Pendentes" value={counts.pending} color="yellow" />
-        <SummaryCard icon={<CheckCircle className="h-5 w-5" />} label="Enviados" value={counts.dispatched} color="green" />
+        <SummaryCard icon={<CheckCircle className="h-5 w-5" />} label="Enviados" value={counts.sent} color="green" />
         <SummaryCard icon={<MessageCircle className="h-5 w-5" />} label="Responderam" value={counts.responded} />
         <SummaryCard icon={<TrendingUp className="h-5 w-5" />} label="Convertidos" value={counts.converted} />
       </div>
 
-      {/* Leads Table */}
       <Card variant="gradient">
         <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-base">Meus Leads</CardTitle>
@@ -936,13 +790,13 @@ function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
                   </TableCell>
                   <TableCell>{l.city || "—"}</TableCell>
                   <TableCell>
-                    {l.campaign_tag ? (
-                      <Badge variant="outline" className="text-xs">{l.campaign_tag}</Badge>
-                    ) : "—"}
+                    {l.campaign_tag ? <Badge variant="outline" className="text-xs">{l.campaign_tag}</Badge> : "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={l.status === "pending" || l.status === "distributed" ? "secondary" : "default"}
-                      className={statusBadge(l.status)}>
+                    <Badge
+                      variant={l.status === "pending" || l.status === "distributed" ? "secondary" : "default"}
+                      className={statusBadgeClass(l.status)}
+                    >
                       {statusLabel(l.status)}
                     </Badge>
                   </TableCell>
