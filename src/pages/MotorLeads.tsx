@@ -42,7 +42,7 @@ export default function MotorLeads() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Motor de Leads</h1>
             <p className="text-muted-foreground text-sm">
-              {isAdmin ? "Upload, distribuição e acompanhamento de leads" : "Leads distribuídos para você"}
+              {isAdmin ? "Visão geral dos pools" : "Leads distribuídos para você"}
             </p>
           </div>
         </div>
@@ -517,9 +517,6 @@ function DashboardTab() {
   const [togglingRefill, setTogglingRefill] = useState(false);
   const [stats, setStats] = useState({ pending: 0, distributed: 0, dispatched: 0, total: 0 });
   const [collabStats, setCollabStats] = useState<{ id: string; name: string; distributed: number; dispatched: number }[]>([]);
-  const [expandedCollab, setExpandedCollab] = useState<string | null>(null);
-  const [expandedLeads, setExpandedLeads] = useState<any[]>([]);
-  const [loadingLeads, setLoadingLeads] = useState(false);
 
   useEffect(() => { loadDashboard(); }, []);
 
@@ -588,23 +585,6 @@ function DashboardTab() {
     }
   };
 
-  const loadCollabLeads = async (collabId: string) => {
-    if (expandedCollab === collabId) {
-      setExpandedCollab(null);
-      setExpandedLeads([]);
-      return;
-    }
-    setExpandedCollab(collabId);
-    setLoadingLeads(true);
-    const { data } = await supabase.from("lead_items")
-      .select("id, name, phone, city, ddd, status, dispatched_at")
-      .eq("assigned_to", collabId)
-      .in("status", ["distributed", "dispatched"])
-      .order("created_at", { ascending: false })
-      .limit(50);
-    setExpandedLeads(data || []);
-    setLoadingLeads(false);
-  };
 
   const toggleAutoRefill = async (enabled: boolean) => {
     setTogglingRefill(true);
@@ -677,82 +657,31 @@ function DashboardTab() {
                 <TableHead className="text-center">Pendentes</TableHead>
                 <TableHead className="text-center">Disparados</TableHead>
                 <TableHead className="text-center">Taxa</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {collabStats.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                     Nenhum colaborador com leads
                   </TableCell>
                 </TableRow>
               ) : collabStats.map(c => {
                 const total = c.distributed + c.dispatched;
                 const rate = total > 0 ? Math.round((c.dispatched / total) * 100) : 0;
-                const isExpanded = expandedCollab === c.id;
                 return (
-                  <>
-                    <TableRow key={c.id} className="table-row-hover">
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary">{c.distributed}</Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {c.dispatched > 0 ? <Badge className="bg-success/20 text-success">{c.dispatched}</Badge> : "0"}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className={rate > 50 ? "text-success font-semibold" : "text-muted-foreground"}>{rate}%</span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button size="sm" variant={isExpanded ? "default" : "outline"} onClick={() => loadCollabLeads(c.id)} className="gap-1 text-xs">
-                          <Eye className="h-3.5 w-3.5" /> {isExpanded ? "Fechar" : "Ver Leads"}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                    {isExpanded && (
-                      <TableRow key={`${c.id}-detail`}>
-                        <TableCell colSpan={5} className="p-0 bg-muted/30">
-                          {loadingLeads ? (
-                            <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
-                          ) : expandedLeads.length === 0 ? (
-                            <p className="text-center text-muted-foreground py-6 text-sm">Nenhum lead encontrado</p>
-                          ) : (
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="text-xs">Nome</TableHead>
-                                  <TableHead className="text-xs">Telefone</TableHead>
-                                  <TableHead className="text-xs">Cidade</TableHead>
-                                  <TableHead className="text-xs">DDD</TableHead>
-                                  <TableHead className="text-xs">Status</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {expandedLeads.map(l => (
-                                  <TableRow key={l.id}>
-                                    <TableCell className="text-xs">{l.name || "—"}</TableCell>
-                                    <TableCell className="text-xs font-mono">{l.phone}</TableCell>
-                                    <TableCell className="text-xs">{l.city || "—"}</TableCell>
-                                    <TableCell className="text-xs">{l.ddd || "—"}</TableCell>
-                                    <TableCell className="text-xs">
-                                      <Badge variant={l.status === "distributed" ? "secondary" : "default"}
-                                        className={l.status === "dispatched" ? "bg-success/20 text-success" : ""}>
-                                        {l.status === "distributed" ? "Pendente" : "Enviado"}
-                                      </Badge>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          )}
-                          {expandedLeads.length === 50 && (
-                            <p className="text-center text-xs text-muted-foreground py-2">Mostrando primeiros 50 leads</p>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </>
+                  <TableRow key={c.id} className="table-row-hover">
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="secondary">{c.distributed}</Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {c.dispatched > 0 ? <Badge className="bg-success/20 text-success">{c.dispatched}</Badge> : "0"}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className={rate > 50 ? "text-success font-semibold" : "text-muted-foreground"}>{rate}%</span>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
             </TableBody>
