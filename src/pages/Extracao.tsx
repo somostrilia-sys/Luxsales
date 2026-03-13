@@ -31,10 +31,11 @@ export default function Extracao() {
   const [progress, setProgress] = useState(0);
   const [lastResult, setLastResult] = useState<{ count: number; sources: string[] } | null>(null);
 
-  if (roleLevel > 1) return <Navigate to="/" replace />;
+  const toggleSource = useCallback((s: string) => {
+    setSources(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  }, []);
 
-  const formatCep = (val: string) => {
-    const digits = val.replace(/\D/g, "").slice(0, 8);
+  if (roleLevel > 1) return <Navigate to="/" replace />;
     if (digits.length > 5) return digits.slice(0, 5) + "-" + digits.slice(5);
     return digits;
   };
