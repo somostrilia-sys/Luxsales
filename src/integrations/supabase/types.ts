@@ -508,46 +508,46 @@ export type Database = {
       }
       invite_links: {
         Row: {
+          active: boolean | null
           company_id: string | null
           created_at: string | null
           created_by: string | null
-          current_uses: number | null
           expires_at: string | null
           id: string
-          is_active: boolean | null
           max_uses: number | null
-          role: string | null
+          role_id: string | null
           token: string
           used_at: string | null
           used_by: string | null
+          used_count: number | null
         }
         Insert: {
+          active?: boolean | null
           company_id?: string | null
           created_at?: string | null
           created_by?: string | null
-          current_uses?: number | null
           expires_at?: string | null
           id?: string
-          is_active?: boolean | null
           max_uses?: number | null
-          role?: string | null
+          role_id?: string | null
           token?: string
           used_at?: string | null
           used_by?: string | null
+          used_count?: number | null
         }
         Update: {
+          active?: boolean | null
           company_id?: string | null
           created_at?: string | null
           created_by?: string | null
-          current_uses?: number | null
           expires_at?: string | null
           id?: string
-          is_active?: boolean | null
           max_uses?: number | null
-          role?: string | null
+          role_id?: string | null
           token?: string
           used_at?: string | null
           used_by?: string | null
+          used_count?: number | null
         }
         Relationships: [
           {
