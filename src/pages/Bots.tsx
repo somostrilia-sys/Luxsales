@@ -368,28 +368,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                   <p className="text-xs text-muted-foreground">Instância: {chip.instance_name}</p>
                 )}
 
-                {/* Campos editáveis de servidor */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Servidor UAZAPI</Label>
-                    <Input
-                      value={chip.uazapi_server_url || ""}
-                      onChange={e => setChips(prev => prev.map(c => c.id === chip.id ? { ...c, uazapi_server_url: e.target.value } : c))}
-                      onBlur={e => updateField(chip.id, "uazapi_server_url", e.target.value)}
-                      className="bg-background border-border text-xs mt-1 h-8"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Admin Token</Label>
-                    <Input
-                      type="password"
-                      value={chip.uazapi_admin_token || ""}
-                      onChange={e => setChips(prev => prev.map(c => c.id === chip.id ? { ...c, uazapi_admin_token: e.target.value } : c))}
-                      onBlur={e => updateField(chip.id, "uazapi_admin_token", e.target.value)}
-                      className="bg-background border-border text-xs mt-1 h-8"
-                    />
-                  </div>
-                </div>
+                {/* Campos de servidor — ocultos para usuários, gerenciados pelo backend */}
               </div>
             ))}
           </div>
