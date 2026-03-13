@@ -401,11 +401,19 @@ function DistributeTab() {
     if (!resolvedCompanyId) return;
     setSyncing(true);
     try {
-      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: resolvedCompanyId });
+      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: resolvedCompanyId, p_limit: 50000 });
       if (error) throw error;
       const r = data as any;
-      toast.success(`Sincronizado! ${r?.total ?? 0} novos leads importados`);
+      const totalImported = r?.total ?? 0;
       await countAvailable();
+      const remaining = countDetails?.naoImportados ?? 0;
+      if (remaining > 0 && totalImported > 0) {
+        toast.success(`Sincronizados ${totalImported.toLocaleString("pt-BR")} leads. Ainda restam ${remaining.toLocaleString("pt-BR")} na base.`);
+      } else if (totalImported > 0) {
+        toast.success(`Sincronizado! ${totalImported.toLocaleString("pt-BR")} novos leads importados`);
+      } else {
+        toast.info("Base já está sincronizada. Nenhum lead novo.");
+      }
     } catch (e: any) { toast.error("Erro ao sincronizar: " + e.message); }
     finally { setSyncing(false); }
   }, [resolvedCompanyId, countAvailable]);
