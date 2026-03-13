@@ -22,11 +22,11 @@ const managementItems: MenuItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, levels: [0, 1, 2] },
   { title: "Agentes de IA", url: "/agentes", icon: Cpu, levels: [0, 1] },
   { title: "Bots / WhatsApp", url: "/bots", icon: Bot, levels: [0, 1, 2, 3] },
-  { title: "Colaboradores", url: "/colaboradores", icon: Users, levels: [0, 1, 2] },
+  { title: "Colaboradores", url: "/colaboradores", icon: Users, levels: [0, 1] },
   { title: "Cadastro", url: "/cadastro", icon: UserPlus, levels: [0, 1] },
   { title: "Extração de Leads", url: "/extracao", icon: FileSearch, levels: [0, 1, 2] },
   { title: "Base de Dados", url: "/base-dados", icon: Database, levels: [0, 1, 2] },
-  { title: "Métricas", url: "/metricas", icon: BarChart3, levels: [0, 1, 2] },
+  { title: "Métricas", url: "/metricas", icon: BarChart3, levels: [0, 1] },
   { title: "Identidade Visual", url: "/identidade-visual", icon: Palette, levels: [0] },
   { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0, 1] },
   { title: "CEO / Bolt", url: "/ceo", icon: Crown, levels: [0] },
@@ -36,7 +36,7 @@ const consultantItems: MenuItem[] = [
   { title: "Conversas", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
   { title: "Meu Bot", url: "/meu-bot", icon: Bot, levels: [0, 1, 2, 3] },
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
-  { title: "Métricas", url: "/metricas", icon: BarChart3, levels: [3] },
+  
 ];
 
 export function AppSidebar() {

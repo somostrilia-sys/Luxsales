@@ -361,7 +361,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
 }
 
 export default function Bots() {
-  const { collaborator } = useCollaborator();
+  const { collaborator, roleLevel } = useCollaborator();
   const { user } = useAuth();
 
   // ── WhatsApp states ──
@@ -546,18 +546,17 @@ export default function Bots() {
 
   const handleSaveBot = async () => {
     if (!botForm.name.trim()) { toast.error("Nome é obrigatório"); return; }
-    if (!botForm.company_id) { toast.error("Selecione uma empresa"); return; }
     setSavingBot(true);
     const payload: any = {
       name: botForm.name.trim(),
-      collaborator_id: botForm.collaborator_id || null,
-      company_id: botForm.company_id,
+      collaborator_id: collaborator?.id || null,
+      company_id: collaborator?.company_id || null,
       bot_type: botForm.bot_type,
       api_key_id: botForm.api_key_id || null,
       uazapi_instance_id: botForm.uazapi_instance_id || null,
       uazapi_token: botForm.uazapi_token || null,
       whatsapp_number: botForm.whatsapp_number || null,
-      agent_ids: selectedAgentIds.length > 0 ? selectedAgentIds : null,
+      agent_ids: null,
       max_msgs_per_day: botForm.max_msgs_per_day,
       msg_interval_min: botForm.msg_interval_min,
       msg_interval_max: botForm.msg_interval_max,
@@ -677,9 +676,11 @@ export default function Bots() {
             <TabsTrigger value="bots" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
               <Bot className="h-4 w-4" /> Bots
             </TabsTrigger>
-            <TabsTrigger value="apikeys" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <Key className="h-4 w-4" /> API Keys
-            </TabsTrigger>
+            {roleLevel <= 1 && (
+              <TabsTrigger value="apikeys" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+                <Key className="h-4 w-4" /> API Keys
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* ════════════════════ ABA BOTS ════════════════════ */}
@@ -752,6 +753,7 @@ export default function Bots() {
           </TabsContent>
 
           {/* ════════════════════ ABA API KEYS ════════════════════ */}
+          {roleLevel <= 1 && (
           <TabsContent value="apikeys" className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="relative max-w-sm flex-1">
@@ -829,6 +831,7 @@ export default function Bots() {
               </div>
             )}
           </TabsContent>
+          )}
         </Tabs>
 
         {/* ════════════════════ MEU WHATSAPP ════════════════════ */}
@@ -896,20 +899,6 @@ export default function Bots() {
               <Input value={botForm.name} onChange={e => setBotForm({ ...botForm, name: e.target.value })} className="bg-[#0a0a0f] border-[#1E1E2E]" />
             </div>
             <div>
-              <Label>Empresa *</Label>
-              <Select value={botForm.company_id} onValueChange={v => { setBotForm({ ...botForm, company_id: v, collaborator_id: "" }); setSelectedAgentIds([]); }}>
-                <SelectTrigger className="bg-[#0a0a0f] border-[#1E1E2E]"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Colaborador vinculado</Label>
-              <Select value={botForm.collaborator_id} onValueChange={v => setBotForm({ ...botForm, collaborator_id: v })}>
-                <SelectTrigger className="bg-[#0a0a0f] border-[#1E1E2E]"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{filteredCollaborators.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
               <Label>Tipo</Label>
               <Select value={botForm.bot_type} onValueChange={v => setBotForm({ ...botForm, bot_type: v })}>
                 <SelectTrigger className="bg-[#0a0a0f] border-[#1E1E2E]"><SelectValue /></SelectTrigger>
@@ -951,21 +940,6 @@ export default function Bots() {
               <Input value={botForm.whatsapp_number} onChange={e => setBotForm({ ...botForm, whatsapp_number: e.target.value })} className="bg-[#0a0a0f] border-[#1E1E2E]" placeholder="+55..." />
             </div>
 
-            {botForm.company_id && (
-              <div>
-                <Label>Agentes vinculados {selectedAgentIds.length > 0 && <span className="text-primary">({selectedAgentIds.length})</span>}</Label>
-                <div className="mt-1 max-h-48 overflow-y-auto border border-[#1E1E2E] rounded-md p-2 space-y-1 bg-[#0a0a0f] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:rounded-full">
-                  {filteredAgents.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2 text-center">Nenhum agente nesta empresa</p>
-                  ) : filteredAgents.map(a => (
-                    <label key={a.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#1E1E2E] cursor-pointer text-sm">
-                      <Checkbox checked={selectedAgentIds.includes(a.id)} onCheckedChange={() => toggleAgentId(a.id)} />
-                      <span className="text-foreground">{a.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <div className="border border-[#1E1E2E] rounded-lg p-4 space-y-3">
               <h4 className="text-sm font-semibold text-foreground">Configuração Anti-Ban</h4>

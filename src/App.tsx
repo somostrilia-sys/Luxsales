@@ -52,8 +52,8 @@ const App = () => (
                 <Route path="/base-dados" element={<ProtectedRoute minLevel={2}><BaseDados /></ProtectedRoute>} />
                 <Route path="/conversas" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
                 <Route path="/meu-bot" element={<ProtectedRoute><MeuBot /></ProtectedRoute>} />
-                <Route path="/metricas" element={<ProtectedRoute><Metricas /></ProtectedRoute>} />
-                <Route path="/colaboradores" element={<ProtectedRoute minLevel={2}><Colaboradores /></ProtectedRoute>} />
+                <Route path="/metricas" element={<ProtectedRoute minLevel={1}><Metricas /></ProtectedRoute>} />
+                <Route path="/colaboradores" element={<ProtectedRoute minLevel={0}><Colaboradores /></ProtectedRoute>} />
                 <Route path="/cadastro" element={<ProtectedRoute minLevel={1}><Cadastro /></ProtectedRoute>} />
                 <Route path="/configuracoes" element={<ProtectedRoute minLevel={1}><Configuracoes /></ProtectedRoute>} />
                 <Route path="/identidade-visual" element={<ProtectedRoute minLevel={0}><IdentidadeVisual /></ProtectedRoute>} />
