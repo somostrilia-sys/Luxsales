@@ -108,7 +108,7 @@ function UploadTab() {
   }, [selectedCompanyId]);
 
   const loadAvailableCount = async () => {
-    const companyId = selectedCompanyId || collaborator?.company_id;
+    const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
     if (!companyId) return;
     const { count } = await supabase
       .from("lead_items")
