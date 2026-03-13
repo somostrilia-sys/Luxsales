@@ -285,7 +285,7 @@ function DistributeTab() {
   const [commercialCollabs, setCommercialCollabs] = useState<{ id: string; name: string }[]>([]);
   const [availableCount, setAvailableCount] = useState(0);
 
-  const companyId = selectedCompanyId || collaborator?.company_id;
+  const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
 
   useEffect(() => { loadFilterOptions(); }, [companyId]);
   useEffect(() => { countAvailable(); }, [filterCity, filterDDD, companyId]);
