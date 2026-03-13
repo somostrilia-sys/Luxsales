@@ -84,14 +84,14 @@
 /* ─── Card gradient styles ─── */
 .card-gradient {
   background: var(--gradient-card);
-  border-color: hsl(240 12% 14%);
+  border-color: hsl(222 30% 15%);
   box-shadow: var(--shadow-card);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .card-gradient:hover {
   background: var(--gradient-card-highlight);
   box-shadow: var(--shadow-card-hover);
-  border-color: hsl(240 12% 18%);
+  border-color: hsl(222 30% 20%);
 }
 
 /* Card with colored top accent */
