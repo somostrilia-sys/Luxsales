@@ -31,7 +31,7 @@ const managementItems: MenuItem[] = [
   { title: "Identidade Visual", url: "/identidade-visual", icon: Palette, levels: [0] },
   { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0, 1] },
   { title: "CEO / Bolt", url: "/ceo", icon: Crown, levels: [0] },
-  { title: "Motor de Leads", url: "/motor-leads", icon: Rocket, levels: [0, 1, 2, 3] },
+  { title: "Leads & Disparo", url: "/motor-leads", icon: Rocket, levels: [0, 1, 2, 3] },
 ];
 
 const consultantItems: MenuItem[] = [
