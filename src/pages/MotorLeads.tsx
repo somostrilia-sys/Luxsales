@@ -517,9 +517,6 @@ function DashboardTab() {
   const [togglingRefill, setTogglingRefill] = useState(false);
   const [stats, setStats] = useState({ pending: 0, distributed: 0, dispatched: 0, total: 0 });
   const [collabStats, setCollabStats] = useState<{ id: string; name: string; distributed: number; dispatched: number }[]>([]);
-  const [expandedCollab, setExpandedCollab] = useState<string | null>(null);
-  const [expandedLeads, setExpandedLeads] = useState<any[]>([]);
-  const [loadingLeads, setLoadingLeads] = useState(false);
 
   useEffect(() => { loadDashboard(); }, []);
 
