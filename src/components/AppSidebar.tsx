@@ -30,13 +30,13 @@ const managementItems: MenuItem[] = [
   { title: "Identidade Visual", url: "/identidade-visual", icon: Palette, levels: [0] },
   { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0, 1] },
   { title: "CEO / Bolt", url: "/ceo", icon: Crown, levels: [0] },
-  { title: "Motor de Disparo", url: "/motor-disparo", icon: Zap, levels: [0, 1] },
+  { title: "Motor de Disparo", url: "/motor-disparo", icon: Zap, levels: [0, 1, 2, 3] },
 ];
 
 const consultantItems: MenuItem[] = [
   { title: "Conversas", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
   { title: "Meu Bot", url: "/meu-bot", icon: Bot, levels: [0, 1, 2, 3] },
-  { title: "Motor de Leads", url: "/motor-leads", icon: Zap, levels: [2, 3] },
+  // Motor de Leads: consultores usam /motor-disparo que tem a view correta por roleLevel
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
   
 ];
