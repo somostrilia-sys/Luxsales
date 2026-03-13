@@ -1,3 +1,4 @@
+// v2.4 — Base de Dados restrito a CEO e Diretores
 import {
   LayoutDashboard, Users, FileSearch, Database,
   BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Zap
