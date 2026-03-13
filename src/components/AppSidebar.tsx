@@ -2,7 +2,7 @@
 import {
   LayoutDashboard, Users, FileSearch, Database,
   BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Zap, Rocket
-} from "lucide-react";
+Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
