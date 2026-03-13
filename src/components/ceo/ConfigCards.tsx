@@ -154,33 +154,6 @@ export function ConfigCards() {
         </CardContent>
       </Card>
 
-      {/* Staff Card - Green border */}
-      <Card className="border-2 border-green-500/60">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-green-500" />
-            API Key dos Colaboradores
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Usada pelos consultores e gestores no painel
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ApiKeyInput
-            label="API Key Anthropic"
-            value={values.anthropic_api_key_staff}
-            onChange={(v) => set("anthropic_api_key_staff", v)}
-          />
-          <Button
-            onClick={() => upsertKeys(["anthropic_api_key_staff"], "staff")}
-            disabled={saving === "staff"}
-            className="w-full gap-2"
-          >
-            <Save className="h-4 w-4" />
-            {saving === "staff" ? "Salvando..." : "Salvar"}
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }
