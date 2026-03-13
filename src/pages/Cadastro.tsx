@@ -206,10 +206,6 @@ export default function Cadastro() {
 
   // ─── Invite Link Functions ───
   const handleCreateInvite = async () => {
-    if (!inviteForm.company_id || !inviteForm.role_id) {
-      toast.error("Selecione empresa e cargo para o convite");
-      return;
-    }
     setInviteCreating(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
