@@ -132,7 +132,7 @@ function InviteRegistration({ token }: { token: string }) {
       if (data.expires_at && new Date(data.expires_at) < new Date()) {
         setInviteError("Este link de cadastro expirou. Solicite um novo ao administrador."); return;
       }
-      if (data.current_uses >= data.max_uses) {
+      if ((data.used_count ?? 0) >= data.max_uses) {
         setInviteError("Este link já atingiu o limite de cadastros. Solicite um novo ao administrador."); return;
       }
 
