@@ -95,6 +95,10 @@ export default function Bots() {
   const { collaborator } = useCollaborator();
   const [myWhatsAppBot, setMyWhatsAppBot] = useState<BotInstance | null>(null);
   const [waLoading, setWaLoading] = useState(true);
+  const [waConnecting, setWaConnecting] = useState(false);
+  const [waQrCode, setWaQrCode] = useState<string | null>(null);
+  const [waConnected, setWaConnected] = useState(false);
+  const [waNumber, setWaNumber] = useState<string | null>(null);
   const [bots, setBots] = useState<BotInstance[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
   const [collaborators, setCollaborators] = useState<any[]>([]);
@@ -152,6 +156,30 @@ export default function Bots() {
       setWaLoading(false);
     })();
   }, [collaborator]);
+
+  // ── WhatsApp helpers ──
+  const handleWaAction = async (action: "create" | "status") => {
+    setWaConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-whatsapp-instance", {
+        body: { action },
+      });
+      if (error || data?.error) {
+        toast.error(data?.error || error?.message || "Erro ao conectar WhatsApp");
+      } else if (data?.connected) {
+        setWaConnected(true);
+        setWaQrCode(null);
+        setWaNumber(data.number || null);
+        toast.success("WhatsApp conectado!");
+      } else if (data?.qr_code) {
+        setWaQrCode(data.qr_code);
+        setWaConnected(false);
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Erro de conexão");
+    }
+    setWaConnecting(false);
+  };
 
   // ── Bot helpers ──
 
@@ -481,34 +509,57 @@ export default function Bots() {
           <CardContent>
             {waLoading ? (
               <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            ) : waConnected ? (
+              <div className="flex items-center gap-4 py-4">
+                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-sm px-3 py-1">🟢 Conectado</Badge>
+                {waNumber && <span className="text-foreground font-medium">{waNumber}</span>}
+                <Button size="sm" variant="outline" onClick={() => handleWaAction("status")} disabled={waConnecting}>
+                  {waConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Atualizar Status"}
+                </Button>
+              </div>
+            ) : waQrCode ? (
+              <div className="flex flex-col items-center gap-4 py-4">
+                <img src={waQrCode} alt="QR Code WhatsApp" className="w-64 h-64 rounded-lg border border-border" />
+                <p className="text-sm text-muted-foreground">Escaneie com o WhatsApp no seu celular</p>
+                <Button size="sm" variant="outline" onClick={() => handleWaAction("status")} disabled={waConnecting} className="gap-2">
+                  {waConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Atualizar Status"}
+                </Button>
+              </div>
             ) : !myWhatsAppBot ? (
-              <div className="text-center py-8 space-y-2">
+              <div className="text-center py-8 space-y-3">
                 <Smartphone className="h-10 w-10 text-muted-foreground mx-auto" />
-                <p className="text-muted-foreground text-sm">Aguardando configuração UAZAPI</p>
-                <p className="text-xs text-muted-foreground">Nenhuma instância WhatsApp vinculada ao seu perfil.</p>
+                <p className="text-muted-foreground text-sm">Nenhuma instância WhatsApp vinculada</p>
+                <Button onClick={() => handleWaAction("create")} disabled={waConnecting} className="gap-2">
+                  {waConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><QrCode className="h-4 w-4" /> Conectar WhatsApp</>}
+                </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground text-xs">Número</span>
-                  <p className="font-medium text-foreground">{myWhatsAppBot.whatsapp_number || "—"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">Status</span>
-                  <div className="mt-1">
-                    <Badge variant="outline" className={myWhatsAppBot.whatsapp_status === "connected" ? "text-emerald-400 border-emerald-500/30" : "text-amber-400 border-amber-500/30"}>
-                      {myWhatsAppBot.whatsapp_status === "connected" ? "🟢 Online" : "🟡 Offline"}
-                    </Badge>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground text-xs">Número</span>
+                    <p className="font-medium text-foreground">{myWhatsAppBot.whatsapp_number || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground text-xs">Status</span>
+                    <div className="mt-1">
+                      <Badge variant="outline" className={myWhatsAppBot.whatsapp_status === "connected" ? "text-emerald-400 border-emerald-500/30" : "text-amber-400 border-amber-500/30"}>
+                        {myWhatsAppBot.whatsapp_status === "connected" ? "🟢 Online" : "🟡 Offline"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground text-xs">Instância UAZAPI</span>
+                    <p className="font-medium text-foreground truncate">{myWhatsAppBot.uazapi_instance_id || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground text-xs">Último acesso</span>
+                    <p className="font-medium text-foreground">{myWhatsAppBot.last_seen_at ? new Date(myWhatsAppBot.last_seen_at).toLocaleString("pt-BR") : "Nunca"}</p>
                   </div>
                 </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">Instância UAZAPI</span>
-                  <p className="font-medium text-foreground truncate">{myWhatsAppBot.uazapi_instance_id || "—"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">Último acesso</span>
-                  <p className="font-medium text-foreground">{myWhatsAppBot.last_seen_at ? new Date(myWhatsAppBot.last_seen_at).toLocaleString("pt-BR") : "Nunca"}</p>
-                </div>
+                <Button size="sm" variant="outline" onClick={() => handleWaAction("create")} disabled={waConnecting} className="gap-2">
+                  {waConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><QrCode className="h-4 w-4" /> Reconectar</>}
+                </Button>
               </div>
             )}
           </CardContent>
