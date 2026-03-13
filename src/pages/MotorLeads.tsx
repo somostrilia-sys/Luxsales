@@ -139,7 +139,7 @@ function UploadTab() {
 
   const handleImport = async () => {
     if (preview.length === 0 || totalRows === 0) return;
-    const companyId = selectedCompanyId || collaborator?.company_id;
+    const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
     if (!companyId) { toast.error("Empresa não encontrada"); return; }
 
     setImporting(true);
