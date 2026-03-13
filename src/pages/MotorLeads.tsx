@@ -400,12 +400,12 @@ function DistributeTab() {
   }, [resolvedCompanyId, filterCity, filterDDD]);
 
   const handleDistribute = async () => {
-    if (!targetCollab || !companyId || !collaborator?.id) { toast.error("Selecione um consultor"); return; }
+    if (!targetCollab || !resolvedCompanyId || !collaborator?.id) { toast.error("Selecione um consultor"); return; }
     setDistributing(true);
     try {
       const { data, error } = await supabase.rpc("distribute_leads", {
         p_assigned_to: targetCollab,
-        p_company_id: companyId,
+        p_company_id: resolvedCompanyId,
         p_assigned_by: collaborator.id,
         p_quantidade: parseInt(quantity) || 500,
         p_filtro_cidade: filterCity || null,
@@ -421,7 +421,7 @@ function DistributeTab() {
   };
 
   const handleDistributeAll = async () => {
-    if (!companyId || !collaborator?.id) return;
+    if (!resolvedCompanyId || !collaborator?.id) return;
     const targets = selectedCollabs.size > 0
       ? commercialCollabs.filter(c => selectedCollabs.has(c.id))
       : commercialCollabs;
@@ -433,7 +433,7 @@ function DistributeTab() {
       for (const collab of targets) {
         const { data, error } = await supabase.rpc("distribute_leads", {
           p_assigned_to: collab.id,
-          p_company_id: companyId,
+          p_company_id: resolvedCompanyId,
           p_assigned_by: collaborator.id,
           p_quantidade: parseInt(quantity) || 500,
           p_filtro_cidade: filterCity || null,
