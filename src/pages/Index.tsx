@@ -32,8 +32,8 @@ export default function Index() {
     const daysAgo = subDays(new Date(), parseInt(period)).toISOString();
 
     // Parallel queries
-    let leadsQ = supabase.from("contact_leads").select("id", { count: "exact", head: true });
-    if (selectedCompanyId !== "all") leadsQ = leadsQ.eq("company_target", selectedCompanyId);
+    // Use RPC for leads count instead of HEAD query on contact_leads
+    const leadsCountPromise = supabase.rpc('get_contact_leads_stats');
 
     let agentsQ = supabase.from("agent_definitions").select("id", { count: "exact", head: true }).eq("active", true);
     if (selectedCompanyId !== "all") agentsQ = agentsQ.eq("company_id", selectedCompanyId);
