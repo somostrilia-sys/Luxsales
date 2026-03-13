@@ -30,7 +30,7 @@ const COMMERCIAL_SLUGS = ["comercial", "consultor", "gestor-comercial", "gestor-
 
 export default function MotorLeads() {
   const { collaborator, roleLevel } = useCollaborator();
-  const isAdmin = roleLevel <= 1 || collaborator?.is_super_admin;
+  const isAdmin = roleLevel <= 1;
 
   return (
     <DashboardLayout>
