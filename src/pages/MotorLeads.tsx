@@ -56,6 +56,7 @@ export default function MotorLeads() {
 // ADMIN VIEW
 // ═══════════════════════════════════════════
 function AdminView() {
+  /* v2 - sem lista individual */
   const [activeTab, setActiveTab] = useState("distribute");
 
   return (
