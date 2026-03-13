@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Crown, Bot } from "lucide-react";
+import { Send, Crown, Bot, Loader2 } from "lucide-react";
 import { ConfigCards } from "@/components/ceo/ConfigCards";
 
 interface AgentDef {
