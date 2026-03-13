@@ -66,7 +66,7 @@ export default function ForgotPassword() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-4">
-              <Button type="submit" className="w-full btn-shimmer bg-gradient-to-r from-kpi-from to-kpi-to" disabled={loading}>
+              <Button type="submit" className="w-full h-11 btn-modern font-semibold" disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Enviar link
               </Button>
