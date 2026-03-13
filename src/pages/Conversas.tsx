@@ -81,8 +81,8 @@ export default function Conversas() {
     await supabase.from("agent_messages").insert({ conversation_id: conversationId, role: "user", content });
     try {
       const history = newMessages.map(m => ({ role: m.role, content: m.content }));
-      const { data, error } = await supabase.functions.invoke("ceo-chat", {
-        body: { message: content, history, key_type: "conversas" },
+      const { data, error } = await supabase.functions.invoke("consultant-chat", {
+        body: { message: content, history, consultant_name: collaborator?.name || "Consultor" },
       });
       if (error || data?.error) {
         toast.error(data?.error || error?.message || "Erro ao enviar");
