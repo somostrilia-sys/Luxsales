@@ -90,7 +90,7 @@ function InviteRegistration({ token }: { token: string }) {
   const [generatedPassword, setGeneratedPassword] = useState("");
 
   const companyFixed = !!invite?.company_id;
-  const roleFixed = !!invite?.role;
+  const roleFixed = !!invite?.role_id;
 
   useEffect(() => { validateInvite(); }, [token]);
   useEffect(() => { if (phone && !whatsapp) setWhatsapp(phone); }, [phone]);
