@@ -59,7 +59,6 @@ const App = () => (
                 <Route path="/configuracoes" element={<ProtectedRoute minLevel={1}><Configuracoes /></ProtectedRoute>} />
                 <Route path="/identidade-visual" element={<ProtectedRoute minLevel={0}><IdentidadeVisual /></ProtectedRoute>} />
                 <Route path="/ceo" element={<ProtectedRoute minLevel={0}><CeoBolt /></ProtectedRoute>} />
-                <Route path="/motor-disparo" element={<ProtectedRoute><MotorDisparo /></ProtectedRoute>} />
                 <Route path="/motor-leads" element={<ProtectedRoute><MotorLeads /></ProtectedRoute>} />
 
                 <Route path="*" element={<NotFound />} />
