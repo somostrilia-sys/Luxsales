@@ -95,14 +95,13 @@ function maskKey(key: string) {
 export default function Bots() {
   const { collaborator } = useCollaborator();
   const { user } = useAuth();
-  const [myWhatsAppBot, setMyWhatsAppBot] = useState<BotInstance | null>(null);
-  const [waLoading, setWaLoading] = useState(true);
-  const [waConnecting, setWaConnecting] = useState(false);
+
+  // ── WhatsApp states ──
+  type WaStatus = "loading" | "disconnected" | "connecting" | "connected" | "no_instance";
+  const [waInstanceStatus, setWaInstanceStatus] = useState<WaStatus>("loading");
   const [waQrCode, setWaQrCode] = useState<string | null>(null);
-  const [waConnected, setWaConnected] = useState(false);
-  const [waNumber, setWaNumber] = useState<string | null>(null);
-  const [collabId, setCollabId] = useState<string | null>(null);
-  const [collabName, setCollabName] = useState<string | null>(null);
+  const [waPhone, setWaPhone] = useState<string | null>(null);
+  const [waProfileName, setWaProfileName] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [bots, setBots] = useState<BotInstance[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
