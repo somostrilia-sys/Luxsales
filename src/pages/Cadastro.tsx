@@ -382,21 +382,27 @@ export default function Cadastro() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Crie um link que permite novos colaboradores se cadastrarem com empresa e cargo pré-definidos.
+                  Crie um link que permite novos colaboradores se cadastrarem. Empresa e cargo são opcionais.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label>Empresa *</Label>
-                    <Select value={inviteForm.company_id} onValueChange={v => setInviteForm(prev => ({ ...prev, company_id: v, role_id: "" }))}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                    <Label>Empresa <span className="text-xs text-muted-foreground">(opcional)</span></Label>
+                    <Select value={inviteForm.company_id || "none"} onValueChange={v => setInviteForm(prev => ({ ...prev, company_id: v === "none" ? "" : v, role_id: "" }))}>
+                      <SelectTrigger><SelectValue placeholder="Colaborador escolhe" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— Colaborador escolhe —</SelectItem>
+                        {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <Label>Cargo *</Label>
-                    <Select value={inviteForm.role_id} onValueChange={v => setInviteForm(prev => ({ ...prev, role_id: v }))}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>{inviteFilteredRoles.map(r => <SelectItem key={r.id} value={r.id}>{r.name} (Lv.{r.level})</SelectItem>)}</SelectContent>
+                    <Label>Cargo <span className="text-xs text-muted-foreground">(opcional)</span></Label>
+                    <Select value={inviteForm.role_id || "none"} onValueChange={v => setInviteForm(prev => ({ ...prev, role_id: v === "none" ? "" : v }))}>
+                      <SelectTrigger><SelectValue placeholder="Colaborador escolhe" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— Colaborador escolhe —</SelectItem>
+                        {inviteFilteredRoles.map(r => <SelectItem key={r.id} value={r.id}>{r.name} (Lv.{r.level})</SelectItem>)}
+                      </SelectContent>
                     </Select>
                   </div>
                   <div>
