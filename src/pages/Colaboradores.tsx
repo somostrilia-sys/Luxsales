@@ -260,7 +260,7 @@ export default function Colaboradores() {
   };
 
   const deactivateInvite = async (id: string) => {
-    const { error } = await supabase.from("invite_links").update({ is_active: false }).eq("id", id);
+    const { error } = await supabase.from("invite_links").update({ active: false }).eq("id", id);
     if (error) toast.error("Erro ao desativar");
     else { toast.success("Convite desativado"); loadInvites(); }
   };
