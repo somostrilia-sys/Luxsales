@@ -753,6 +753,7 @@ export default function Bots() {
           </TabsContent>
 
           {/* ════════════════════ ABA API KEYS ════════════════════ */}
+          {roleLevel <= 1 && (
           <TabsContent value="apikeys" className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="relative max-w-sm flex-1">
@@ -829,7 +830,8 @@ export default function Bots() {
                 })}
               </div>
             )}
-          </TabsContent>}
+          </TabsContent>
+          )}
         </Tabs>
 
         {/* ════════════════════ MEU WHATSAPP ════════════════════ */}
