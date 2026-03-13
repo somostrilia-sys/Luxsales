@@ -3,23 +3,16 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useCollaborator } from "@/contexts/CollaboratorContext";
-import { supabase } from "@/lib/supabase";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Zap, Users, Send, MessageSquare, RefreshCw, Play, Pause, Trash2, AlertTriangle, Search, Phone, MapPin, Tag } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Zap, Users, Send, MessageCircle, TrendingUp, Loader2,
-  Play, Pause, FlaskConical, ChevronDown, ChevronUp, Settings2,
-} from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
 
-interface ConsultantPoolStatus {
+interface ConsultantRow {
   collaborator_id: string;
   name: string;
   company: string;
@@ -27,824 +20,626 @@ interface ConsultantPoolStatus {
   sent: number;
   responded: number;
   converted: number;
-  active_job_id?: string;
-  job_status?: string;
+  status?: string;
 }
 
-interface PendingLead {
+interface LeadRow {
   id: string;
-  name: string | null;
   phone: string;
-  city: string | null;
-  source: string | null;
+  lead_name?: string;
+  city?: string;
+  campaign_tag?: string;
   status: string;
+  assigned_at: string;
 }
 
-interface StatusSummary {
+interface Summary {
   total_consultants: number;
   total_assigned: number;
   total_sent: number;
   total_responded: number;
-  pending?: number;
-  sent?: number;
-  responded?: number;
-  converted?: number;
 }
 
-interface TestResult {
-  phone: string;
-  status: string;
-  error?: string;
-}
+const LEAD_POOL_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/lead-pool";
+const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://ecaduzwautlpzpvjognr.supabase.co";
-
-async function getAuthHeaders() {
-  const session = (await supabase.auth.getSession()).data.session;
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${session?.access_token}`,
-  };
-}
-
-async function callBlastEngine(body: Record<string, unknown>) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/blast-engine`, {
+async function callLeadPool(action: string, params: Record<string, any> = {}) {
+  const res = await fetch(LEAD_POOL_URL, {
     method: "POST",
-    headers,
-    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json", "apikey": ANON_KEY, "Authorization": `Bearer ${ANON_KEY}` },
+    body: JSON.stringify({ action, ...params }),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Erro na API");
-  return data;
-}
-
-// ─── Global campaign config state (shared across modals)
-interface CampaignConfig {
-  messageTemplate: string;
-  dddFilter: string;
-  campaignTag: string;
-  leadsPerConsultant: string;
-  dailyLimit: string;
+  return res.json();
 }
 
 export default function MotorDisparo() {
-  const { collaborator, roleLevel } = useCollaborator();
-  const isCeoOrDirector = roleLevel <= 1;
+  const { collaborator } = useCollaborator();
+  const roleLevel = (collaborator as any)?.roles?.level ?? (collaborator as any)?.role_level ?? 99;
+  const isAdmin = roleLevel <= 1; // CEO ou Diretor
+  const isGestor = roleLevel === 2;
+  const isConsultor = roleLevel >= 3;
 
+  // ── Estado Admin/Gestor ─────────────────────────────────────
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [consultants, setConsultants] = useState<ConsultantRow[]>([]);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+
+  // ── Estado Consultor (Meus Leads) ───────────────────────────
+  const [myLeads, setMyLeads] = useState<LeadRow[]>([]);
+  const [myStats, setMyStats] = useState({ pending: 0, sent: 0, responded: 0, converted: 0 });
+  const [loadingLeads, setLoadingLeads] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(0);
+  const PAGE_SIZE = 20;
+
+  // ── Modals ──────────────────────────────────────────────────
+  const [deleteModal, setDeleteModal] = useState<ConsultantRow | null>(null);
+  const [deleteAllModal, setDeleteAllModal] = useState(false);
+  const [distributeModal, setDistributeModal] = useState(false);
+  const [assignModal, setAssignModal] = useState<ConsultantRow | null>(null);
+  const [assignCount, setAssignCount] = useState("500");
+  const [assignDDD, setAssignDDD] = useState("");
+  const [loadingAction, setLoadingAction] = useState(false);
+
+  // ── Load Status (Admin/Gestor) ───────────────────────────────
+  const loadStatus = useCallback(async () => {
+    setLoadingStatus(true);
+    try {
+      const data = await callLeadPool("status");
+      if (data.ok) {
+        setSummary(data.summary || null);
+        setConsultants(data.consultants || []);
+      } else {
+        toast.error("Erro ao carregar status: " + (data.error || ""));
+      }
+    } catch (e: any) {
+      toast.error("Erro de conexão");
+    }
+    setLoadingStatus(false);
+  }, []);
+
+  // ── Load Leads (Consultor) ───────────────────────────────────
+  const loadMyLeads = useCallback(async () => {
+    if (!collaborator?.id) return;
+    setLoadingLeads(true);
+    try {
+      const data = await callLeadPool("status", { collaborator_id: collaborator.id });
+      if (data.ok) {
+        setMyStats({
+          pending: data.pending || 0,
+          sent: data.sent || 0,
+          responded: data.responded || 0,
+          converted: data.converted || 0,
+        });
+      }
+
+      const listData = await callLeadPool("list_pending", {
+        collaborator_id: collaborator.id,
+        limit: PAGE_SIZE,
+        offset: currentPage * PAGE_SIZE,
+        status_filter: statusFilter !== "all" ? statusFilter : undefined,
+      });
+      if (listData.ok) {
+        setMyLeads(listData.leads || []);
+      }
+    } catch (e: any) {
+      toast.error("Erro ao carregar seus leads");
+    }
+    setLoadingLeads(false);
+  }, [collaborator?.id, currentPage, statusFilter]);
+
+  useEffect(() => {
+    if (isConsultor || isGestor) {
+      loadMyLeads();
+    } else {
+      loadStatus();
+    }
+  }, [isConsultor, isGestor, loadMyLeads, loadStatus]);
+
+  // ── Ações Admin ──────────────────────────────────────────────
+  const handleDistributeAll = async () => {
+    setLoadingAction(true);
+    setDistributeModal(false);
+    try {
+      const data = await callLeadPool("auto_refill", { min_threshold: 0, target_count: 500 });
+      if (data.ok) {
+        toast.success(`Leads distribuídos: ${data.total_assigned || 0} leads para ${data.consultors_updated || 0} consultores`);
+        await loadStatus();
+      } else {
+        toast.error("Erro: " + (data.error || ""));
+      }
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+    setLoadingAction(false);
+  };
+
+  const handleAssignOne = async () => {
+    if (!assignModal) return;
+    setLoadingAction(true);
+    try {
+      const data = await callLeadPool("assign", {
+        collaborator_id: assignModal.collaborator_id,
+        count: parseInt(assignCount) || 500,
+        ddd: assignDDD || undefined,
+      });
+      if (data.ok) {
+        toast.success(`${data.assigned || 0} leads atribuídos para ${assignModal.name}`);
+        setAssignModal(null);
+        await loadStatus();
+      } else {
+        toast.error("Erro: " + (data.error || ""));
+      }
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+    setLoadingAction(false);
+  };
+
+  const handleDeleteOne = async () => {
+    if (!deleteModal) return;
+    setLoadingAction(true);
+    try {
+      const data = await callLeadPool("delete_distribution", {
+        collaborator_id: deleteModal.collaborator_id,
+      });
+      if (data.ok) {
+        toast.success(`${data.deleted || 0} leads removidos de ${deleteModal.name}`);
+        setDeleteModal(null);
+        await loadStatus();
+      } else {
+        toast.error("Erro: " + (data.error || ""));
+      }
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+    setLoadingAction(false);
+  };
+
+  const handleDeleteAll = async () => {
+    setLoadingAction(true);
+    setDeleteAllModal(false);
+    try {
+      const data = await callLeadPool("delete_all_distributions", {});
+      if (data.ok) {
+        toast.success(`${data.deleted || 0} leads removidos de todos os consultores`);
+        await loadStatus();
+      } else {
+        toast.error("Erro: " + (data.error || ""));
+      }
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+    setLoadingAction(false);
+  };
+
+  const filteredLeads = myLeads.filter(l =>
+    !searchTerm ||
+    l.phone?.includes(searchTerm) ||
+    l.lead_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    l.city?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const statusBadge = (s: string) => {
+    const map: Record<string, string> = {
+      pending: "bg-yellow-500/20 text-yellow-400",
+      sent: "bg-blue-500/20 text-blue-400",
+      responded: "bg-green-500/20 text-green-400",
+      converted: "bg-emerald-500/20 text-emerald-400",
+      failed: "bg-red-500/20 text-red-400",
+    };
+    return map[s] || "bg-gray-500/20 text-gray-400";
+  };
+
+  // ══════════════════════════════════════════════════════════
+  // VIEW: CONSULTOR — Meus Leads
+  // ══════════════════════════════════════════════════════════
+  if (isConsultor) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="h-6 w-6 text-primary" />
+              <h1 className="text-2xl font-bold">Meus Leads</h1>
+            </div>
+            <Button onClick={loadMyLeads} disabled={loadingLeads} variant="outline" size="sm">
+              <RefreshCw className={`h-4 w-4 mr-2 ${loadingLeads ? "animate-spin" : ""}`} />
+              Atualizar
+            </Button>
+          </div>
+
+          {/* Cards de métricas */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: "Pendentes", value: myStats.pending, icon: <Users className="h-5 w-5" />, color: "text-yellow-400" },
+              { label: "Enviados", value: myStats.sent, icon: <Send className="h-5 w-5" />, color: "text-blue-400" },
+              { label: "Responderam", value: myStats.responded, icon: <MessageSquare className="h-5 w-5" />, color: "text-green-400" },
+              { label: "Convertidos", value: myStats.converted, icon: <Zap className="h-5 w-5" />, color: "text-emerald-400" },
+            ].map(({ label, value, icon, color }) => (
+              <Card key={label}>
+                <CardContent className="pt-6 pb-4">
+                  <div className={`flex items-center gap-2 mb-1 ${color}`}>{icon}</div>
+                  <div className="text-2xl font-bold">{value.toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground">{label}</div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Filtros */}
+          <div className="flex gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por telefone, nome ou cidade..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setCurrentPage(0); }}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="pending">Pendentes</SelectItem>
+                <SelectItem value="sent">Enviados</SelectItem>
+                <SelectItem value="responded">Responderam</SelectItem>
+                <SelectItem value="converted">Convertidos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Tabela de leads */}
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Telefone</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Cidade</TableHead>
+                    <TableHead>Campanha</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Recebido</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingLeads ? (
+                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
+                  ) : filteredLeads.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhum lead encontrado</TableCell></TableRow>
+                  ) : filteredLeads.map(lead => (
+                    <TableRow key={lead.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="font-mono text-sm">{lead.phone}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{lead.lead_name || "—"}</TableCell>
+                      <TableCell>
+                        {lead.city ? (
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                            {lead.city}
+                          </div>
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {lead.campaign_tag ? (
+                          <div className="flex items-center gap-1">
+                            <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-xs">{lead.campaign_tag}</span>
+                          </div>
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge(lead.status)}`}>
+                          {lead.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {lead.assigned_at ? new Date(lead.assigned_at).toLocaleDateString("pt-BR") : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Paginação */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">
+              Mostrando {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, myStats.pending + myStats.sent + myStats.responded + myStats.converted)} de {myStats.pending + myStats.sent + myStats.responded + myStats.converted}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setCurrentPage(p => p - 1)}>
+                Anterior
+              </Button>
+              <Button variant="outline" size="sm" disabled={filteredLeads.length < PAGE_SIZE} onClick={() => setCurrentPage(p => p + 1)}>
+                Próxima
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // VIEW: GESTOR — Meus Leads + Equipe (mesma view do consultor mas com contexto de gestor)
+  // ══════════════════════════════════════════════════════════
+  if (isGestor) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="h-6 w-6 text-primary" />
+              <h1 className="text-2xl font-bold">Motor de Leads</h1>
+            </div>
+            <Button onClick={loadMyLeads} disabled={loadingLeads} variant="outline" size="sm">
+              <RefreshCw className={`h-4 w-4 mr-2 ${loadingLeads ? "animate-spin" : ""}`} />
+              Atualizar
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: "Pendentes", value: myStats.pending, color: "text-yellow-400" },
+              { label: "Enviados", value: myStats.sent, color: "text-blue-400" },
+              { label: "Responderam", value: myStats.responded, color: "text-green-400" },
+              { label: "Convertidos", value: myStats.converted, color: "text-emerald-400" },
+            ].map(({ label, value, color }) => (
+              <Card key={label}><CardContent className="pt-6 pb-4">
+                <div className={`text-2xl font-bold ${color}`}>{value.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground">{label}</div>
+              </CardContent></Card>
+            ))}
+          </div>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Seus leads recebidos</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Telefone</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Cidade</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingLeads ? (
+                    <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">Carregando...</TableCell></TableRow>
+                  ) : myLeads.length === 0 ? (
+                    <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">Nenhum lead recebido</TableCell></TableRow>
+                  ) : myLeads.slice(0, 50).map(lead => (
+                    <TableRow key={lead.id}>
+                      <TableCell className="font-mono text-sm">{lead.phone}</TableCell>
+                      <TableCell>{lead.lead_name || "—"}</TableCell>
+                      <TableCell>{lead.city || "—"}</TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${statusBadge(lead.status)}`}>
+                          {lead.status}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // VIEW: CEO / DIRETOR — Gestão completa de distribuição
+  // ══════════════════════════════════════════════════════════
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Zap className="h-7 w-7 text-primary" />
-          <h1 className="text-2xl font-bold text-foreground">Motor de Disparo</h1>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Zap className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold">Motor de Disparo</h1>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={loadStatus} disabled={loadingStatus} variant="outline" size="sm">
+              <RefreshCw className={`h-4 w-4 mr-2 ${loadingStatus ? "animate-spin" : ""}`} />
+              Atualizar
+            </Button>
+            {isAdmin && (
+              <Button onClick={() => setDeleteAllModal(true)} variant="destructive" size="sm">
+                <Trash2 className="h-4 w-4 mr-2" />
+                Limpar Tudo
+              </Button>
+            )}
+            <Button onClick={() => setDistributeModal(true)} disabled={loadingAction} className="btn-modern" size="sm">
+              <Zap className="h-4 w-4 mr-2" />
+              Distribuir para Todos
+            </Button>
+          </div>
         </div>
-        {isCeoOrDirector ? (
-          <CeoView />
-        ) : (
-          <ConsultorView collaboratorId={collaborator?.id || ""} />
-        )}
-      </div>
-    </DashboardLayout>
-  );
-}
 
-// ═══════════════════════════════════════════
-// CEO / DIRETORES VIEW
-// ═══════════════════════════════════════════
+        {/* Cards de métricas */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: "Consultores c/ Pool", value: summary?.total_consultants ?? consultants.length, icon: <Users className="h-5 w-5" /> },
+            { label: "Leads Atribuídos", value: summary?.total_assigned ?? 0, icon: <Zap className="h-5 w-5" /> },
+            { label: "Enviados", value: summary?.total_sent ?? 0, icon: <Send className="h-5 w-5" /> },
+            { label: "Responderam", value: summary?.total_responded ?? 0, icon: <MessageSquare className="h-5 w-5" /> },
+          ].map(({ label, value, icon }) => (
+            <Card key={label}>
+              <CardContent className="pt-6 pb-4">
+                <div className="flex items-center gap-2 mb-2 text-primary">{icon}</div>
+                <div className="text-2xl font-bold">{(value || 0).toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground">{label}</div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
-function CeoView() {
-  const [status, setStatus] = useState<StatusSummary | null>(null);
-  const [consultants, setConsultants] = useState<ConsultantPoolStatus[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [configOpen, setConfigOpen] = useState(true);
-
-  // Campaign config
-  const [campaign, setCampaign] = useState<CampaignConfig>({
-    messageTemplate: "Oi {nome}, tudo bem? Sou consultor de proteção veicular e gostaria de apresentar uma solução para o seu veículo. Posso te enviar mais informações?",
-    dddFilter: "",
-    campaignTag: "campanha-marco-2026",
-    leadsPerConsultant: "500",
-    dailyLimit: "100",
-  });
-
-  // Modals
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [distributeOpen, setDistributeOpen] = useState(false);
-  const [testOpen, setTestOpen] = useState(false);
-  const [selectedConsultant, setSelectedConsultant] = useState<ConsultantPoolStatus | null>(null);
-
-  const [allCollaborators, setAllCollaborators] = useState<{ id: string; name: string }[]>([]);
-
-  const fetchStatus = useCallback(async () => {
-    setLoading(true);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/lead-pool`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ action: "status" }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao buscar status");
-      setStatus(data.summary || { total_consultants: 0, total_assigned: 0, total_sent: 0, total_responded: 0 });
-      setConsultants(data.consultants || []);
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchStatus();
-    supabase.from("collaborators").select("id, name").eq("active", true).then(({ data }) => {
-      if (data) setAllCollaborators(data as any);
-    });
-  }, [fetchStatus]);
-
-  const handleDistributeAll = async () => {
-    if (!campaign.messageTemplate.trim()) {
-      toast.error("Preencha a mensagem da campanha antes de distribuir");
-      setConfigOpen(true);
-      return;
-    }
-    setDistributeOpen(true);
-  };
-
-  const handleStartJob = async (c: ConsultantPoolStatus) => {
-    if (c.job_status === "running") {
-      // Pause
-      try {
-        await callBlastEngine({ action: "pause", job_id: c.active_job_id });
-        toast.success("Disparo pausado");
-        fetchStatus();
-      } catch (e: any) { toast.error(e.message); }
-    } else if (c.active_job_id) {
-      // Resume/start existing job
-      try {
-        await callBlastEngine({ action: "start", job_id: c.active_job_id });
-        toast.success("Disparo iniciado!");
-        fetchStatus();
-      } catch (e: any) { toast.error(e.message); }
-    } else {
-      // No job yet — auto-create with campaign config
-      if (!campaign.messageTemplate.trim()) {
-        toast.error("Configure a mensagem da campanha antes de iniciar");
-        setConfigOpen(true);
-        return;
-      }
-      try {
-        const data = await callBlastEngine({
-          action: "assign_one",
-          collaborator_id: c.collaborator_id,
-          ddd: campaign.dddFilter || undefined,
-          count: parseInt(campaign.leadsPerConsultant) || 500,
-          campaign_tag: campaign.campaignTag,
-          message_template: campaign.messageTemplate,
-          daily_limit: parseInt(campaign.dailyLimit) || 100,
-          auto_start: true,
-        });
-        toast.success(`${data.assigned || 0} leads atribuídos — disparo iniciado!`);
-        fetchStatus();
-      } catch (e: any) { toast.error(e.message); }
-    }
-  };
-
-  return (
-    <>
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard icon={<Users className="h-5 w-5" />} label="Consultores c/ Pool" value={status?.total_consultants ?? 0} />
-        <SummaryCard icon={<TrendingUp className="h-5 w-5" />} label="Leads Atribuídos" value={status?.total_assigned ?? 0} />
-        <SummaryCard icon={<Send className="h-5 w-5" />} label="Enviados" value={status?.total_sent ?? 0} />
-        <SummaryCard icon={<MessageCircle className="h-5 w-5" />} label="Responderam" value={status?.total_responded ?? 0} />
-      </div>
-
-      {/* Campaign Config */}
-      <Collapsible open={configOpen} onOpenChange={setConfigOpen}>
+        {/* Tabela de consultores */}
         <Card>
-          <CollapsibleTrigger asChild>
-            <CardHeader className="flex flex-row items-center justify-between cursor-pointer hover:bg-muted/30 rounded-t-lg transition-colors">
-              <div className="flex items-center gap-2">
-                <Settings2 className="h-5 w-5 text-primary" />
-                <CardTitle className="text-base">Configurar Campanha</CardTitle>
-              </div>
-              {configOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-            </CardHeader>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <CardContent className="pt-0 pb-5">
-              <div className="space-y-4">
-                <div>
-                  <Label>Mensagem <span className="text-muted-foreground text-xs ml-1">use {"{nome}"} para personalizar</span></Label>
-                  <Textarea
-                    rows={3}
-                    placeholder="Oi {nome}, tudo bem? Sou consultor de proteção veicular..."
-                    value={campaign.messageTemplate}
-                    onChange={(e) => setCampaign(p => ({ ...p, messageTemplate: e.target.value }))}
-                    className="mt-1 resize-none"
-                  />
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div>
-                    <Label>DDD filtro</Label>
-                    <Input placeholder="Ex: 31" value={campaign.dddFilter} onChange={(e) => setCampaign(p => ({ ...p, dddFilter: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label>Tag campanha</Label>
-                    <Input placeholder="campanha-marco-2026" value={campaign.campaignTag} onChange={(e) => setCampaign(p => ({ ...p, campaignTag: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label>Qtd por consultor</Label>
-                    <Input type="number" value={campaign.leadsPerConsultant} onChange={(e) => setCampaign(p => ({ ...p, leadsPerConsultant: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label>Limite diário</Label>
-                    <Input type="number" value={campaign.dailyLimit} onChange={(e) => setCampaign(p => ({ ...p, dailyLimit: e.target.value }))} />
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </CollapsibleContent>
-        </Card>
-      </Collapsible>
-
-      {/* Consultants Table */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-lg">Consultores com Pool</CardTitle>
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => fetchStatus()} disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Atualizar"}
-            </Button>
-            <Button size="sm" onClick={handleDistributeAll}>
-              <Zap className="h-4 w-4 mr-1" /> Distribuir para Todos
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Empresa</TableHead>
-                <TableHead className="text-center">Pendentes</TableHead>
-                <TableHead className="text-center">Enviados</TableHead>
-                <TableHead className="text-center">Responderam</TableHead>
-                <TableHead className="text-center">Convertidos</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {consultants.length === 0 && !loading ? (
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Consultores com Pool ({consultants.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    Nenhum consultor com pool
-                  </TableCell>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Empresa</TableHead>
+                  <TableHead className="text-right">Pendentes</TableHead>
+                  <TableHead className="text-right">Enviados</TableHead>
+                  <TableHead className="text-right">Responderam</TableHead>
+                  <TableHead className="text-right">Convertidos</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
-              ) : (
-                consultants.map((c) => (
-                  <ConsultantRow
-                    key={c.collaborator_id}
-                    consultant={c}
-                    onAssign={() => { setSelectedConsultant(c); setAssignOpen(true); }}
-                    onTest={() => { setSelectedConsultant(c); setTestOpen(true); }}
-                    onStartPause={() => handleStartJob(c)}
-                  />
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Assign Modal */}
-      <AssignModal
-        open={assignOpen}
-        onClose={() => { setAssignOpen(false); setSelectedConsultant(null); }}
-        consultant={selectedConsultant}
-        campaign={campaign}
-        onSuccess={fetchStatus}
-      />
-
-      {/* Test Modal */}
-      <TestModal
-        open={testOpen}
-        onClose={() => { setTestOpen(false); setSelectedConsultant(null); }}
-        consultant={selectedConsultant}
-        defaultMessage={campaign.messageTemplate}
-      />
-
-      {/* Distribute Modal */}
-      <DistributeModal
-        open={distributeOpen}
-        onClose={() => setDistributeOpen(false)}
-        campaign={campaign}
-        onSuccess={fetchStatus}
-      />
-    </>
-  );
-}
-
-// Row component to keep state per row (loading)
-function ConsultantRow({
-  consultant: c, onAssign, onTest, onStartPause,
-}: {
-  consultant: ConsultantPoolStatus;
-  onAssign: () => void;
-  onTest: () => void;
-  onStartPause: () => void;
-}) {
-  const [startLoading, setStartLoading] = useState(false);
-  const isRunning = c.job_status === "running";
-
-  const handleStartPause = async () => {
-    setStartLoading(true);
-    await onStartPause();
-    setStartLoading(false);
-  };
-
-  return (
-    <TableRow>
-      <TableCell className="font-medium">{c.name}</TableCell>
-      <TableCell className="text-muted-foreground text-sm">{c.company}</TableCell>
-      <TableCell className="text-center"><Badge variant="secondary">{c.pending}</Badge></TableCell>
-      <TableCell className="text-center">{c.sent}</TableCell>
-      <TableCell className="text-center">{c.responded}</TableCell>
-      <TableCell className="text-center">{c.converted}</TableCell>
-      <TableCell className="text-right">
-        <div className="flex justify-end gap-1">
-          {/* Atribuir */}
-          <Button size="icon" variant="outline" title="Atribuir leads" onClick={onAssign} className="h-8 w-8">
-            <Users className="h-3.5 w-3.5" />
-          </Button>
-          {/* Testar */}
-          <Button size="icon" variant="outline" title="Testar disparo" onClick={onTest} className="h-8 w-8">
-            <FlaskConical className="h-3.5 w-3.5" />
-          </Button>
-          {/* Iniciar / Pausar */}
-          <Button
-            size="icon"
-            variant={isRunning ? "secondary" : "default"}
-            title={isRunning ? "Pausar disparo" : "Iniciar disparo"}
-            onClick={handleStartPause}
-            disabled={startLoading}
-            className="h-8 w-8"
-          >
-            {startLoading
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              : isRunning
-                ? <Pause className="h-3.5 w-3.5" />
-                : <Play className="h-3.5 w-3.5" />}
-          </Button>
-        </div>
-      </TableCell>
-    </TableRow>
-  );
-}
-
-// ═══════════════════════════════════════════
-// CONSULTOR VIEW
-// ═══════════════════════════════════════════
-
-function ConsultorView({ collaboratorId }: { collaboratorId: string }) {
-  const [status, setStatus] = useState<StatusSummary | null>(null);
-  const [leads, setLeads] = useState<PendingLead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [blasting, setBlasting] = useState(false);
-  const [testOpen, setTestOpen] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    if (!collaboratorId) return;
-    setLoading(true);
-    try {
-      const headers = await getAuthHeaders();
-      const [statusRes, leadsRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/functions/v1/lead-pool`, {
-          method: "POST", headers,
-          body: JSON.stringify({ action: "status", collaborator_id: collaboratorId }),
-        }),
-        fetch(`${SUPABASE_URL}/functions/v1/lead-pool`, {
-          method: "POST", headers,
-          body: JSON.stringify({ action: "list_pending", collaborator_id: collaboratorId, limit: 50 }),
-        }),
-      ]);
-      const statusData = await statusRes.json();
-      const leadsData = await leadsRes.json();
-      setStatus(statusData.summary || statusData);
-      setLeads(leadsData.leads || []);
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [collaboratorId]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  const handleStartBlast = async () => {
-    setBlasting(true);
-    try {
-      const data = await callBlastEngine({ action: "status", collaborator_id: collaboratorId });
-      const jobId = data.jobs?.[0]?.id;
-      if (!jobId) {
-        toast.error("Nenhum job encontrado. Aguarde o gestor atribuir leads.");
-        return;
-      }
-      await callBlastEngine({ action: "start", job_id: jobId });
-      toast.success("Disparo iniciado!");
-      fetchData();
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setBlasting(false);
-    }
-  };
-
-  return (
-    <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard icon={<TrendingUp className="h-5 w-5" />} label="Pendentes" value={status?.pending ?? 0} />
-        <SummaryCard icon={<Send className="h-5 w-5" />} label="Enviados" value={status?.sent ?? 0} />
-        <SummaryCard icon={<MessageCircle className="h-5 w-5" />} label="Responderam" value={status?.responded ?? 0} />
-        <SummaryCard icon={<Zap className="h-5 w-5" />} label="Convertidos" value={status?.converted ?? 0} />
+              </TableHeader>
+              <TableBody>
+                {loadingStatus ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
+                ) : consultants.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum consultor com pool ativo. Clique em "Distribuir para Todos".</TableCell></TableRow>
+                ) : consultants.map(c => (
+                  <TableRow key={c.collaborator_id}>
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{c.company}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="outline" className="text-yellow-400 border-yellow-400/30">{c.pending}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="outline" className="text-blue-400 border-blue-400/30">{c.sent}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="outline" className="text-green-400 border-green-400/30">{c.responded}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="outline" className="text-emerald-400 border-emerald-400/30">{c.converted}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex gap-1 justify-end">
+                        <Button size="sm" variant="outline" onClick={() => setAssignModal(c)}>
+                          <Zap className="h-3.5 w-3.5 mr-1" /> Atribuir
+                        </Button>
+                        {isAdmin && (
+                          <Button size="sm" variant="destructive" onClick={() => setDeleteModal(c)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-lg">Leads Pendentes</CardTitle>
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={fetchData} disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Atualizar"}
+      {/* Modal: Distribuir para Todos */}
+      <Dialog open={distributeModal} onOpenChange={setDistributeModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Distribuir Leads para Todos</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Distribui automaticamente 500 leads para cada consultor com pool abaixo do mínimo.
+            Consultores que já têm leads não serão afetados.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDistributeModal(false)}>Cancelar</Button>
+            <Button onClick={handleDistributeAll} disabled={loadingAction} className="btn-modern">
+              {loadingAction ? "Distribuindo..." : "Confirmar Distribuição"}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setTestOpen(true)}>
-              <FlaskConical className="h-4 w-4 mr-1" /> Testar
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Atribuir para um consultor */}
+      <Dialog open={!!assignModal} onOpenChange={() => setAssignModal(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Atribuir Leads — {assignModal?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Quantidade de leads</label>
+              <Input value={assignCount} onChange={e => setAssignCount(e.target.value)} type="number" min="1" max="5000" className="mt-1" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">DDD (opcional)</label>
+              <Input value={assignDDD} onChange={e => setAssignDDD(e.target.value)} placeholder="Ex: 31, 11, 21" className="mt-1" />
+              <p className="text-xs text-muted-foreground mt-1">Filtrar leads de um DDD específico</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignModal(null)}>Cancelar</Button>
+            <Button onClick={handleAssignOne} disabled={loadingAction} className="btn-modern">
+              {loadingAction ? "Atribuindo..." : `Atribuir ${assignCount} leads`}
             </Button>
-            <Button size="sm" onClick={handleStartBlast} disabled={blasting || leads.length === 0}>
-              {blasting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Play className="h-4 w-4 mr-1" />}
-              Iniciar Disparo
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Excluir distribuição de um consultor */}
+      <Dialog open={!!deleteModal} onOpenChange={() => setDeleteModal(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Excluir Leads de {deleteModal?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Isso removerá <strong>{deleteModal?.pending} leads pendentes</strong> do pool de {deleteModal?.name}.
+            Leads já enviados <strong>não</strong> serão afetados.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteModal(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleDeleteOne} disabled={loadingAction}>
+              {loadingAction ? "Excluindo..." : "Confirmar Exclusão"}
             </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Telefone</TableHead>
-                <TableHead>Cidade</TableHead>
-                <TableHead>Fonte</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {leads.length === 0 && !loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    Nenhum lead pendente
-                  </TableCell>
-                </TableRow>
-              ) : (
-                leads.map((l) => (
-                  <TableRow key={l.id}>
-                    <TableCell>{l.name || "—"}</TableCell>
-                    <TableCell className="font-mono text-sm">{l.phone}</TableCell>
-                    <TableCell>{l.city || "—"}</TableCell>
-                    <TableCell><Badge variant="outline">{l.source || "—"}</Badge></TableCell>
-                    <TableCell><Badge variant="secondary">{l.status}</Badge></TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      <TestModal
-        open={testOpen}
-        onClose={() => setTestOpen(false)}
-        consultant={{ collaborator_id: collaboratorId, name: "Você", company: "", pending: 0, sent: 0, responded: 0, converted: 0 }}
-        defaultMessage="Oi {nome}, tudo bem? Sou consultor de proteção veicular e gostaria de apresentar uma solução para o seu veículo. Posso te enviar mais informações?"
-      />
-    </>
-  );
-}
-
-// ═══════════════════════════════════════════
-// SHARED COMPONENTS
-// ═══════════════════════════════════════════
-
-function SummaryCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10 text-primary">{icon}</div>
-          <div>
-            <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold text-foreground">{value.toLocaleString()}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ═══════════════════════════════════════════
-// ASSIGN MODAL (atribuir leads a UM consultor)
-// ═══════════════════════════════════════════
-
-function AssignModal({
-  open, onClose, consultant, campaign, onSuccess,
-}: {
-  open: boolean;
-  onClose: () => void;
-  consultant: ConsultantPoolStatus | null;
-  campaign: CampaignConfig;
-  onSuccess: () => void;
-}) {
-  const [ddd, setDdd] = useState(campaign.dddFilter);
-  const [city, setCity] = useState("");
-  const [count, setCount] = useState(campaign.leadsPerConsultant);
-  const [campaignTag, setCampaignTag] = useState(campaign.campaignTag);
-  const [autoStart, setAutoStart] = useState(false);
-  const [messageTemplate, setMessageTemplate] = useState(campaign.messageTemplate);
-  const [saving, setSaving] = useState(false);
-
-  // Sync with campaign config when modal opens
-  useEffect(() => {
-    if (open) {
-      setDdd(campaign.dddFilter);
-      setCount(campaign.leadsPerConsultant);
-      setCampaignTag(campaign.campaignTag);
-      setMessageTemplate(campaign.messageTemplate);
-    }
-  }, [open, campaign]);
-
-  const handleSubmit = async () => {
-    if (!consultant) return;
-    if (autoStart && !messageTemplate.trim()) {
-      toast.error("Preencha a mensagem para auto-iniciar");
-      return;
-    }
-    setSaving(true);
-    try {
-      const data = await callBlastEngine({
-        action: "assign_one",
-        collaborator_id: consultant.collaborator_id,
-        ddd: ddd || undefined,
-        city: city || undefined,
-        count: parseInt(count) || 500,
-        campaign_tag: campaignTag || "campanha-marco-2026",
-        auto_start: autoStart,
-        message_template: autoStart ? messageTemplate : undefined,
-      });
-      toast.success(`${data.assigned || 0} leads atribuídos a ${data.collaborator_name || consultant.name}${data.auto_started ? " — disparo iniciado!" : "!"}`);
-      onClose();
-      onSuccess();
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Atribuir Leads — {consultant?.name}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>DDD</Label>
-              <Input placeholder="Ex: 31" value={ddd} onChange={(e) => setDdd(e.target.value)} />
-            </div>
-            <div>
-              <Label>Cidade</Label>
-              <Input placeholder="Ex: Belo Horizonte" value={city} onChange={(e) => setCity(e.target.value)} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Quantidade</Label>
-              <Input type="number" value={count} onChange={(e) => setCount(e.target.value)} />
-            </div>
-            <div>
-              <Label>Tag Campanha</Label>
-              <Input placeholder="campanha-marco-2026" value={campaignTag} onChange={(e) => setCampaignTag(e.target.value)} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 pt-1">
-            <Checkbox
-              id="auto-start"
-              checked={autoStart}
-              onCheckedChange={(v) => setAutoStart(!!v)}
-            />
-            <label htmlFor="auto-start" className="text-sm font-medium cursor-pointer">
-              Auto-iniciar disparo após atribuir
-            </label>
-          </div>
-          {autoStart && (
-            <div>
-              <Label>Mensagem <span className="text-muted-foreground text-xs ml-1">use {"{nome}"}</span></Label>
-              <Textarea
-                rows={3}
-                value={messageTemplate}
-                onChange={(e) => setMessageTemplate(e.target.value)}
-                className="mt-1 resize-none"
-              />
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleSubmit} disabled={saving}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Users className="h-4 w-4 mr-1" />}
-            {autoStart ? "Atribuir e Iniciar" : "Atribuir"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ═══════════════════════════════════════════
-// TEST MODAL (testar disparo com 3-5 leads)
-// ═══════════════════════════════════════════
-
-function TestModal({
-  open, onClose, consultant, defaultMessage,
-}: {
-  open: boolean;
-  onClose: () => void;
-  consultant: ConsultantPoolStatus | null;
-  defaultMessage: string;
-}) {
-  const [messageTemplate, setMessageTemplate] = useState(defaultMessage);
-  const [testCount, setTestCount] = useState("3");
-  const [testing, setTesting] = useState(false);
-  const [results, setResults] = useState<TestResult[] | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setMessageTemplate(defaultMessage);
-      setResults(null);
-    }
-  }, [open, defaultMessage]);
-
-  const handleTest = async () => {
-    if (!consultant) return;
-    if (!messageTemplate.trim()) { toast.error("Preencha a mensagem"); return; }
-    setTesting(true);
-    setResults(null);
-    try {
-      const data = await callBlastEngine({
-        action: "test_blast",
-        collaborator_id: consultant.collaborator_id,
-        message_template: messageTemplate,
-        test_count: parseInt(testCount) || 3,
-      });
-      setResults(data.test_results || []);
-      const sent = data.sent ?? 0;
-      const total = data.total ?? 0;
-      if (sent > 0) {
-        toast.success(`${sent}/${total} mensagens enviadas com sucesso!`);
-      } else {
-        toast.error(data.error || "Nenhuma mensagem enviada");
-      }
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const sentCount = results?.filter(r => r.status === "sent").length ?? 0;
-  const failCount = results?.filter(r => r.status !== "sent").length ?? 0;
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FlaskConical className="h-5 w-5 text-primary" />
-            Testar Disparo — {consultant?.name}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <Label>Mensagem <span className="text-muted-foreground text-xs ml-1">use {"{nome}"}</span></Label>
-            <Textarea
-              rows={3}
-              value={messageTemplate}
-              onChange={(e) => setMessageTemplate(e.target.value)}
-              className="mt-1 resize-none"
-            />
-          </div>
-          <div className="w-32">
-            <Label>Qtd. de teste (máx. 5)</Label>
-            <Input
-              type="number"
-              min={1}
-              max={5}
-              value={testCount}
-              onChange={(e) => setTestCount(e.target.value)}
-            />
-          </div>
-
-          {/* Results */}
-          {results && (
-            <div className="rounded-lg border p-3 space-y-2">
-              <div className="flex gap-4 text-sm font-medium">
-                <span className="text-green-500">✓ Enviados: {sentCount}</span>
-                <span className="text-destructive">✗ Falhou: {failCount}</span>
-              </div>
-              <div className="space-y-1 max-h-32 overflow-y-auto">
-                {results.map((r, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>{r.status === "sent" ? "✅" : "❌"}</span>
-                    <span className="font-mono">{r.phone}</span>
-                    {r.error && <span className="text-destructive">{r.error}</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Fechar</Button>
-          <Button onClick={handleTest} disabled={testing}>
-            {testing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <FlaskConical className="h-4 w-4 mr-1" />}
-            {results ? "Testar Novamente" : "Enviar Teste"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ═══════════════════════════════════════════
-// DISTRIBUTE MODAL (todos os consultores)
-// ═══════════════════════════════════════════
-
-function DistributeModal({
-  open, onClose, campaign, onSuccess,
-}: {
-  open: boolean;
-  onClose: () => void;
-  campaign: CampaignConfig;
-  onSuccess: () => void;
-}) {
-  const [saving, setSaving] = useState(false);
-
-  const handleSubmit = async () => {
-    setSaving(true);
-    try {
-      const data = await callBlastEngine({
-        action: "distribute",
-        message_template: campaign.messageTemplate,
-        ddd_filter: campaign.dddFilter || undefined,
-        campaign_tag: campaign.campaignTag || "campanha-marco-2026",
-        leads_per_consultant: parseInt(campaign.leadsPerConsultant) || 500,
-        daily_limit: parseInt(campaign.dailyLimit) || 100,
-      });
-      if (!data.ok) throw new Error(data.error || "Erro ao distribuir");
-      toast.success(`${data.total_distributed || 0} leads distribuídos para ${data.consultants_reached || 0} consultores!`);
-      onClose();
-      onSuccess();
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Confirmar Distribuição</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 text-sm text-muted-foreground">
-          <p>Distribui leads para <strong className="text-foreground">todos os consultores elegíveis</strong> usando a configuração atual:</p>
-          <ul className="space-y-1 list-none">
-            <li>📌 Tag: <strong className="text-foreground">{campaign.campaignTag || "campanha-marco-2026"}</strong></li>
-            <li>🎯 DDD filtro: <strong className="text-foreground">{campaign.dddFilter || "Todos"}</strong></li>
-            <li>📦 Qtd por consultor: <strong className="text-foreground">{campaign.leadsPerConsultant}</strong></li>
-            <li>📅 Limite diário: <strong className="text-foreground">{campaign.dailyLimit}</strong></li>
-          </ul>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleSubmit} disabled={saving}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Zap className="h-4 w-4 mr-1" />}
-            Confirmar e Distribuir
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      {/* Modal: Limpar tudo */}
+      <Dialog open={deleteAllModal} onOpenChange={setDeleteAllModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Limpar Todos os Pools
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Isso removerá <strong>todos os leads pendentes</strong> de todos os consultores.
+            Esta ação não pode ser desfeita.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteAllModal(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleDeleteAll} disabled={loadingAction}>
+              {loadingAction ? "Limpando..." : "Confirmar — Limpar Tudo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </DashboardLayout>
   );
 }
