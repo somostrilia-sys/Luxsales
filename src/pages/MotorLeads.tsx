@@ -294,6 +294,8 @@ function DistributeTab() {
   const [ddds, setDDDs] = useState<string[]>([]);
   const [commercialCollabs, setCommercialCollabs] = useState<{ id: string; name: string }[]>([]);
   const [availableCount, setAvailableCount] = useState(0);
+  const [countDetails, setCountDetails] = useState<{ disponiveis: number; naoImportados: number } | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   // For CEOs with "all" selected, use their own company_id as fallback
   const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
@@ -372,32 +374,33 @@ function DistributeTab() {
   };
 
   const countAvailable = useCallback(async () => {
-    if (!resolvedCompanyId) { setAvailableCount(0); return; }
+    if (!resolvedCompanyId) { setAvailableCount(0); setCountDetails(null); return; }
     try {
-      // Use the RPC for reliable counting
       const { data, error } = await supabase.rpc("count_available_leads", { p_company_id: resolvedCompanyId });
-      if (error) {
-        console.error("count_available_leads error:", error);
-        // Fallback to direct query
-        let query = supabase
-          .from("lead_items")
-          .select("id", { count: "exact", head: true })
-          .eq("company_id", resolvedCompanyId)
-          .eq("status", "disponivel")
-          .is("assigned_to", null);
-        if (filterCity) query = query.ilike("cidade", filterCity);
-        if (filterDDD) query = query.eq("ddd", filterDDD);
-        const { count } = await query;
-        setAvailableCount(count || 0);
-        return;
-      }
+      if (error) { console.error("count_available_leads error:", error); return; }
       const d = data as any;
-      setAvailableCount(d?.lead_items_disponiveis ?? 0);
+      const disponiveis = d?.lead_items_disponiveis ?? 0;
+      const naoImportados = (d?.contact_leads_nao_importados ?? 0) + (d?.leads_nao_importados ?? 0);
+      setCountDetails({ disponiveis, naoImportados });
+      setAvailableCount(disponiveis + naoImportados);
     } catch (e) {
       console.error("countAvailable error:", e);
       setAvailableCount(0);
     }
-  }, [resolvedCompanyId, filterCity, filterDDD]);
+  }, [resolvedCompanyId]);
+
+  const handleSyncBeforeDistribute = useCallback(async () => {
+    if (!resolvedCompanyId) return;
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: resolvedCompanyId });
+      if (error) throw error;
+      const r = data as any;
+      toast.success(`Sincronizado! ${r?.total ?? 0} novos leads importados`);
+      await countAvailable();
+    } catch (e: any) { toast.error("Erro ao sincronizar: " + e.message); }
+    finally { setSyncing(false); }
+  }, [resolvedCompanyId, countAvailable]);
 
   const handleDistribute = async () => {
     if (!targetCollab || !resolvedCompanyId || !collaborator?.id) { toast.error("Selecione um consultor"); return; }
@@ -460,17 +463,39 @@ function DistributeTab() {
 
   return (
     <>
-      <Card>
-        <CardContent className="pt-5 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10 text-primary"><Package className="h-5 w-5" /></div>
-            <div>
-              <p className="text-sm text-muted-foreground">Leads disponíveis com filtros aplicados</p>
-              <p className="text-2xl font-bold text-foreground">{availableCount.toLocaleString("pt-BR")}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10 text-primary"><Package className="h-5 w-5" /></div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total disponível para distribuição</p>
+                <p className="text-2xl font-bold text-foreground">{availableCount.toLocaleString("pt-BR")}</p>
+                {countDetails && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {countDetails.disponiveis.toLocaleString("pt-BR")} prontos · {countDetails.naoImportados.toLocaleString("pt-BR")} na base (auto-sync)
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5 pb-4 flex items-center justify-center">
+            <Button onClick={handleSyncBeforeDistribute} disabled={syncing} variant="outline" className="gap-2 w-full">
+              {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {syncing ? "Sincronizando..." : "Sincronizar Base Agora"}
+            </Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5 pb-4 flex items-center justify-center">
+            <Button onClick={() => countAvailable()} variant="ghost" className="gap-2 w-full">
+              <RefreshCw className="h-4 w-4" /> Atualizar Contadores
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card className="border-border">
         <CardHeader>
