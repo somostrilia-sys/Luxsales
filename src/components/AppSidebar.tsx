@@ -38,7 +38,7 @@ const managementItems: MenuItem[] = [
 const consultantItems: MenuItem[] = [
   { title: "Conversas", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
   { title: "Meu Bot", url: "/meu-bot", icon: Bot, levels: [0, 1, 2, 3] },
-  { title: "Motor de Leads", url: "/motor-leads", icon: Zap, levels: [2, 3] },
+  
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
 ];
 
