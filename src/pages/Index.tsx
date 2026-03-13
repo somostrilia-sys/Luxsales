@@ -1,3 +1,4 @@
+// app v2.1
 import { useEffect, useState } from "react";
 import { Target, Bot, MessageSquare, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
