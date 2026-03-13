@@ -217,6 +217,7 @@ export default function Cadastro() {
         company_id: inviteForm.company_id || null,
         role_id: inviteForm.role_id || null,
         max_uses: parseInt(inviteForm.max_uses),
+        used_count: 0,
         expires_at: expiresAt.toISOString(),
         created_by: session?.user?.id || null,
         active: true,
