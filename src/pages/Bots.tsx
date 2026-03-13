@@ -611,6 +611,9 @@ export default function Bots() {
             )}
           </CardContent>
         </Card>
+
+        {/* ════════════════════ CHIPS DESCARTÁVEIS ════════════════════ */}
+        <DisposableChipsSection collaboratorId={collaborator?.id || null} />
       </div>
 
       {/* ════════════════════ MODAL BOT ════════════════════ */}
