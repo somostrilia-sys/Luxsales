@@ -374,32 +374,33 @@ function DistributeTab() {
   };
 
   const countAvailable = useCallback(async () => {
-    if (!resolvedCompanyId) { setAvailableCount(0); return; }
+    if (!resolvedCompanyId) { setAvailableCount(0); setCountDetails(null); return; }
     try {
-      // Use the RPC for reliable counting
       const { data, error } = await supabase.rpc("count_available_leads", { p_company_id: resolvedCompanyId });
-      if (error) {
-        console.error("count_available_leads error:", error);
-        // Fallback to direct query
-        let query = supabase
-          .from("lead_items")
-          .select("id", { count: "exact", head: true })
-          .eq("company_id", resolvedCompanyId)
-          .eq("status", "disponivel")
-          .is("assigned_to", null);
-        if (filterCity) query = query.ilike("cidade", filterCity);
-        if (filterDDD) query = query.eq("ddd", filterDDD);
-        const { count } = await query;
-        setAvailableCount(count || 0);
-        return;
-      }
+      if (error) { console.error("count_available_leads error:", error); return; }
       const d = data as any;
-      setAvailableCount(d?.lead_items_disponiveis ?? 0);
+      const disponiveis = d?.lead_items_disponiveis ?? 0;
+      const naoImportados = (d?.contact_leads_nao_importados ?? 0) + (d?.leads_nao_importados ?? 0);
+      setCountDetails({ disponiveis, naoImportados });
+      setAvailableCount(disponiveis + naoImportados);
     } catch (e) {
       console.error("countAvailable error:", e);
       setAvailableCount(0);
     }
-  }, [resolvedCompanyId, filterCity, filterDDD]);
+  }, [resolvedCompanyId]);
+
+  const handleSyncBeforeDistribute = useCallback(async () => {
+    if (!resolvedCompanyId) return;
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: resolvedCompanyId });
+      if (error) throw error;
+      const r = data as any;
+      toast.success(`Sincronizado! ${r?.total ?? 0} novos leads importados`);
+      await countAvailable();
+    } catch (e: any) { toast.error("Erro ao sincronizar: " + e.message); }
+    finally { setSyncing(false); }
+  }, [resolvedCompanyId, countAvailable]);
 
   const handleDistribute = async () => {
     if (!targetCollab || !resolvedCompanyId || !collaborator?.id) { toast.error("Selecione um consultor"); return; }
