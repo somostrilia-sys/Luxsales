@@ -280,7 +280,7 @@ function UploadTab() {
 // DISTRIBUTE TAB — RPC distribute_leads
 // ═══════════════════════════════════════════
 function DistributeTab() {
-  const { collaborator } = useCollaborator();
+  const { collaborator, isCEO } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
   const [loading, setLoading] = useState(true);
   const [distributing, setDistributing] = useState(false);
@@ -295,20 +295,40 @@ function DistributeTab() {
   const [commercialCollabs, setCommercialCollabs] = useState<{ id: string; name: string }[]>([]);
   const [availableCount, setAvailableCount] = useState(0);
 
+  // For CEOs with "all" selected, use their own company_id as fallback
   const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
 
-  useEffect(() => { loadFilterOptions(); }, [companyId]);
-  useEffect(() => { countAvailable(); }, [filterCity, filterDDD, companyId]);
+  // If CEO has no specific company and selected "all", try to get the first company
+  const [resolvedCompanyId, setResolvedCompanyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const resolve = async () => {
+      if (companyId) {
+        setResolvedCompanyId(companyId);
+        return;
+      }
+      // CEO with "all" and no company_id: get first company from DB
+      if (isCEO) {
+        const { data } = await supabase.from("companies").select("id").limit(1).single();
+        if (data?.id) {
+          setResolvedCompanyId(data.id);
+        }
+      }
+    };
+    resolve();
+  }, [companyId, isCEO]);
+
+  useEffect(() => { if (resolvedCompanyId) loadFilterOptions(); }, [resolvedCompanyId]);
+  useEffect(() => { countAvailable(); }, [filterCity, filterDDD, resolvedCompanyId]);
 
   const loadFilterOptions = async () => {
-    if (!companyId) return;
+    if (!resolvedCompanyId) return;
     setLoading(true);
     try {
-      // Get unique cities and DDDs from available leads
       const { data: cityData } = await supabase
         .from("lead_items")
         .select("cidade")
-        .eq("company_id", companyId)
+        .eq("company_id", resolvedCompanyId)
         .eq("status", "disponivel")
         .is("assigned_to", null)
         .not("cidade", "is", null)
@@ -317,7 +337,7 @@ function DistributeTab() {
       const { data: dddData } = await supabase
         .from("lead_items")
         .select("ddd")
-        .eq("company_id", companyId)
+        .eq("company_id", resolvedCompanyId)
         .eq("status", "disponivel")
         .is("assigned_to", null)
         .not("ddd", "is", null)
@@ -351,27 +371,41 @@ function DistributeTab() {
     finally { setLoading(false); }
   };
 
-  const countAvailable = async () => {
-    if (!companyId) return;
-    let query = supabase
-      .from("lead_items")
-      .select("id", { count: "exact", head: true })
-      .eq("company_id", companyId)
-      .eq("status", "disponivel")
-      .is("assigned_to", null);
-    if (filterCity) query = query.ilike("cidade", filterCity);
-    if (filterDDD) query = query.eq("ddd", filterDDD);
-    const { count } = await query;
-    setAvailableCount(count || 0);
-  };
+  const countAvailable = useCallback(async () => {
+    if (!resolvedCompanyId) { setAvailableCount(0); return; }
+    try {
+      // Use the RPC for reliable counting
+      const { data, error } = await supabase.rpc("count_available_leads", { p_company_id: resolvedCompanyId });
+      if (error) {
+        console.error("count_available_leads error:", error);
+        // Fallback to direct query
+        let query = supabase
+          .from("lead_items")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", resolvedCompanyId)
+          .eq("status", "disponivel")
+          .is("assigned_to", null);
+        if (filterCity) query = query.ilike("cidade", filterCity);
+        if (filterDDD) query = query.eq("ddd", filterDDD);
+        const { count } = await query;
+        setAvailableCount(count || 0);
+        return;
+      }
+      const d = data as any;
+      setAvailableCount(d?.lead_items_disponiveis ?? 0);
+    } catch (e) {
+      console.error("countAvailable error:", e);
+      setAvailableCount(0);
+    }
+  }, [resolvedCompanyId, filterCity, filterDDD]);
 
   const handleDistribute = async () => {
-    if (!targetCollab || !companyId || !collaborator?.id) { toast.error("Selecione um consultor"); return; }
+    if (!targetCollab || !resolvedCompanyId || !collaborator?.id) { toast.error("Selecione um consultor"); return; }
     setDistributing(true);
     try {
       const { data, error } = await supabase.rpc("distribute_leads", {
         p_assigned_to: targetCollab,
-        p_company_id: companyId,
+        p_company_id: resolvedCompanyId,
         p_assigned_by: collaborator.id,
         p_quantidade: parseInt(quantity) || 500,
         p_filtro_cidade: filterCity || null,
@@ -387,7 +421,7 @@ function DistributeTab() {
   };
 
   const handleDistributeAll = async () => {
-    if (!companyId || !collaborator?.id) return;
+    if (!resolvedCompanyId || !collaborator?.id) return;
     const targets = selectedCollabs.size > 0
       ? commercialCollabs.filter(c => selectedCollabs.has(c.id))
       : commercialCollabs;
@@ -399,7 +433,7 @@ function DistributeTab() {
       for (const collab of targets) {
         const { data, error } = await supabase.rpc("distribute_leads", {
           p_assigned_to: collab.id,
-          p_company_id: companyId,
+          p_company_id: resolvedCompanyId,
           p_assigned_by: collaborator.id,
           p_quantidade: parseInt(quantity) || 500,
           p_filtro_cidade: filterCity || null,
