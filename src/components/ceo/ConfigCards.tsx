@@ -10,25 +10,17 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Crown, Users } from "lucide-react";
+import { Save, Crown } from "lucide-react";
 import { ApiKeyInput } from "./ApiKeyInput";
 
 interface ConfigValues {
   anthropic_api_key_ceo: string;
   ceo_model: string;
-  api_key_agent_1: string;
-  api_key_agent_2: string;
-  api_key_agent_3: string;
-  api_key_agent_4: string;
 }
 
 const DEFAULT_VALUES: ConfigValues = {
   anthropic_api_key_ceo: "",
   ceo_model: "claude-opus-4-5",
-  api_key_agent_1: "",
-  api_key_agent_2: "",
-  api_key_agent_3: "",
-  api_key_agent_4: "",
 };
 
 export function ConfigCards() {
@@ -74,8 +66,7 @@ export function ConfigCards() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      {/* CEO Card - Gold border */}
+    <div className="max-w-lg">
       <Card className="border-2 border-yellow-500/60">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -114,46 +105,6 @@ export function ConfigCards() {
           </Button>
         </CardContent>
       </Card>
-
-      {/* Agents Pool Card - Blue border */}
-      <Card className="border-2 border-blue-500/60">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Users className="h-5 w-5 text-blue-500" />
-            Pool de API Keys dos Agentes
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Distribuída entre os 80 bots (rotação anti-rate-limit)
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {([1, 2, 3, 4] as const).map((n) => (
-            <ApiKeyInput
-              key={n}
-              label={`Chave ${n}`}
-              value={values[`api_key_agent_${n}` as keyof ConfigValues]}
-              onChange={(v) => set(`api_key_agent_${n}` as keyof ConfigValues, v)}
-            />
-          ))}
-          <p className="text-xs text-muted-foreground italic">
-            Modelo fixo: claude-sonnet-4-6
-          </p>
-          <Button
-            onClick={() =>
-              upsertKeys(
-                ["api_key_agent_1", "api_key_agent_2", "api_key_agent_3", "api_key_agent_4"],
-                "agents"
-              )
-            }
-            disabled={saving === "agents"}
-            className="w-full gap-2"
-          >
-            <Save className="h-4 w-4" />
-            {saving === "agents" ? "Salvando..." : "Salvar"}
-          </Button>
-        </CardContent>
-      </Card>
-
     </div>
   );
 }
