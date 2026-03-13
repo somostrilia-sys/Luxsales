@@ -184,8 +184,8 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   };
 
   const handleConnect = async (chip: DisposableChip) => {
-    if (!chip.instance_token) { toast.error("Instância não criada no UAZAPI"); return; }
     setConnecting(chip.id);
+    // Se não tem instância, a Edge Function vai criar automaticamente
     const result = await callEdge({ action: "connect", chip_id: chip.id });
     if (result?.error) { toast.error("Erro ao conectar: " + result.error); setConnecting(null); return; }
     const qrCode = result?.qr_code;
