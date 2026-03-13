@@ -213,8 +213,8 @@ export default function Cadastro() {
       expiresAt.setDate(expiresAt.getDate() + parseInt(inviteForm.expires_days));
 
       const { data, error } = await supabase.from("invite_links").insert({
-        company_id: inviteForm.company_id,
-        role: inviteForm.role_id,
+        company_id: inviteForm.company_id || null,
+        role_id: inviteForm.role_id || null,
         max_uses: parseInt(inviteForm.max_uses),
         expires_at: expiresAt.toISOString(),
         created_by: session?.user?.id || null,
