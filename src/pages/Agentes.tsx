@@ -42,7 +42,8 @@ const LEVELS = [
   { level: 0, label: "CEO" },
   { level: 1, label: "Diretor" },
   { level: 2, label: "Gestor" },
-  { level: 3, label: "Colaborador" },
+  { level: 3, label: "Consultor" },
+  { level: 4, label: "Colaborador" },
 ];
 
 export default function Agentes() {
