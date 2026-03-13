@@ -223,18 +223,14 @@ export default function Colaboradores() {
   };
 
   const handleCreateInvite = async () => {
-    if (!inviteForm.company_id || !inviteForm.role_id) {
-      toast.error("Selecione empresa e cargo");
-      return;
-    }
     setInviteCreating(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + parseInt(inviteForm.expires_days || "7"));
       const { data, error } = await supabase.from("invite_links").insert({
-        company_id: inviteForm.company_id,
-        role: inviteForm.role_id,
+        company_id: inviteForm.company_id || null,
+        role: inviteForm.role_id || null,
         max_uses: parseInt(inviteForm.max_uses || "9999"),
         expires_at: expiresAt.toISOString(),
         created_by: session?.user?.id || null,
@@ -519,17 +515,23 @@ export default function Colaboradores() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Empresa *</Label>
-              <Select value={inviteForm.company_id} onValueChange={v => setInviteForm(prev => ({ ...prev, company_id: v, role_id: "" }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione a empresa" /></SelectTrigger>
-                <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+              <Label>Empresa <span className="text-xs text-muted-foreground">(opcional — se vazio, colaborador escolhe)</span></Label>
+              <Select value={inviteForm.company_id || "none"} onValueChange={v => setInviteForm(prev => ({ ...prev, company_id: v === "none" ? "" : v, role_id: "" }))}>
+                <SelectTrigger><SelectValue placeholder="Colaborador escolhe" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Colaborador escolhe —</SelectItem>
+                  {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Cargo *</Label>
-              <Select value={inviteForm.role_id} onValueChange={v => setInviteForm(prev => ({ ...prev, role_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione o cargo" /></SelectTrigger>
-                <SelectContent>{inviteFilteredRoles.map(r => <SelectItem key={r.id} value={r.id}>{r.name} (Lv.{r.level})</SelectItem>)}</SelectContent>
+              <Label>Cargo <span className="text-xs text-muted-foreground">(opcional — se vazio, colaborador escolhe)</span></Label>
+              <Select value={inviteForm.role_id || "none"} onValueChange={v => setInviteForm(prev => ({ ...prev, role_id: v === "none" ? "" : v }))}>
+                <SelectTrigger><SelectValue placeholder="Colaborador escolhe" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Colaborador escolhe —</SelectItem>
+                  {inviteFilteredRoles.map(r => <SelectItem key={r.id} value={r.id}>{r.name} (Lv.{r.level})</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -594,8 +596,8 @@ export default function Colaboradores() {
                   const status = getInviteStatus(invite);
                   return (
                     <TableRow key={invite.id} className="table-row-hover">
-                      <TableCell className="font-medium">{getCompanyName(invite.company_id)}</TableCell>
-                      <TableCell>{getRoleName(invite.role)}</TableCell>
+                      <TableCell className="font-medium">{invite.company_id ? getCompanyName(invite.company_id) : <span className="text-muted-foreground italic">Escolha livre</span>}</TableCell>
+                      <TableCell>{invite.role ? getRoleName(invite.role) : <span className="text-muted-foreground italic">Escolha livre</span>}</TableCell>
                       <TableCell>{invite.current_uses ?? 0}/{invite.max_uses ?? "∞"}</TableCell>
                       <TableCell className="text-sm">
                         {invite.expires_at ? format(new Date(invite.expires_at), "dd/MM/yy HH:mm") : "Nunca"}
