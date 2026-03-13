@@ -121,8 +121,6 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
 
   // Form para novo chip (servidor + token)
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newServerUrl, setNewServerUrl] = useState("https://walkholding.uazapi.com");
-  const [newAdminToken, setNewAdminToken] = useState("");
 
   const fetchChips = useCallback(async () => {
     if (!collaboratorId) { setChips([]); setLoading(false); return; }
