@@ -61,7 +61,7 @@ export default function Colaboradores() {
   const [inviteLinks, setInviteLinks] = useState<InviteLink[]>([]);
   const [inviteListOpen, setInviteListOpen] = useState(false);
 
-  const canManageInvites = roleLevel <= 1 || currentCollab?.is_super_admin;
+  const canManageInvites = roleLevel <= 1;
 
   useEffect(() => { loadData(); if (canManageInvites) loadInvites(); }, [selectedCompanyId]);
 
