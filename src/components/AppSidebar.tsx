@@ -1,6 +1,7 @@
+// v2.5 — Refined dark dashboard sidebar
 import {
   LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Zap
+  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Zap, Rocket
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -15,7 +16,7 @@ interface MenuItem {
   title: string;
   url: string;
   icon: any;
-  levels: number[]; // which role levels can see this
+  levels: number[];
 }
 
 const managementItems: MenuItem[] = [
@@ -24,8 +25,8 @@ const managementItems: MenuItem[] = [
   { title: "Bots / WhatsApp", url: "/bots", icon: Bot, levels: [0, 1, 2, 3] },
   { title: "Colaboradores", url: "/colaboradores", icon: Users, levels: [0, 1] },
   { title: "Cadastro", url: "/cadastro", icon: UserPlus, levels: [0, 1] },
-  { title: "Extração de Leads", url: "/extracao", icon: FileSearch, levels: [0, 1] }, // CEO e Diretores apenas
-  { title: "Base de Dados", url: "/base-dados", icon: Database, levels: [0, 1] },
+  { title: "Extração de Leads", url: "/extracao", icon: FileSearch, levels: [0, 1] },
+  { title: "Base de Dados ⚠️", url: "/base-dados", icon: Database, levels: [0, 1] },
   { title: "Métricas", url: "/metricas", icon: BarChart3, levels: [0, 1] },
   { title: "Identidade Visual", url: "/identidade-visual", icon: Palette, levels: [0] },
   { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0, 1] },
@@ -36,9 +37,8 @@ const managementItems: MenuItem[] = [
 const consultantItems: MenuItem[] = [
   { title: "Conversas", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
   { title: "Meu Bot", url: "/meu-bot", icon: Bot, levels: [0, 1, 2, 3] },
-  // Motor de Leads: consultores usam /motor-disparo que tem a view correta por roleLevel
-  { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
   
+  { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
 ];
 
 export function AppSidebar() {
@@ -57,7 +57,7 @@ export function AppSidebar() {
           <NavLink
             to={item.url}
             end={item.url === "/"}
-            className="hover:bg-sidebar-accent transition-colors"
+            className="hover:bg-sidebar-accent/60 transition-all duration-200 rounded-lg"
             activeClassName="sidebar-active-gradient text-primary font-semibold"
           >
             <item.icon className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -69,7 +69,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarContent className="pt-6 bg-sidebar">
+      <SidebarContent className="pt-6 bg-sidebar border-r border-sidebar-border">
         {/* Logo */}
         <div className="px-4 mb-6 flex items-center gap-3">
           {collaborator?.company?.logo_url ? (
@@ -92,7 +92,7 @@ export function AppSidebar() {
 
         {visibleManagement.length > 0 && (
           <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-muted-foreground text-[10px] uppercase tracking-wider">Gestão</SidebarGroupLabel>}
+            {!collapsed && <SidebarGroupLabel className="text-muted-foreground text-[10px] uppercase tracking-widest font-semibold px-4 mb-1">Gestão</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>{renderItems(visibleManagement)}</SidebarMenu>
             </SidebarGroupContent>
@@ -101,7 +101,7 @@ export function AppSidebar() {
 
         {visibleConsultant.length > 0 && (
           <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-muted-foreground text-[10px] uppercase tracking-wider">Consultor</SidebarGroupLabel>}
+            {!collapsed && <SidebarGroupLabel className="text-muted-foreground text-[10px] uppercase tracking-widest font-semibold px-4 mb-1">Consultor</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>{renderItems(visibleConsultant)}</SidebarMenu>
             </SidebarGroupContent>

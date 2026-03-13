@@ -13,12 +13,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center justify-between border-b bg-card px-4 shrink-0">
+          <header className="h-14 flex items-center justify-between border-b border-border/60 bg-card/50 backdrop-blur-sm px-4 shrink-0 sticky top-0 z-10">
             <div className="flex items-center gap-3">
-              <SidebarTrigger />
+              <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
               {isCEO && companies.length > 0 && (
                 <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
-                  <SelectTrigger className="w-[180px] h-8 text-xs">
+                  <SelectTrigger className="w-[180px] h-8 text-xs bg-secondary/50 border-border">
                     <SelectValue placeholder="Empresa" />
                   </SelectTrigger>
                   <SelectContent>
