@@ -57,7 +57,7 @@ export default function Conversas() {
     } else {
       const { data: newConv } = await supabase.from("agent_conversations").insert({
         agent_id: agent.id, collaborator_id: collaborator!.id,
-        company_id: collaborator!.company_id, title: `Conversa com ${agent.name}`,
+        status: "active",
       }).select("id").single();
       if (newConv) setConversationId(newConv.id);
     }
