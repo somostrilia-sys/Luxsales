@@ -410,6 +410,9 @@ export type Database = {
           collaborator_id: string
           created_at: string
           id: string
+          instance_name: string | null
+          instance_token: string | null
+          phone: string | null
           qr_code: string | null
           status: string
           uazapi_admin_token: string
@@ -421,6 +424,9 @@ export type Database = {
           collaborator_id: string
           created_at?: string
           id?: string
+          instance_name?: string | null
+          instance_token?: string | null
+          phone?: string | null
           qr_code?: string | null
           status?: string
           uazapi_admin_token?: string
@@ -432,6 +438,9 @@ export type Database = {
           collaborator_id?: string
           created_at?: string
           id?: string
+          instance_name?: string | null
+          instance_token?: string | null
+          phone?: string | null
           qr_code?: string | null
           status?: string
           uazapi_admin_token?: string
