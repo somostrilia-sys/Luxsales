@@ -585,23 +585,6 @@ function DashboardTab() {
     }
   };
 
-  const loadCollabLeads = async (collabId: string) => {
-    if (expandedCollab === collabId) {
-      setExpandedCollab(null);
-      setExpandedLeads([]);
-      return;
-    }
-    setExpandedCollab(collabId);
-    setLoadingLeads(true);
-    const { data } = await supabase.from("lead_items")
-      .select("id, name, phone, city, ddd, status, dispatched_at")
-      .eq("assigned_to", collabId)
-      .in("status", ["distributed", "dispatched"])
-      .order("created_at", { ascending: false })
-      .limit(50);
-    setExpandedLeads(data || []);
-    setLoadingLeads(false);
-  };
 
   const toggleAutoRefill = async (enabled: boolean) => {
     setTogglingRefill(true);
