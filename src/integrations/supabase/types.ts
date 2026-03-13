@@ -1107,6 +1107,7 @@ export type Database = {
         Args: { p_bolt_collaborator_id: string }
         Returns: Json
       }
+      count_available_leads: { Args: { p_company_id: string }; Returns: Json }
       distribute_leads: {
         Args: {
           p_assigned_by: string
@@ -1138,6 +1139,7 @@ export type Database = {
         Returns: undefined
       }
       reset_daily_chip_counts: { Args: never; Returns: undefined }
+      sync_leads_from_base: { Args: { p_company_id: string }; Returns: Json }
     }
     Enums: {
       user_role: "admin" | "gestor" | "consultor" | "sdr"

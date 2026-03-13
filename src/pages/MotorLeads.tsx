@@ -98,32 +98,44 @@ function UploadTab() {
   const { selectedCompanyId } = useCompanyFilter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [preview, setPreview] = useState<any[]>([]);
   const [fileName, setFileName] = useState("");
   const [totalRows, setTotalRows] = useState(0);
-  const [availableCount, setAvailableCount] = useState<number | null>(null);
+  const [counts, setCounts] = useState<{ disponiveis: number; naoImportados: number } | null>(null);
 
-  useEffect(() => {
-    loadAvailableCount();
-  }, [selectedCompanyId]);
+  const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
 
-  const loadAvailableCount = async () => {
-    const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
+  const loadCounts = useCallback(async () => {
     if (!companyId) return;
-    const { count } = await supabase
-      .from("lead_items")
-      .select("id", { count: "exact", head: true })
-      .eq("company_id", companyId)
-      .eq("status", "disponivel")
-      .is("assigned_to", null);
-    setAvailableCount(count ?? 0);
-  };
+    const { data, error } = await supabase.rpc("count_available_leads", { p_company_id: companyId });
+    if (error) { console.error(error); return; }
+    const d = data as any;
+    setCounts({
+      disponiveis: d?.lead_items_disponiveis ?? 0,
+      naoImportados: (d?.contact_leads_nao_importados ?? 0) + (d?.leads_nao_importados ?? 0),
+    });
+  }, [companyId]);
+
+  useEffect(() => { loadCounts(); }, [loadCounts]);
+
+  const handleSync = useCallback(async () => {
+    if (!companyId) { toast.error("Empresa não encontrada"); return; }
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: companyId });
+      if (error) throw error;
+      const r = data as any;
+      toast.success(`Sincronizado! ${r?.total ?? 0} novos leads importados`);
+      loadCounts();
+    } catch (e: any) { toast.error("Erro: " + e.message); }
+    finally { setSyncing(false); }
+  }, [companyId, loadCounts]);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
-
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
@@ -139,25 +151,14 @@ function UploadTab() {
 
   const handleImport = async () => {
     if (preview.length === 0 || totalRows === 0) return;
-    const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
     if (!companyId) { toast.error("Empresa não encontrada"); return; }
-
     setImporting(true);
     try {
-      // Re-parse full file
-      const fileInput = fileRef.current;
-      const file = fileInput?.files?.[0];
-      if (!file) { toast.error("Selecione o arquivo novamente"); return; }
-
+      const file = fileRef.current?.files?.[0];
+      if (!file) { toast.error("Selecione o arquivo novamente"); setImporting(false); return; }
       const parseResult = await new Promise<any[]>((resolve, reject) => {
-        Papa.parse(file, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (r) => resolve(r.data as any[]),
-          error: (e) => reject(e),
-        });
+        Papa.parse(file, { header: true, skipEmptyLines: true, complete: (r) => resolve(r.data as any[]), error: (e) => reject(e) });
       });
-
       const items = parseResult
         .filter(r => r.telefone || r.phone || r.tel)
         .map(r => ({
@@ -170,9 +171,7 @@ function UploadTab() {
           status: "disponivel",
           company_id: companyId,
         }));
-
       if (items.length === 0) { toast.error("Nenhum lead com telefone válido"); setImporting(false); return; }
-
       let inserted = 0;
       for (let i = 0; i < items.length; i += 500) {
         const chunk = items.slice(i, i + 500);
@@ -180,35 +179,48 @@ function UploadTab() {
         if (error) throw error;
         inserted += chunk.length;
       }
-
       toast.success(`${inserted.toLocaleString("pt-BR")} leads importados!`);
-      setPreview([]);
-      setFileName("");
-      setTotalRows(0);
+      setPreview([]); setFileName(""); setTotalRows(0);
       if (fileRef.current) fileRef.current.value = "";
-      loadAvailableCount();
-    } catch (e: any) {
-      toast.error("Erro: " + e.message);
-    } finally {
-      setImporting(false);
-    }
+      loadCounts();
+    } catch (e: any) { toast.error("Erro: " + e.message); }
+    finally { setImporting(false); }
   };
 
   return (
     <>
-      {availableCount !== null && (
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10 text-primary"><Package className="h-5 w-5" /></div>
               <div>
-                <p className="text-sm text-muted-foreground">Leads disponíveis na base</p>
-                <p className="text-2xl font-bold text-foreground">{availableCount.toLocaleString("pt-BR")}</p>
+                <p className="text-sm text-muted-foreground">Disponíveis (lead_items)</p>
+                <p className="text-2xl font-bold text-foreground">{counts?.disponiveis?.toLocaleString("pt-BR") ?? "..."}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-      )}
+        <Card>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-accent/20 text-accent-foreground"><TrendingUp className="h-5 w-5" /></div>
+              <div>
+                <p className="text-sm text-muted-foreground">Na base (não importados)</p>
+                <p className="text-2xl font-bold text-foreground">{counts?.naoImportados?.toLocaleString("pt-BR") ?? "..."}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5 pb-4 flex items-center justify-center">
+            <Button onClick={handleSync} disabled={syncing} variant="outline" className="gap-2 w-full">
+              {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {syncing ? "Sincronizando..." : "Sincronizar Base"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card className="border-border">
         <CardHeader>
@@ -223,12 +235,10 @@ function UploadTab() {
           <div className="flex gap-3 items-center">
             <input ref={fileRef} type="file" accept=".csv,.txt" onChange={handleFile} className="hidden" />
             <Button onClick={() => fileRef.current?.click()} disabled={importing} variant="outline" className="gap-2">
-              <Upload className="h-4 w-4" />
-              Selecionar Arquivo
+              <Upload className="h-4 w-4" /> Selecionar Arquivo
             </Button>
             {fileName && <span className="text-sm text-muted-foreground">{fileName}</span>}
           </div>
-
           {preview.length > 0 && (
             <>
               <div className="border rounded-lg overflow-hidden border-border">
