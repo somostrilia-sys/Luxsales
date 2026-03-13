@@ -830,7 +830,7 @@ export default function Bots() {
                 })}
               </div>
             )}
-          </TabsContent>
+          </TabsContent>}
         </Tabs>
 
         {/* ════════════════════ MEU WHATSAPP ════════════════════ */}
