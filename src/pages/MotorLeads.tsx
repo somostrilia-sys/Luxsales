@@ -382,11 +382,12 @@ function DistributeTab() {
   };
 
   const countAvailable = useCallback(async () => {
-    if (!resolvedCompanyId) { setAvailableCount(0); setCountDetails(null); return; }
+    const cid = resolvedCompanyId || null;
     try {
-      const { data, error } = await supabase.rpc("count_available_leads", { p_company_id: resolvedCompanyId });
-      if (error) { console.error("count_available_leads error:", error); return; }
+      const { data, error } = await supabase.rpc("count_available_leads", { p_company_id: cid });
+      if (error) { console.error("count_available_leads error:", error); setAvailableCount(0); setCountDetails(null); return; }
       const d = data as any;
+      console.log("count_available_leads result:", d);
       const disponiveis = d?.lead_items_disponiveis ?? 0;
       const naoImportados = (d?.contact_leads_nao_importados ?? 0) + (d?.leads_nao_importados ?? 0);
       setCountDetails({ disponiveis, naoImportados });
