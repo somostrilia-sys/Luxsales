@@ -157,6 +157,30 @@ export default function Bots() {
     })();
   }, [collaborator]);
 
+  // ── WhatsApp helpers ──
+  const handleWaAction = async (action: "create" | "status") => {
+    setWaConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-whatsapp-instance", {
+        body: { action },
+      });
+      if (error || data?.error) {
+        toast.error(data?.error || error?.message || "Erro ao conectar WhatsApp");
+      } else if (data?.connected) {
+        setWaConnected(true);
+        setWaQrCode(null);
+        setWaNumber(data.number || null);
+        toast.success("WhatsApp conectado!");
+      } else if (data?.qr_code) {
+        setWaQrCode(data.qr_code);
+        setWaConnected(false);
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Erro de conexão");
+    }
+    setWaConnecting(false);
+  };
+
   // ── Bot helpers ──
 
   const openNewBot = () => {
