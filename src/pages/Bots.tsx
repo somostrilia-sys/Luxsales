@@ -275,7 +275,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         </div>
         <Button size="sm" onClick={() => setShowAddForm(v => !v)} disabled={!collaboratorId || chips.length >= 5} className="gap-2">
           <Plus className="h-4 w-4" />
-          + Novo Chip
+          + Chip de Disparo
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -884,7 +884,7 @@ export default function Bots() {
                 <Input placeholder="Buscar bot..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 bg-[#111118] border-[#1E1E2E]" />
               </div>
               <Button onClick={openNewBot} className="gap-2 bg-primary hover:bg-primary/90">
-                <Plus className="h-4 w-4" /> Novo Bot
+                <Plus className="h-4 w-4" /> Chip de Disparo
               </Button>
             </div>
 
@@ -1089,7 +1089,7 @@ export default function Bots() {
       <Dialog open={botModalOpen} onOpenChange={setBotModalOpen}>
         <DialogContent className="bg-[#111118] border-[#1E1E2E] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingBot ? "Editar Bot" : "Novo Bot"}</DialogTitle>
+            <DialogTitle>{editingBot ? "Editar Bot" : "Chip de Disparo"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
