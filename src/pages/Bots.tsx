@@ -271,7 +271,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
             📱 Chips de Disparo
             {chips.length > 0 && <span className="text-sm text-muted-foreground font-normal">({chips.length}/5)</span>}
           </CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">Números para disparo em massa — antibloco por rodízio</p>
+          <p className="text-xs text-muted-foreground mt-1">Chips adicionais para prospecção e disparo em massa. Seu WhatsApp pessoal já tem bot ativo após conectar abaixo.</p>
         </div>
         <Button size="sm" onClick={() => setShowAddForm(v => !v)} disabled={!collaboratorId || chips.length >= 5} className="gap-2">
           <Plus className="h-4 w-4" />
