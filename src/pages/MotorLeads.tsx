@@ -890,7 +890,13 @@ const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
 
 function BlastSection() {
   const { collaborator } = useCollaborator();
-  const [messageTemplate, setMessageTemplate] = useState("Olá {nome}! Vi que você atua com imóveis...");
+  const [messageTemplates, setMessageTemplates] = useState([
+    "Olá {nome}! Vi que você atua nessa área e quero apresentar uma solução que pode proteger seus veículos com muito mais segurança e custo acessível. Posso te mostrar em 5 minutos?",
+    "",
+    "",
+    "",
+    "",
+  ]);
   const [dailyLimit, setDailyLimit] = useState(100);
   const [creating, setCreating] = useState(false);
   const [sending, setSending] = useState(false);
@@ -958,13 +964,15 @@ function BlastSection() {
 
   const handleCreate = async () => {
     if (!collaborator?.id) return;
-    if (!messageTemplate.trim()) { toast.error("Preencha o template da mensagem"); return; }
+    const activeTemplates = messageTemplates.filter(t => t.trim().length > 0);
+    if (activeTemplates.length === 0) { toast.error("Preencha pelo menos um template de mensagem"); return; }
     setCreating(true);
     try {
       const data = await callBlast({
         action: "create_job",
         collaborator_id: collaborator.id,
-        message_template: messageTemplate,
+        message_template: activeTemplates[0],
+        message_templates: activeTemplates,
         daily_limit: dailyLimit,
       });
       toast.success("Job de disparo criado!");
@@ -1081,18 +1089,31 @@ function BlastSection() {
         {job === null && !loadingJob && (
           <p className="text-sm text-muted-foreground">Nenhum job ativo. Configure e inicie um novo disparo.</p>
         )}
-        <div className="space-y-2">
-          <Label>Template da mensagem</Label>
-          <Textarea
-            placeholder="Olá {nome}! Vi que você atua com imóveis..."
-            value={messageTemplate}
-            onChange={e => setMessageTemplate(e.target.value)}
-            rows={4}
-          />
-          <p className="text-xs text-muted-foreground">Use {"{{nome}}"} para inserir o nome do lead.</p>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-sm font-medium">Templates de mensagem</Label>
+            <p className="text-xs text-muted-foreground mt-0.5">O sistema alterna automaticamente entre os templates a cada envio. Use {"{nome}"} para o nome do lead.</p>
+          </div>
+          {messageTemplates.map((tmpl, idx) => (
+            <div key={idx} className="space-y-1">
+              <Label className="text-xs text-muted-foreground">
+                Template {idx + 1}{idx === 0 ? " (obrigatório)" : " (opcional)"}
+              </Label>
+              <Textarea
+                placeholder={idx === 0 ? "Olá {nome}! Apresento uma solução..." : `Variação ${idx + 1}...`}
+                value={tmpl}
+                onChange={e => {
+                  const updated = [...messageTemplates];
+                  updated[idx] = e.target.value;
+                  setMessageTemplates(updated);
+                }}
+                rows={3}
+              />
+            </div>
+          ))}
         </div>
         <div className="space-y-2 max-w-xs">
-          <Label>Limite diário</Label>
+          <Label>Limite diário total (somado entre todos os chips de disparo)</Label>
           <Input
             type="number"
             value={dailyLimit}
