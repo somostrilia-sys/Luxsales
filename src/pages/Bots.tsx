@@ -884,7 +884,7 @@ export default function Bots() {
                 <Input placeholder="Buscar bot..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 bg-[#111118] border-[#1E1E2E]" />
               </div>
               <Button onClick={openNewBot} className="gap-2 bg-primary hover:bg-primary/90">
-                <Plus className="h-4 w-4" /> Novo Bot
+                <Plus className="h-4 w-4" /> Chip de Disparo
               </Button>
             </div>
 
