@@ -157,6 +157,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         delete pollingRefs.current[chipId];
         setChips(prev => prev.map(c => c.id === chipId ? { ...c, status: "connected", qr_code: null, phone: result.phone || c.phone } : c));
         setConnecting(null);
+        setActiveQrChipId(prev => prev === chipId ? null : prev);
         toast.success("✅ Chip conectado com sucesso!");
       } else if (result?.status === "connecting" && result?.qr_code) {
         // QR refreshed on UAZAPI side — update display so user always sees fresh QR
