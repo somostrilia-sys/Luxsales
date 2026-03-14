@@ -271,11 +271,11 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
             📱 Chips de Disparo
             {chips.length > 0 && <span className="text-sm text-muted-foreground font-normal">({chips.length}/5)</span>}
           </CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">Números para disparo em massa — antibloco por rodízio</p>
+          <p className="text-xs text-muted-foreground mt-1">Chips adicionais para prospecção e disparo em massa. Seu WhatsApp pessoal já tem bot ativo após conectar abaixo.</p>
         </div>
         <Button size="sm" onClick={() => setShowAddForm(v => !v)} disabled={!collaboratorId || chips.length >= 5} className="gap-2">
           <Plus className="h-4 w-4" />
-          + Chip de Disparo
+          + Novo Chip
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -867,7 +867,7 @@ export default function Bots() {
         <Tabs defaultValue="bots" className="w-full">
           <TabsList className="bg-[#111118] border border-[#1E1E2E]">
             <TabsTrigger value="bots" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <Bot className="h-4 w-4" /> Bots
+              <Bot className="h-4 w-4" /> Chips de Disparo
             </TabsTrigger>
             {roleLevel <= 1 && (
               <TabsTrigger value="apikeys" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
@@ -1089,7 +1089,7 @@ export default function Bots() {
       <Dialog open={botModalOpen} onOpenChange={setBotModalOpen}>
         <DialogContent className="bg-[#111118] border-[#1E1E2E] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingBot ? "Editar Bot" : "Chip de Disparo"}</DialogTitle>
+            <DialogTitle>{editingBot ? "Editar Bot" : "Novo Bot"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
