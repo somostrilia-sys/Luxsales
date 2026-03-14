@@ -289,7 +289,6 @@ function UploadTab() {
 // ═══════════════════════════════════════════
 function DistributeTab() {
   const { collaborator, isCEO } = useCollaborator();
-  const { selectedCompanyId } = useCompanyFilter();
   const [loading, setLoading] = useState(true);
   const [distributing, setDistributing] = useState(false);
   const [distributingAll, setDistributingAll] = useState(false);
@@ -305,31 +304,25 @@ function DistributeTab() {
   const [countDetails, setCountDetails] = useState<{ disponiveis: number; naoImportados: number } | null>(null);
   const [syncing, setSyncing] = useState(false);
 
-  // For CEOs with "all" selected, use their own company_id as fallback
-  const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
+  // Company selector (local state, independent from global filter)
+  const [allCompanies, setAllCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [distCompanyId, setDistCompanyId] = useState<string | null>(null);
 
-  // If CEO has no specific company and selected "all", try to get the first company
-  const [resolvedCompanyId, setResolvedCompanyId] = useState<string | null>(null);
-
+  // Load all companies on mount and auto-select first
   useEffect(() => {
-    const resolve = async () => {
-      if (companyId) {
-        setResolvedCompanyId(companyId);
-        return;
-      }
-      // CEO with "all" and no company_id: get first company from DB
-      if (isCEO) {
-        const { data } = await supabase.from("companies").select("id").limit(1).single();
-        if (data?.id) {
-          setResolvedCompanyId(data.id);
-        }
+    const loadCompanies = async () => {
+      const { data } = await supabase.from("companies").select("id, name").order("name");
+      const list = data || [];
+      setAllCompanies(list);
+      if (list.length > 0 && !distCompanyId) {
+        setDistCompanyId(list[0].id);
       }
     };
-    resolve();
-  }, [companyId, isCEO]);
+    loadCompanies();
+  }, []);
 
-  useEffect(() => { if (resolvedCompanyId) loadFilterOptions(); }, [resolvedCompanyId]);
-  useEffect(() => { countAvailable(); }, [filterCity, filterDDD, resolvedCompanyId]);
+  useEffect(() => { if (distCompanyId) loadFilterOptions(); }, [distCompanyId]);
+  useEffect(() => { countAvailable(); }, [filterCity, filterDDD, distCompanyId]);
 
   const loadFilterOptions = async () => {
     if (!resolvedCompanyId) return;
