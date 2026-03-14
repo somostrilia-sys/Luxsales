@@ -49,8 +49,7 @@ const LEVELS: LevelConfig[] = [
   { key: "ceo", label: "CEO", match: (r) => r.level === 0 },
   { key: "diretor", label: "Diretor", match: (r) => r.level === 1 },
   { key: "gestor", label: "Gestor", match: (r) => r.level === 2 },
-  { key: "consultor", label: "Consultor", match: (r) => r.level === 3 && (r.slug?.includes("consultor") ?? false) },
-  { key: "colaborador", label: "Colaborador", match: (r) => r.level === 3 && (r.slug?.includes("colab") ?? false) },
+  { key: "colaborador", label: "Colaborador", match: (r) => r.level === 3 },
 ];
 
 export default function Agentes() {
