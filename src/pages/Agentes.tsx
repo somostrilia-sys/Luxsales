@@ -70,7 +70,7 @@ export default function Agentes() {
     const [agentsRes, companiesRes, rolesRes, accessRes] = await Promise.all([
       supabase.from("agent_definitions").select("id, name, slug, active, company_id, description, agent_type"),
       supabase.from("companies").select("id, name"),
-      supabase.from("roles").select("id, level, company_id"),
+      supabase.from("roles").select("id, level, company_id, slug"),
       supabase.from("role_agent_access").select("agent_id, role_id"),
     ]);
     if (agentsRes.data) setAgents(agentsRes.data);
