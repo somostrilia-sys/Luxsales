@@ -233,12 +233,12 @@ export default function Agentes() {
 
                   <div className="space-y-2.5 pt-1 border-t border-border">
                     <p className="text-[11px] text-muted-foreground uppercase tracking-wider pt-2">Acesso por nível</p>
-                    {LEVELS.map(({ level, label }) => (
-                      <div key={level} className="flex items-center justify-between">
-                        <span className="text-sm text-foreground">{label}</span>
+                    {LEVELS.map((config) => (
+                      <div key={config.key} className="flex items-center justify-between">
+                        <span className="text-sm text-foreground">{config.label}</span>
                         <Switch
-                          checked={hasLevelAccess(agent.id, level, agent.company_id)}
-                          onCheckedChange={() => toggleLevelAccess(agent, level)}
+                          checked={hasConfigAccess(agent.id, config, agent.company_id)}
+                          onCheckedChange={() => toggleConfigAccess(agent, config)}
                         />
                       </div>
                     ))}
