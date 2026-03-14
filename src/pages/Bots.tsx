@@ -15,7 +15,7 @@ import { supabase } from "@/lib/supabase";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Plus, Search, Bot, Pencil, Power, QrCode, Eye, EyeOff, Loader2, Key, Trash2, Smartphone, RefreshCw, BookOpen, MessageCircle } from "lucide-react";
+import { Plus, Search, Bot, Pencil, Power, QrCode, Eye, EyeOff, Loader2, Key, Trash2, Smartphone, RefreshCw, BookOpen, MessageCircle, Users, ChevronDown, ChevronUp } from "lucide-react";
 
 // ── Types ──
 
@@ -555,6 +555,148 @@ function WhatsAppConversationsSection({ collaboratorId }: { collaboratorId: stri
   );
 }
 
+// ── Admin: All Collaborators Chips Overview (CEO/Diretor only) ──
+
+interface CollabChipOverview {
+  collaborator_id: string;
+  collaborator_name: string;
+  chips: DisposableChip[];
+}
+
+function AdminChipsOverview() {
+  const [data, setData] = useState<CollabChipOverview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedCollabs, setExpandedCollabs] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      // Fetch all disposable chips with collaborator names
+      const { data: chips } = await supabase
+        .from("disposable_chips")
+        .select("*")
+        .order("chip_index");
+
+      const { data: collabs } = await supabase
+        .from("collaborators")
+        .select("id, name")
+        .eq("active", true)
+        .order("name");
+
+      if (chips && collabs) {
+        const collabMap = new Map(collabs.map((c: any) => [c.id, c.name]));
+        const grouped = new Map<string, DisposableChip[]>();
+
+        for (const chip of chips as DisposableChip[]) {
+          const existing = grouped.get(chip.collaborator_id) || [];
+          existing.push(chip);
+          grouped.set(chip.collaborator_id, existing);
+        }
+
+        const result: CollabChipOverview[] = [];
+        for (const [collabId, collabChips] of grouped.entries()) {
+          result.push({
+            collaborator_id: collabId,
+            collaborator_name: collabMap.get(collabId) || "Desconhecido",
+            chips: collabChips,
+          });
+        }
+        result.sort((a, b) => a.collaborator_name.localeCompare(b.collaborator_name));
+        setData(result);
+      }
+      setLoading(false);
+    })();
+  }, []);
+
+  const toggleExpand = (collabId: string) => {
+    setExpandedCollabs(prev => {
+      const next = new Set(prev);
+      if (next.has(collabId)) next.delete(collabId);
+      else next.add(collabId);
+      return next;
+    });
+  };
+
+  const statusDot = (status: string) => {
+    if (status === "connected") return "bg-emerald-500";
+    if (status === "connecting") return "bg-amber-500";
+    return "bg-red-500";
+  };
+
+  const totalChips = data.reduce((sum, d) => sum + d.chips.length, 0);
+  const connectedChips = data.reduce((sum, d) => sum + d.chips.filter(c => c.status === "connected").length, 0);
+
+  return (
+    <Card className="border-purple-500/30">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Users className="h-5 w-5 text-purple-500" />
+          Painel Geral — Todos os Chips
+          <span className="text-sm text-muted-foreground font-normal ml-2">
+            {connectedChips}/{totalChips} conectados | {data.length} colaboradores
+          </span>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">Visão administrativa de todos os chips descartáveis de todos os colaboradores</p>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        ) : data.length === 0 ? (
+          <p className="text-center text-muted-foreground text-sm py-8">Nenhum chip cadastrado no sistema</p>
+        ) : (
+          <div className="space-y-2">
+            {data.map(item => {
+              const connected = item.chips.filter(c => c.status === "connected").length;
+              const isExpanded = expandedCollabs.has(item.collaborator_id);
+              return (
+                <div key={item.collaborator_id} className="border border-border rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => toggleExpand(item.collaborator_id)}
+                    className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex gap-1">
+                        {item.chips.map(c => (
+                          <div key={c.id} className={`w-2.5 h-2.5 rounded-full ${statusDot(c.status)}`} />
+                        ))}
+                      </div>
+                      <span className="font-medium text-sm">{item.collaborator_name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {connected}/{item.chips.length} chips
+                      </span>
+                    </div>
+                    {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  </button>
+                  {isExpanded && (
+                    <div className="border-t border-border p-3 space-y-2 bg-muted/10">
+                      {item.chips.map((chip, idx) => (
+                        <div key={chip.id} className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${statusDot(chip.status)}`} />
+                            <span>Chip #{idx + 1}</span>
+                          </div>
+                          <span className="text-muted-foreground">{chip.phone || "Sem número"}</span>
+                          <Badge variant="outline" className={`text-[10px] ${
+                            chip.status === "connected" ? "text-emerald-400 border-emerald-500/30" :
+                            chip.status === "connecting" ? "text-amber-400 border-amber-500/30" :
+                            "text-red-400 border-red-500/30"
+                          }`}>
+                            {chip.status === "connected" ? "Conectado" : chip.status === "connecting" ? "Aguardando" : "Desconectado"}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Bots() {
   const { collaborator, roleLevel } = useCollaborator();
   const { user } = useAuth();
@@ -1026,6 +1168,9 @@ export default function Bots() {
           </TabsContent>
         </Tabs>
         )}
+
+        {/* ════════════════════ PAINEL ADMIN — TODOS OS CHIPS ════════════════════ */}
+        {roleLevel <= 1 && <AdminChipsOverview />}
 
         {/* ════════════════════ MEU WHATSAPP ════════════════════ */}
         <Card className="border-emerald-500/30">

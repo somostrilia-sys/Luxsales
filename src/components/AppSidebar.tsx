@@ -1,7 +1,7 @@
 // v2.5 — Refined dark dashboard sidebar
 import {
   LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket
+  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -35,9 +35,10 @@ const managementItems: MenuItem[] = [
 ];
 
 const consultantItems: MenuItem[] = [
-  { title: "Conversas", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
+  { title: "Atendimento", url: "/atendimento", icon: Phone, levels: [0, 1, 2, 3] },
+  { title: "Conversas IA", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
   { title: "Meu Bot", url: "/meu-bot", icon: Bot, levels: [0, 1, 2, 3] },
-  
+
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
 ];
 
