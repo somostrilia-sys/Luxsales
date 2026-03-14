@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
       // Fallback: env vars por conta
       if (!serverUrl) {
         serverUrl = uazapiAccount === "account_b"
-          ? (Deno.env.get("UAZAPI_ACCOUNT_B_URL") || "https://walkholding.uazapi.com")
+          ? (Deno.env.get("UAZAPI_ACCOUNT_B_URL") || "https://walk2.uazapi.com")
           : (Deno.env.get("UAZAPI_ACCOUNT_C_URL") || "https://walkholding.uazapi.com");
       }
       if (!finalAdminToken) {

@@ -35,11 +35,11 @@ CREATE TABLE IF NOT EXISTS uazapi_accounts (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Insert default accounts (update tokens via Supabase dashboard)
+-- Insert default accounts (IMPORTANTE: atualizar admin_token via Supabase dashboard!)
 INSERT INTO uazapi_accounts (account_key, api_url, description) VALUES
-  ('account_a', 'https://walkholding.uazapi.com', 'Conta A — Chips principais (fixos) dos consultores'),
-  ('account_b', 'https://walkholding.uazapi.com', 'Conta B — Chips descartáveis 1-3 de cada consultor'),
-  ('account_c', 'https://walkholding.uazapi.com', 'Conta C — Chips descartáveis 4-5 de cada consultor')
+  ('account_a', 'https://trilhoassist.uazapi.com', 'Conta A (trilhoassist) — Chips fixos dos consultores (142 já existem)'),
+  ('account_b', 'https://walk2.uazapi.com', 'Conta B (walk2) — Chips descartáveis 1-3 de cada consultor'),
+  ('account_c', 'https://walkholding.uazapi.com', 'Conta C (walkholding) — Chips descartáveis 4-5 de cada consultor')
 ON CONFLICT (account_key) DO NOTHING;
 
 -- RLS for uazapi_accounts (only authenticated can read)
