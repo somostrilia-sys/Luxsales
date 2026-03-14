@@ -14,6 +14,68 @@ export type Database = {
   }
   public: {
     Tables: {
+      blast_config: {
+        Row: {
+          active: boolean | null
+          collaborator_id: string
+          created_at: string | null
+          erro_digitacao_a_cada: number | null
+          horario_fim: string | null
+          horario_inicio: string | null
+          id: string
+          intervalo_max_sec: number | null
+          intervalo_min_sec: number | null
+          max_msgs_dia_por_chip: number | null
+          pausa_padrao_1_min: number | null
+          pausa_padrao_1_offline_min: number | null
+          pausa_padrao_2_min: number | null
+          pausa_padrao_2_offline_min: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          collaborator_id: string
+          created_at?: string | null
+          erro_digitacao_a_cada?: number | null
+          horario_fim?: string | null
+          horario_inicio?: string | null
+          id?: string
+          intervalo_max_sec?: number | null
+          intervalo_min_sec?: number | null
+          max_msgs_dia_por_chip?: number | null
+          pausa_padrao_1_min?: number | null
+          pausa_padrao_1_offline_min?: number | null
+          pausa_padrao_2_min?: number | null
+          pausa_padrao_2_offline_min?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          collaborator_id?: string
+          created_at?: string | null
+          erro_digitacao_a_cada?: number | null
+          horario_fim?: string | null
+          horario_inicio?: string | null
+          id?: string
+          intervalo_max_sec?: number | null
+          intervalo_min_sec?: number | null
+          max_msgs_dia_por_chip?: number | null
+          pausa_padrao_1_min?: number | null
+          pausa_padrao_1_offline_min?: number | null
+          pausa_padrao_2_min?: number | null
+          pausa_padrao_2_offline_min?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blast_config_collaborator_id_fkey"
+            columns: ["collaborator_id"]
+            isOneToOne: true
+            referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bot_messages: {
         Row: {
           consultant_id: string | null
@@ -466,12 +528,16 @@ export type Database = {
           chip_index: number
           collaborator_id: string
           created_at: string
+          created_at_date: string | null
+          daily_msg_count: number | null
           id: string
           instance_name: string | null
           instance_token: string | null
+          last_reset_at: string | null
           phone: string | null
           qr_code: string | null
           status: string
+          uazapi_account: string | null
           uazapi_admin_token: string
           uazapi_server_url: string
           updated_at: string
@@ -480,12 +546,16 @@ export type Database = {
           chip_index?: number
           collaborator_id: string
           created_at?: string
+          created_at_date?: string | null
+          daily_msg_count?: number | null
           id?: string
           instance_name?: string | null
           instance_token?: string | null
+          last_reset_at?: string | null
           phone?: string | null
           qr_code?: string | null
           status?: string
+          uazapi_account?: string | null
           uazapi_admin_token?: string
           uazapi_server_url?: string
           updated_at?: string
@@ -494,12 +564,16 @@ export type Database = {
           chip_index?: number
           collaborator_id?: string
           created_at?: string
+          created_at_date?: string | null
+          daily_msg_count?: number | null
           id?: string
           instance_name?: string | null
           instance_token?: string | null
+          last_reset_at?: string | null
           phone?: string | null
           qr_code?: string | null
           status?: string
+          uazapi_account?: string | null
           uazapi_admin_token?: string
           uazapi_server_url?: string
           updated_at?: string
@@ -789,10 +863,12 @@ export type Database = {
       messages: {
         Row: {
           channel_type: string | null
+          chip_id: string | null
           content: string | null
           conversation_id: string | null
           created_at: string | null
           delivery_status: string | null
+          direction: string | null
           id: string
           media_type: string | null
           media_url: string | null
@@ -801,10 +877,12 @@ export type Database = {
         }
         Insert: {
           channel_type?: string | null
+          chip_id?: string | null
           content?: string | null
           conversation_id?: string | null
           created_at?: string | null
           delivery_status?: string | null
+          direction?: string | null
           id?: string
           media_type?: string | null
           media_url?: string | null
@@ -813,10 +891,12 @@ export type Database = {
         }
         Update: {
           channel_type?: string | null
+          chip_id?: string | null
           content?: string | null
           conversation_id?: string | null
           created_at?: string | null
           delivery_status?: string | null
+          direction?: string | null
           id?: string
           media_type?: string | null
           media_url?: string | null
@@ -824,6 +904,13 @@ export type Database = {
           sender?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "messages_chip_id_fkey"
+            columns: ["chip_id"]
+            isOneToOne: false
+            referencedRelation: "disposable_chips"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "messages_conversation_id_fkey"
             columns: ["conversation_id"]
@@ -1019,6 +1106,42 @@ export type Database = {
         }
         Relationships: []
       }
+      uazapi_accounts: {
+        Row: {
+          account_key: string
+          active: boolean | null
+          admin_token: string
+          api_url: string
+          created_at: string | null
+          description: string | null
+          id: string
+          max_instances: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_key: string
+          active?: boolean | null
+          admin_token?: string
+          api_url: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          max_instances?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_key?: string
+          active?: boolean | null
+          admin_token?: string
+          api_url?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          max_instances?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       units: {
         Row: {
           active: boolean | null
@@ -1091,6 +1214,56 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "whatsapp_bot_conversations_collaborator_id_fkey"
+            columns: ["collaborator_id"]
+            isOneToOne: false
+            referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_instances: {
+        Row: {
+          bot_enabled: boolean | null
+          chip_type: string | null
+          collaborator_id: string
+          created_at: string | null
+          id: string
+          instance_name: string
+          instance_token: string | null
+          phone_number: string | null
+          qr_code: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          bot_enabled?: boolean | null
+          chip_type?: string | null
+          collaborator_id: string
+          created_at?: string | null
+          id?: string
+          instance_name: string
+          instance_token?: string | null
+          phone_number?: string | null
+          qr_code?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          bot_enabled?: boolean | null
+          chip_type?: string | null
+          collaborator_id?: string
+          created_at?: string | null
+          id?: string
+          instance_name?: string
+          instance_token?: string | null
+          phone_number?: string | null
+          qr_code?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_instances_collaborator_id_fkey"
             columns: ["collaborator_id"]
             isOneToOne: false
             referencedRelation: "collaborators"

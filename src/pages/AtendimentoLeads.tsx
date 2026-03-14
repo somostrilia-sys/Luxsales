@@ -263,60 +263,41 @@ export default function AtendimentoLeads() {
     scrollToBottom();
 
     try {
-      // Try backend API first (handles UaZapi sending + typing simulation)
-      if (BACKEND_URL) {
-        const res = await fetch(`${BACKEND_URL}/conversations/${selectedConv.id}/messages`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
-        });
-        if (!res.ok) throw new Error("Backend error");
-        const data = await res.json();
-        // Replace temp message with real one
+      // Save message to DB
+      const { data: savedMsg, error } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: selectedConv.id,
+          sender: "consultant",
+          content,
+          delivery_status: "sent",
+          channel_type: "whatsapp",
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Send via edge function (anti-ban: edge function resolves the correct chip)
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Sessão expirada");
+
+      await fetch("https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/send-whatsapp-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({
+          conversation_id: selectedConv.id,
+          phone: selectedConv.lead_phone,
+          message: content,
+        }),
+      });
+
+      // Replace temp message
+      if (savedMsg) {
         setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? { ...m, id: data.id || tempId, delivery_status: "sent" } : m))
+          prev.map((m) => (m.id === tempId ? (savedMsg as Message) : m))
         );
-      } else {
-        // Fallback: direct Supabase insert + UaZapi call via edge function
-        // Save message to DB
-        const { data: savedMsg, error } = await supabase
-          .from("messages")
-          .insert({
-            conversation_id: selectedConv.id,
-            sender: "consultant",
-            content,
-            delivery_status: "sent",
-            channel_type: "whatsapp",
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        // Send via UaZapi if chip token is available
-        if (selectedConv.chip_instance_token && selectedConv.lead_phone) {
-          // Call UaZapi send text (via edge function or direct)
-          const { data: { session } } = await supabase.auth.getSession();
-          const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
-          const edgeBase = `${import.meta.env.VITE_SUPABASE_URL || "https://ecaduzwautlpzpvjognr.supabase.co"}/functions/v1`;
-
-          await fetch(`${edgeBase}/send-whatsapp-message`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-            body: JSON.stringify({
-              instance_token: selectedConv.chip_instance_token,
-              phone: selectedConv.lead_phone,
-              message: content,
-            }),
-          });
-        }
-
-        // Replace temp message
-        if (savedMsg) {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === tempId ? (savedMsg as Message) : m))
-          );
-        }
       }
 
       // Update conversation last message
