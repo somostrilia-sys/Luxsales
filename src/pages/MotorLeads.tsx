@@ -1189,10 +1189,10 @@ function ConsultorView() {
     try {
       const { data, error } = await supabase
         .from("consultant_lead_pool")
-        .select("id, lead_name, phone, lead_city, lead_category, status, created_at")
+        .select("id, lead_name, phone, lead_city, lead_category, status, assigned_at")
         .eq("collaborator_id", collaborator.id)
         .eq("status", "pending")
-        .order("created_at", { ascending: true })
+        .order("assigned_at", { ascending: true })
         .limit(200);
       if (error) throw error;
       // Normaliza campos para compatibilidade com a UI existente
@@ -1203,7 +1203,7 @@ function ConsultorView() {
         cidade: l.lead_city,
         ddd: l.phone ? l.phone.replace(/\D/g, "").slice(0, 2) : "",
         status: l.status,
-        assigned_at: l.created_at,
+        assigned_at: l.assigned_at,
       })));
     } catch (e: any) {
       toast.error("Erro ao carregar leads: " + e.message);
