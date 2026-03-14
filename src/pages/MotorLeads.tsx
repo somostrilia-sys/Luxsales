@@ -1173,7 +1173,7 @@ function BlastSection() {
 }
 
 // ═══════════════════════════════════════════
-// CONSULTOR VIEW — Meus Leads (lead_items + Realtime)
+// CONSULTOR VIEW — Meus Leads (consultant_lead_pool + Realtime)
 // ═══════════════════════════════════════════
 function ConsultorView() {
   const { collaborator } = useCollaborator();
@@ -1188,13 +1188,23 @@ function ConsultorView() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from("lead_items")
-        .select("id, nome, telefone, cidade, ddd, status, assigned_at")
-        .eq("assigned_to", collaborator.id)
-        .eq("status", "atribuido")
+        .from("consultant_lead_pool")
+        .select("id, lead_name, phone, lead_city, lead_category, status, created_at")
+        .eq("collaborator_id", collaborator.id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: true })
         .limit(200);
       if (error) throw error;
-      setLeads(data || []);
+      // Normaliza campos para compatibilidade com a UI existente
+      setLeads((data || []).map(l => ({
+        id: l.id,
+        nome: l.lead_name,
+        telefone: l.phone,
+        cidade: l.lead_city,
+        ddd: l.phone ? l.phone.replace(/\D/g, "").slice(0, 2) : "",
+        status: l.status,
+        assigned_at: l.created_at,
+      })));
     } catch (e: any) {
       toast.error("Erro ao carregar leads: " + e.message);
     } finally {
@@ -1212,8 +1222,8 @@ function ConsultorView() {
       .on("postgres_changes", {
         event: "INSERT",
         schema: "public",
-        table: "lead_items",
-        filter: `assigned_to=eq.${collaborator.id}`,
+        table: "consultant_lead_pool",
+        filter: `collaborator_id=eq.${collaborator.id}`,
       }, () => {
         fetchLeads();
         toast.info("Novos leads recebidos!");
@@ -1234,8 +1244,8 @@ function ConsultorView() {
   const markAsSent = async (id: string) => {
     try {
       const { error } = await supabase
-        .from("lead_items")
-        .update({ status: "enviado", dispatched_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .from("consultant_lead_pool")
+        .update({ status: "sent", sent_at: new Date().toISOString() })
         .eq("id", id);
       if (error) throw error;
       setLeads(prev => prev.filter(l => l.id !== id));
@@ -1251,8 +1261,8 @@ function ConsultorView() {
       for (let i = 0; i < ids.length; i += 100) {
         const chunk = ids.slice(i, i + 100);
         const { error } = await supabase
-          .from("lead_items")
-          .update({ status: "enviado", dispatched_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .from("consultant_lead_pool")
+          .update({ status: "sent", sent_at: new Date().toISOString() })
           .in("id", chunk);
         if (error) throw error;
       }
