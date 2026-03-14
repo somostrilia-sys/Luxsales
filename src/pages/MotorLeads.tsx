@@ -545,6 +545,12 @@ function DistributeTab() {
                 {allCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            {leadPoolStats && (
+              <div className="flex gap-2 mt-2">
+                <Badge variant="outline" className="text-xs">Objetivo: {leadPoolStats.objetivo.toLocaleString("pt-BR")} leads</Badge>
+                <Badge variant="outline" className="text-xs">Trilia: {leadPoolStats.trilia.toLocaleString("pt-BR")} leads</Badge>
+              </div>
+            )}
           </div>
 
           {/* Filters */}
