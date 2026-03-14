@@ -324,14 +324,18 @@ function DistributeTab() {
   useEffect(() => { if (distCompanyId) loadFilterOptions(); }, [distCompanyId]);
   useEffect(() => { countAvailable(); }, [filterCity, filterDDD, distCompanyId]);
 
+  const selectedCompanyName = allCompanies.find(c => c.id === distCompanyId)?.name || "";
+
   const loadFilterOptions = async () => {
-    if (!resolvedCompanyId) return;
+    if (!distCompanyId) return;
     setLoading(true);
+    setSelectedCollabs(new Set());
+    setTargetCollab("");
     try {
       const { data: cityData } = await supabase
         .from("lead_items")
         .select("cidade")
-        .eq("company_id", resolvedCompanyId)
+        .eq("company_id", distCompanyId)
         .eq("status", "disponivel")
         .is("assigned_to", null)
         .not("cidade", "is", null)
@@ -340,7 +344,7 @@ function DistributeTab() {
       const { data: dddData } = await supabase
         .from("lead_items")
         .select("ddd")
-        .eq("company_id", resolvedCompanyId)
+        .eq("company_id", distCompanyId)
         .eq("status", "disponivel")
         .is("assigned_to", null)
         .not("ddd", "is", null)
@@ -354,7 +358,7 @@ function DistributeTab() {
       (dddData || []).forEach(item => { if (item.ddd) dddSet.add(item.ddd); });
       setDDDs(Array.from(dddSet).sort());
 
-      // Load commercial collaborators
+      // Load commercial collaborators filtered by selected company
       const { data: roles } = await supabase
         .from("roles").select("id,slug,level").gte("level", 2).eq("active", true);
       const commercialRoleIds = (roles || [])
@@ -367,20 +371,22 @@ function DistributeTab() {
           .select("id,name,role_id")
           .in("role_id", commercialRoleIds)
           .eq("active", true)
+          .eq("company_id", distCompanyId)
           .order("name");
         setCommercialCollabs(collabs || []);
+      } else {
+        setCommercialCollabs([]);
       }
     } catch (e: any) { toast.error(e.message); }
     finally { setLoading(false); }
   };
 
   const countAvailable = useCallback(async () => {
-    const cid = resolvedCompanyId || null;
+    const cid = distCompanyId || null;
     try {
       const { data, error } = await supabase.rpc("count_available_leads", { p_company_id: cid });
       if (error) { console.error("count_available_leads error:", error); setAvailableCount(0); setCountDetails(null); return; }
       const d = data as any;
-      console.log("count_available_leads result:", d);
       const disponiveis = d?.lead_items_disponiveis ?? 0;
       const naoImportados = (d?.contact_leads_nao_importados ?? 0) + (d?.leads_nao_importados ?? 0);
       setCountDetails({ disponiveis, naoImportados });
@@ -389,13 +395,13 @@ function DistributeTab() {
       console.error("countAvailable error:", e);
       setAvailableCount(0);
     }
-  }, [resolvedCompanyId]);
+  }, [distCompanyId]);
 
   const handleSyncBeforeDistribute = useCallback(async () => {
-    if (!resolvedCompanyId) return;
+    if (!distCompanyId) return;
     setSyncing(true);
     try {
-      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: resolvedCompanyId, p_limit: 50000 });
+      const { data, error } = await supabase.rpc("sync_leads_from_base", { p_company_id: distCompanyId, p_limit: 50000 });
       if (error) throw error;
       const r = data as any;
       const totalImported = r?.total ?? 0;
@@ -410,15 +416,15 @@ function DistributeTab() {
       }
     } catch (e: any) { toast.error("Erro ao sincronizar: " + e.message); }
     finally { setSyncing(false); }
-  }, [resolvedCompanyId, countAvailable]);
+  }, [distCompanyId, countAvailable]);
 
   const handleDistribute = async () => {
-    if (!targetCollab || !resolvedCompanyId || !collaborator?.id) { toast.error("Selecione um consultor"); return; }
+    if (!targetCollab || !distCompanyId || !collaborator?.id) { toast.error("Selecione um consultor"); return; }
     setDistributing(true);
     try {
       const { data, error } = await supabase.rpc("distribute_leads", {
         p_assigned_to: targetCollab,
-        p_company_id: resolvedCompanyId,
+        p_company_id: distCompanyId,
         p_assigned_by: collaborator.id,
         p_quantidade: parseInt(quantity) || 500,
         p_filtro_cidade: filterCity || null,
@@ -434,7 +440,7 @@ function DistributeTab() {
   };
 
   const handleDistributeAll = async () => {
-    if (!resolvedCompanyId || !collaborator?.id) return;
+    if (!distCompanyId || !collaborator?.id) return;
     const targets = selectedCollabs.size > 0
       ? commercialCollabs.filter(c => selectedCollabs.has(c.id))
       : commercialCollabs;
@@ -446,7 +452,7 @@ function DistributeTab() {
       for (const collab of targets) {
         const { data, error } = await supabase.rpc("distribute_leads", {
           p_assigned_to: collab.id,
-          p_company_id: resolvedCompanyId,
+          p_company_id: distCompanyId,
           p_assigned_by: collaborator.id,
           p_quantidade: parseInt(quantity) || 500,
           p_filtro_cidade: filterCity || null,
@@ -469,7 +475,8 @@ function DistributeTab() {
     });
   };
 
-  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  if (!distCompanyId && allCompanies.length === 0) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  if (loading && allCompanies.length > 0 && distCompanyId) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
   return (
     <>
@@ -514,6 +521,17 @@ function DistributeTab() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
+          {/* Company Selector */}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Empresa</p>
+            <Select value={distCompanyId || ""} onValueChange={(v) => setDistCompanyId(v)}>
+              <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="Selecione a empresa" /></SelectTrigger>
+              <SelectContent>
+                {allCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Filters */}
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Filtros</p>
@@ -567,7 +585,7 @@ function DistributeTab() {
           {/* Distribute to all / selected */}
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-              Distribuir para todos ({selectedCollabs.size > 0 ? `${selectedCollabs.size} selecionados` : `${commercialCollabs.length} consultores`})
+              Distribuir para todos ({selectedCollabs.size > 0 ? `${selectedCollabs.size} selecionados` : `${commercialCollabs.length} consultores da ${selectedCompanyName}`})
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mb-3">
               {commercialCollabs.map(c => (
@@ -576,10 +594,13 @@ function DistributeTab() {
                   <span className="truncate">{c.name}</span>
                 </label>
               ))}
+              {commercialCollabs.length === 0 && (
+                <p className="text-sm text-muted-foreground col-span-full">Nenhum consultor comercial encontrado para {selectedCompanyName}</p>
+              )}
             </div>
             <Button onClick={handleDistributeAll} disabled={distributingAll || availableCount === 0 || commercialCollabs.length === 0} variant="outline" className="gap-2">
               {distributingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
-              Distribuir para {selectedCollabs.size > 0 ? "Selecionados" : "Todos"} ({quantity} cada)
+              Distribuir para Todos ({commercialCollabs.length} Consultores da {selectedCompanyName}) — {quantity} cada
             </Button>
           </div>
         </CardContent>
