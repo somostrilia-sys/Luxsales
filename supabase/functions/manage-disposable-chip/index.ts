@@ -38,18 +38,46 @@ Deno.serve(async (req) => {
 
       const chipIndex = (existing || []).length + 1;
 
-      // Get default UAZAPI config or use provided
-      const serverUrl = body.uazapi_server_url || "https://walkholding.uazapi.com";
-      const adminToken = body.uazapi_admin_token || "";
+      // Determinar conta UaZapi: chips 1-3 = conta B, chips 4-5 = conta C
+      const uazapiAccount = chipIndex <= 3 ? "account_b" : "account_c";
 
-      // Try to get admin token from system_configs if not provided
-      let finalAdminToken = adminToken;
+      // Buscar URL e token da conta correta
+      let serverUrl = body.uazapi_server_url || "";
+      let finalAdminToken = body.uazapi_admin_token || "";
+
+      if (!serverUrl || !finalAdminToken) {
+        // Buscar na tabela uazapi_accounts
+        const { data: account } = await supabase
+          .from("uazapi_accounts")
+          .select("api_url, admin_token")
+          .eq("account_key", uazapiAccount)
+          .single();
+
+        if (account) {
+          if (!serverUrl) serverUrl = account.api_url;
+          if (!finalAdminToken) finalAdminToken = account.admin_token;
+        }
+      }
+
+      // Fallback: env vars por conta
+      if (!serverUrl) {
+        serverUrl = uazapiAccount === "account_b"
+          ? (Deno.env.get("UAZAPI_ACCOUNT_B_URL") || "https://walkholding.uazapi.com")
+          : (Deno.env.get("UAZAPI_ACCOUNT_C_URL") || "https://walkholding.uazapi.com");
+      }
+      if (!finalAdminToken) {
+        finalAdminToken = uazapiAccount === "account_b"
+          ? (Deno.env.get("UAZAPI_ACCOUNT_B_TOKEN") || "")
+          : (Deno.env.get("UAZAPI_ACCOUNT_C_TOKEN") || "");
+      }
+
+      // Last resort: system_configs
       if (!finalAdminToken) {
         const { data: cfg } = await supabase
           .from("system_configs")
           .select("value")
           .eq("key", "uazapi_admin_token")
-          .single();
+          .maybeSingle();
         finalAdminToken = cfg?.value || "";
       }
 
@@ -77,6 +105,7 @@ Deno.serve(async (req) => {
         chip_index: chipIndex,
         uazapi_server_url: serverUrl,
         uazapi_admin_token: finalAdminToken,
+        uazapi_account: uazapiAccount,
         instance_name: instanceName,
         instance_token: instanceToken,
         status: "disconnected",

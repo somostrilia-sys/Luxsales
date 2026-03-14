@@ -26,16 +26,32 @@ Deno.serve(async (req) => {
 
     if (!collaborator_id) return json({ error: "collaborator_id required" }, 400);
 
-    // Get UaZapi Account A config (main chips) from env or system_configs
-    const accountAUrl = Deno.env.get("UAZAPI_ACCOUNT_A_URL") || "https://walkholding.uazapi.com";
+    // Get UaZapi Account A config (chips fixos)
+    let accountAUrl = Deno.env.get("UAZAPI_ACCOUNT_A_URL") || "";
     let accountAToken = Deno.env.get("UAZAPI_ACCOUNT_A_TOKEN") || "";
 
+    // Fallback: buscar na tabela uazapi_accounts
+    if (!accountAUrl || !accountAToken) {
+      const { data: account } = await supabase
+        .from("uazapi_accounts")
+        .select("api_url, admin_token")
+        .eq("account_key", "account_a")
+        .maybeSingle();
+      if (account) {
+        if (!accountAUrl) accountAUrl = account.api_url;
+        if (!accountAToken) accountAToken = account.admin_token;
+      }
+    }
+
+    if (!accountAUrl) accountAUrl = "https://walkholding.uazapi.com";
+
+    // Last resort: system_configs
     if (!accountAToken) {
       const { data: cfg } = await supabase
         .from("system_configs")
         .select("value")
         .eq("key", "uazapi_admin_token")
-        .single();
+        .maybeSingle();
       accountAToken = cfg?.value || "";
     }
 

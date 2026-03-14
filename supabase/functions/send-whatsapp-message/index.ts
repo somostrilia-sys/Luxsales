@@ -37,14 +37,39 @@ Deno.serve(async (req) => {
 
     let serverUrl = "https://walkholding.uazapi.com";
 
+    // 1. Buscar em disposable_chips
     const { data: chip } = await supabase
       .from("disposable_chips")
-      .select("uazapi_server_url")
+      .select("uazapi_server_url, uazapi_account, chip_index")
       .eq("instance_token", instance_token)
       .maybeSingle();
 
     if (chip?.uazapi_server_url) {
       serverUrl = chip.uazapi_server_url;
+    } else if (chip?.uazapi_account) {
+      // Buscar URL da conta na tabela uazapi_accounts
+      const { data: account } = await supabase
+        .from("uazapi_accounts")
+        .select("api_url")
+        .eq("account_key", chip.uazapi_account)
+        .single();
+      if (account?.api_url) serverUrl = account.api_url;
+    } else if (!chip) {
+      // 2. Buscar em whatsapp_instances (chip fixo = conta A)
+      const { data: waInstance } = await supabase
+        .from("whatsapp_instances")
+        .select("id")
+        .eq("instance_token", instance_token)
+        .maybeSingle();
+
+      if (waInstance) {
+        const { data: accountA } = await supabase
+          .from("uazapi_accounts")
+          .select("api_url")
+          .eq("account_key", "account_a")
+          .single();
+        if (accountA?.api_url) serverUrl = accountA.api_url;
+      }
     }
 
     // Format phone for WhatsApp
