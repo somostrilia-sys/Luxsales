@@ -867,7 +867,7 @@ export default function Bots() {
         <Tabs defaultValue="bots" className="w-full">
           <TabsList className="bg-[#111118] border border-[#1E1E2E]">
             <TabsTrigger value="bots" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <Bot className="h-4 w-4" /> Bots
+              <Bot className="h-4 w-4" /> Chips de Disparo
             </TabsTrigger>
             {roleLevel <= 1 && (
               <TabsTrigger value="apikeys" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
