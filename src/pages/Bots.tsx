@@ -115,8 +115,9 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   const [chips, setChips] = useState<DisposableChip[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [connecting, setConnecting] = useState<string | null>(null); // chip_id being connected
+  const [connecting, setConnecting] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [activeQrChipId, setActiveQrChipId] = useState<string | null>(null);
   const pollingRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   // Form para novo chip (servidor + token)
@@ -156,6 +157,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         delete pollingRefs.current[chipId];
         setChips(prev => prev.map(c => c.id === chipId ? { ...c, status: "connected", qr_code: null, phone: result.phone || c.phone } : c));
         setConnecting(null);
+        setActiveQrChipId(prev => prev === chipId ? null : prev);
         toast.success("✅ Chip conectado com sucesso!");
       } else if (result?.status === "connecting" && result?.qr_code) {
         // QR refreshed on UAZAPI side — update display so user always sees fresh QR
@@ -315,7 +317,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                   <div className="flex gap-2">
                     {chip.status !== "connected" && (
                       <Badge
-                        onClick={() => !connecting && handleConnect(chip)}
+                        onClick={() => { if (!connecting) { handleConnect(chip); setActiveQrChipId(chip.id); } }}
                         className={`cursor-pointer gap-1 text-xs px-3 py-1 ${connecting === chip.id ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20'}`}
                       >
                         {connecting === chip.id
@@ -337,7 +339,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                 </div>
 
                 {/* QR Code */}
-                {chip.qr_code && chip.status !== "connected" && (
+                {activeQrChipId === chip.id && chip.qr_code && chip.status !== "connected" && (
                   <div className="flex flex-col items-center gap-2 py-2">
                     <p className="text-xs text-amber-400">Escaneie com o WhatsApp</p>
                     <div className="bg-white p-3 rounded-xl shadow border">
