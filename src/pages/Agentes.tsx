@@ -46,10 +46,13 @@ interface LevelConfig {
 }
 
 const LEVELS: LevelConfig[] = [
-  { key: "ceo", label: "CEO", match: (r) => r.level === 0 },
-  { key: "diretor", label: "Diretor", match: (r) => r.level === 1 },
-  { key: "gestor", label: "Gestor", match: (r) => r.level === 2 },
-  { key: "colaborador", label: "Colaborador", match: (r) => r.level === 3 },
+  { key: "ceo",        label: "CEO",        match: (r) => r.level === 0 },
+  { key: "diretor",    label: "Diretor",    match: (r) => r.level === 1 },
+  { key: "gestor",     label: "Gestor",     match: (r) => r.level === 2 },
+  // Consultores Comerciais (nível 3, slug começa com "consultor")
+  { key: "consultor",  label: "Consultor",  match: (r) => r.level === 3 && (r.slug || "").startsWith("consultor") },
+  // Colaboradores Operacionais (nível 3, slug começa com "colab")
+  { key: "colaborador", label: "Colaborador", match: (r) => r.level === 3 && (r.slug || "").startsWith("colab") },
 ];
 
 export default function Agentes() {
