@@ -861,7 +861,7 @@ export default function Bots() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Gerenciamento de Bots</h1>
-          <p className="text-sm text-muted-foreground">Cadastre e gerencie bots e API keys do sistema</p>
+          <p className="text-sm text-muted-foreground">Conecte seu WhatsApp e gerencie chips de disparo</p>
         </div>
 
         <Tabs defaultValue="bots" className="w-full">
@@ -1089,7 +1089,7 @@ export default function Bots() {
       <Dialog open={botModalOpen} onOpenChange={setBotModalOpen}>
         <DialogContent className="bg-[#111118] border-[#1E1E2E] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingBot ? "Editar Bot" : "Novo Bot"}</DialogTitle>
+            <DialogTitle>{editingBot ? "Editar Bot" : "+ Chip de Disparo"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
