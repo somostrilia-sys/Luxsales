@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,7 +20,7 @@ import Papa from "papaparse";
 import {
   Rocket, Upload, Send, Loader2, RefreshCw, Users, MapPin, Phone,
   Shuffle, Package, Eye, CheckCircle, MessageCircle, Copy, ExternalLink,
-  Zap, TrendingUp, History, Clock
+  Zap, TrendingUp, History, Clock, Play, Pause, Radio
 } from "lucide-react";
 
 const COMMERCIAL_SLUGS = ["comercial", "consultor", "gestor-comercial", "gestor-trilia", "gestora-essencia", "gestor-digitallux"];
