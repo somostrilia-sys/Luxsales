@@ -115,8 +115,9 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   const [chips, setChips] = useState<DisposableChip[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [connecting, setConnecting] = useState<string | null>(null); // chip_id being connected
+  const [connecting, setConnecting] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [activeQrChipId, setActiveQrChipId] = useState<string | null>(null);
   const pollingRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   // Form para novo chip (servidor + token)
