@@ -316,7 +316,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                   <div className="flex gap-2">
                     {chip.status !== "connected" && (
                       <Badge
-                        onClick={() => !connecting && handleConnect(chip)}
+                        onClick={() => { if (!connecting) { handleConnect(chip); setActiveQrChipId(chip.id); } }}
                         className={`cursor-pointer gap-1 text-xs px-3 py-1 ${connecting === chip.id ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20'}`}
                       >
                         {connecting === chip.id
