@@ -298,6 +298,7 @@ function DistributeTab() {
   const [loading, setLoading] = useState(true);
   const [distributing, setDistributing] = useState(false);
   const [distributingAll, setDistributingAll] = useState(false);
+  const [forcingRefill, setForcingRefill] = useState(false);
   const [filterCity, setFilterCity] = useState("");
   const [filterDDD, setFilterDDD] = useState("");
   const [quantity, setQuantity] = useState("500");
@@ -494,6 +495,26 @@ function DistributeTab() {
     finally { setDistributingAll(false); }
   };
 
+  const handleForceRefill = async () => {
+    setForcingRefill(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
+      const res = await fetch("https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/blast-engine", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "force_refill", refill_count: 500 }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        toast.error(data.error || "Nenhum job ativo. Crie jobs no Motor de Disparo.");
+      } else {
+        toast.success(`${data.total_assigned} leads distribuídos para ${data.jobs_processed} consultores!`);
+      }
+    } catch (e: any) { toast.error("Erro: " + e.message); }
+    finally { setForcingRefill(false); }
+  };
+
   const toggleCollabSelection = (id: string) => {
     setSelectedCollabs(prev => {
       const n = new Set(prev);
@@ -631,10 +652,16 @@ function DistributeTab() {
                 <p className="text-sm text-muted-foreground col-span-full">Nenhum consultor comercial encontrado para {selectedCompanyName}</p>
               )}
             </div>
-            <Button onClick={handleDistributeAll} disabled={distributingAll || availableCount === 0 || commercialCollabs.length === 0} variant="outline" className="gap-2">
-              {distributingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
-              Distribuir para Todos ({commercialCollabs.length} Consultores da {selectedCompanyName}) — {quantity} cada
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button onClick={handleDistributeAll} disabled={distributingAll || availableCount === 0 || commercialCollabs.length === 0} variant="outline" className="gap-2 flex-1">
+                {distributingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                Distribuir para Todos ({commercialCollabs.length} Consultores da {selectedCompanyName}) — {quantity} cada
+              </Button>
+              <Button onClick={handleForceRefill} disabled={forcingRefill} variant="default" className="gap-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold">
+                {forcingRefill ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                Forçar Distribuição Agora
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
