@@ -36,13 +36,21 @@ interface Role {
   id: string;
   level: number;
   company_id: string;
+  slug: string | null;
 }
 
-const LEVELS = [
-  { level: 0, label: "CEO" },
-  { level: 1, label: "Diretor" },
-  { level: 2, label: "Gestor" },
-  { level: 3, label: "Colaborador / Consultor" },
+interface LevelConfig {
+  key: string;
+  label: string;
+  match: (r: Role) => boolean;
+}
+
+const LEVELS: LevelConfig[] = [
+  { key: "ceo", label: "CEO", match: (r) => r.level === 0 },
+  { key: "diretor", label: "Diretor", match: (r) => r.level === 1 },
+  { key: "gestor", label: "Gestor", match: (r) => r.level === 2 },
+  { key: "consultor", label: "Consultor", match: (r) => r.level === 3 && (r.slug?.includes("consultor") ?? false) },
+  { key: "colaborador", label: "Colaborador", match: (r) => r.level === 3 && (r.slug?.includes("colab") ?? false) },
 ];
 
 export default function Agentes() {
