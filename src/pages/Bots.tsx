@@ -1089,7 +1089,7 @@ export default function Bots() {
       <Dialog open={botModalOpen} onOpenChange={setBotModalOpen}>
         <DialogContent className="bg-[#111118] border-[#1E1E2E] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingBot ? "Editar Bot" : "Novo Bot"}</DialogTitle>
+            <DialogTitle>{editingBot ? "Editar Bot" : "+ Chip de Disparo"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
