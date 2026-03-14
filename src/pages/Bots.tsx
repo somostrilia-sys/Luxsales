@@ -338,7 +338,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                 </div>
 
                 {/* QR Code */}
-                {chip.qr_code && chip.status !== "connected" && (
+                {activeQrChipId === chip.id && chip.qr_code && chip.status !== "connected" && (
                   <div className="flex flex-col items-center gap-2 py-2">
                     <p className="text-xs text-amber-400">Escaneie com o WhatsApp</p>
                     <div className="bg-white p-3 rounded-xl shadow border">
