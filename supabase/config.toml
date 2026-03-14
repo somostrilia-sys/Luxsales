@@ -2,3 +2,9 @@ project_id = "lqsxmrxbakotigfzqytk"
 
 [functions.manage-disposable-chip]
 verify_jwt = false
+
+[functions.create-whatsapp-instance]
+verify_jwt = false
+
+[functions.send-whatsapp-message]
+verify_jwt = false
