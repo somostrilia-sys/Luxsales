@@ -84,22 +84,26 @@ export default function Agentes() {
 
   const companyName = (id: string) => companies.find(c => c.id === id)?.name ?? "—";
 
-  const hasLevelAccess = (agentId: string, level: number, companyId: string): boolean => {
-    const companyRoles = roles.filter(r => r.level === level && r.company_id === companyId);
-    return companyRoles.some(r => access.some(a => a.agent_id === agentId && a.role_id === r.id));
+  const getRolesForConfig = (config: LevelConfig, companyId: string): Role[] => {
+    return roles.filter(r => r.company_id === companyId && config.match(r));
   };
 
-  const toggleLevelAccess = async (agent: Agent, level: number) => {
-    const companyRoles = roles.filter(r => r.level === level && r.company_id === agent.company_id);
-    if (companyRoles.length === 0) {
-      toast({ title: "Sem roles", description: `Nenhuma role de nível ${level} encontrada para esta empresa.`, variant: "destructive" });
+  const hasConfigAccess = (agentId: string, config: LevelConfig, companyId: string): boolean => {
+    const matchedRoles = getRolesForConfig(config, companyId);
+    return matchedRoles.some(r => access.some(a => a.agent_id === agentId && a.role_id === r.id));
+  };
+
+  const toggleConfigAccess = async (agent: Agent, config: LevelConfig) => {
+    const matchedRoles = getRolesForConfig(config, agent.company_id);
+    if (matchedRoles.length === 0) {
+      toast({ title: "Sem roles", description: `Nenhuma role "${config.label}" encontrada para esta empresa.`, variant: "destructive" });
       return;
     }
 
-    const currentlyOn = hasLevelAccess(agent.id, level, agent.company_id);
+    const currentlyOn = hasConfigAccess(agent.id, config, agent.company_id);
 
     if (currentlyOn) {
-      const roleIds = companyRoles.map(r => r.id);
+      const roleIds = matchedRoles.map(r => r.id);
       const { error } = await supabase
         .from("role_agent_access")
         .delete()
@@ -111,7 +115,7 @@ export default function Agentes() {
       }
       setAccess(prev => prev.filter(a => !(a.agent_id === agent.id && roleIds.includes(a.role_id))));
     } else {
-      const inserts = companyRoles.map(r => ({ agent_id: agent.id, role_id: r.id }));
+      const inserts = matchedRoles.map(r => ({ agent_id: agent.id, role_id: r.id }));
       const { error } = await supabase.from("role_agent_access").upsert(inserts, { onConflict: "role_id,agent_id" });
       if (error) {
         toast({ title: "Erro", description: error.message, variant: "destructive" });
