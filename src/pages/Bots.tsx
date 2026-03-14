@@ -864,16 +864,15 @@ export default function Bots() {
           <p className="text-sm text-muted-foreground">Conecte seu WhatsApp e gerencie chips de disparo</p>
         </div>
 
+        {roleLevel <= 1 && (
         <Tabs defaultValue="bots" className="w-full">
           <TabsList className="bg-[#111118] border border-[#1E1E2E]">
             <TabsTrigger value="bots" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
               <Bot className="h-4 w-4" /> Chips de Disparo
             </TabsTrigger>
-            {roleLevel <= 1 && (
-              <TabsTrigger value="apikeys" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-                <Key className="h-4 w-4" /> API Keys
-              </TabsTrigger>
-            )}
+            <TabsTrigger value="apikeys" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+              <Key className="h-4 w-4" /> API Keys
+            </TabsTrigger>
           </TabsList>
 
           {/* ════════════════════ ABA BOTS ════════════════════ */}
@@ -946,7 +945,6 @@ export default function Bots() {
           </TabsContent>
 
           {/* ════════════════════ ABA API KEYS ════════════════════ */}
-          {roleLevel <= 1 && (
           <TabsContent value="apikeys" className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="relative max-w-sm flex-1">
@@ -1024,8 +1022,8 @@ export default function Bots() {
               </div>
             )}
           </TabsContent>
-          )}
         </Tabs>
+        )}
 
         {/* ════════════════════ MEU WHATSAPP ════════════════════ */}
         <Card className="border-emerald-500/30">
