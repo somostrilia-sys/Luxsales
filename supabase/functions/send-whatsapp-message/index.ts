@@ -108,6 +108,6 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     console.error("Send WhatsApp message error:", e);
-    return json({ error: e.message || "Internal error" }, 500);
+    return json({ error: (e as Error).message || "Internal error" }, 500);
   }
 });

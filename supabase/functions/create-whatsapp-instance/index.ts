@@ -257,6 +257,6 @@ Deno.serve(async (req) => {
     }
   } catch (e) {
     console.error("Edge function error:", e);
-    return json({ error: e.message || "Erro interno" }, 500);
+    return json({ error: (e as Error).message || "Erro interno" }, 500);
   }
 });
