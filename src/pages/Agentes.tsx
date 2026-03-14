@@ -36,13 +36,21 @@ interface Role {
   id: string;
   level: number;
   company_id: string;
+  slug: string | null;
 }
 
-const LEVELS = [
-  { level: 0, label: "CEO" },
-  { level: 1, label: "Diretor" },
-  { level: 2, label: "Gestor" },
-  { level: 3, label: "Colaborador / Consultor" },
+interface LevelConfig {
+  key: string;
+  label: string;
+  match: (r: Role) => boolean;
+}
+
+const LEVELS: LevelConfig[] = [
+  { key: "ceo", label: "CEO", match: (r) => r.level === 0 },
+  { key: "diretor", label: "Diretor", match: (r) => r.level === 1 },
+  { key: "gestor", label: "Gestor", match: (r) => r.level === 2 },
+  { key: "consultor", label: "Consultor", match: (r) => r.level === 3 && (r.slug?.includes("consultor") ?? false) },
+  { key: "colaborador", label: "Colaborador", match: (r) => r.level === 3 && (r.slug?.includes("colab") ?? false) },
 ];
 
 export default function Agentes() {
@@ -62,7 +70,7 @@ export default function Agentes() {
     const [agentsRes, companiesRes, rolesRes, accessRes] = await Promise.all([
       supabase.from("agent_definitions").select("id, name, slug, active, company_id, description, agent_type"),
       supabase.from("companies").select("id, name"),
-      supabase.from("roles").select("id, level, company_id"),
+      supabase.from("roles").select("id, level, company_id, slug"),
       supabase.from("role_agent_access").select("agent_id, role_id"),
     ]);
     if (agentsRes.data) setAgents(agentsRes.data);
@@ -76,22 +84,26 @@ export default function Agentes() {
 
   const companyName = (id: string) => companies.find(c => c.id === id)?.name ?? "—";
 
-  const hasLevelAccess = (agentId: string, level: number, companyId: string): boolean => {
-    const companyRoles = roles.filter(r => r.level === level && r.company_id === companyId);
-    return companyRoles.some(r => access.some(a => a.agent_id === agentId && a.role_id === r.id));
+  const getRolesForConfig = (config: LevelConfig, companyId: string): Role[] => {
+    return roles.filter(r => r.company_id === companyId && config.match(r));
   };
 
-  const toggleLevelAccess = async (agent: Agent, level: number) => {
-    const companyRoles = roles.filter(r => r.level === level && r.company_id === agent.company_id);
-    if (companyRoles.length === 0) {
-      toast({ title: "Sem roles", description: `Nenhuma role de nível ${level} encontrada para esta empresa.`, variant: "destructive" });
+  const hasConfigAccess = (agentId: string, config: LevelConfig, companyId: string): boolean => {
+    const matchedRoles = getRolesForConfig(config, companyId);
+    return matchedRoles.some(r => access.some(a => a.agent_id === agentId && a.role_id === r.id));
+  };
+
+  const toggleConfigAccess = async (agent: Agent, config: LevelConfig) => {
+    const matchedRoles = getRolesForConfig(config, agent.company_id);
+    if (matchedRoles.length === 0) {
+      toast({ title: "Sem roles", description: `Nenhuma role "${config.label}" encontrada para esta empresa.`, variant: "destructive" });
       return;
     }
 
-    const currentlyOn = hasLevelAccess(agent.id, level, agent.company_id);
+    const currentlyOn = hasConfigAccess(agent.id, config, agent.company_id);
 
     if (currentlyOn) {
-      const roleIds = companyRoles.map(r => r.id);
+      const roleIds = matchedRoles.map(r => r.id);
       const { error } = await supabase
         .from("role_agent_access")
         .delete()
@@ -103,7 +115,7 @@ export default function Agentes() {
       }
       setAccess(prev => prev.filter(a => !(a.agent_id === agent.id && roleIds.includes(a.role_id))));
     } else {
-      const inserts = companyRoles.map(r => ({ agent_id: agent.id, role_id: r.id }));
+      const inserts = matchedRoles.map(r => ({ agent_id: agent.id, role_id: r.id }));
       const { error } = await supabase.from("role_agent_access").upsert(inserts, { onConflict: "role_id,agent_id" });
       if (error) {
         toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -221,12 +233,12 @@ export default function Agentes() {
 
                   <div className="space-y-2.5 pt-1 border-t border-border">
                     <p className="text-[11px] text-muted-foreground uppercase tracking-wider pt-2">Acesso por nível</p>
-                    {LEVELS.map(({ level, label }) => (
-                      <div key={level} className="flex items-center justify-between">
-                        <span className="text-sm text-foreground">{label}</span>
+                    {LEVELS.map((config) => (
+                      <div key={config.key} className="flex items-center justify-between">
+                        <span className="text-sm text-foreground">{config.label}</span>
                         <Switch
-                          checked={hasLevelAccess(agent.id, level, agent.company_id)}
-                          onCheckedChange={() => toggleLevelAccess(agent, level)}
+                          checked={hasConfigAccess(agent.id, config, agent.company_id)}
+                          onCheckedChange={() => toggleConfigAccess(agent, config)}
                         />
                       </div>
                     ))}
