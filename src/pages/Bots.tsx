@@ -109,7 +109,7 @@ interface DisposableChip {
   uazapi_admin_token: string;
 }
 
-const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL || "https://ecaduzwautlpzpvjognr.supabase.co"}/functions/v1`;
 
 function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | null }) {
   const [chips, setChips] = useState<DisposableChip[]>([]);
