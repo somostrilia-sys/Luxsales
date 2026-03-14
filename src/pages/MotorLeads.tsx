@@ -23,7 +23,13 @@ import {
   Zap, TrendingUp, History, Clock, Play, Pause, Radio
 } from "lucide-react";
 
-const COMMERCIAL_SLUGS = ["comercial", "consultor", "gestor-comercial", "gestor-trilia", "gestora-essencia", "gestor-digitallux"];
+// Slugs elegíveis para receber leads por empresa:
+// Objetivo → gestor-comercial + consultor-comercial APENAS
+// Trilia   → consultor-trilia APENAS
+const ELIGIBLE_SLUGS_BY_COMPANY: Record<string, string[]> = {
+  objetivo: ["gestor-comercial", "consultor-comercial"],
+  trilia:   ["consultor-trilia"],
+};
 
 /** Resolve companyId: "all" means null (for RPCs) or fallback to collaborator's company */
 function resolveCompanyId(selectedCompanyId: string, fallback?: string | null): string | null {
@@ -374,10 +380,16 @@ function DistributeTab() {
       setDDDs(Array.from(dddSet).sort());
 
       // Load commercial collaborators filtered by selected company
+      const selectedCompanyName = allCompanies.find(c => c.id === distCompanyId)?.name?.toLowerCase() || "";
+      const eligibleSlugs = ELIGIBLE_SLUGS_BY_COMPANY[
+        selectedCompanyName.includes("objetivo") ? "objetivo" :
+        selectedCompanyName.includes("trilia")   ? "trilia"   : ""
+      ] || [];
+
       const { data: roles } = await supabase
         .from("roles").select("id,slug,level").gte("level", 2).eq("active", true);
       const commercialRoleIds = (roles || [])
-        .filter(r => r.slug && COMMERCIAL_SLUGS.some(s => (r.slug || "").includes(s)))
+        .filter(r => r.slug && eligibleSlugs.includes(r.slug))
         .map(r => r.id);
 
       if (commercialRoleIds.length > 0) {
