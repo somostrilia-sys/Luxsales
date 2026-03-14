@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,7 +20,7 @@ import Papa from "papaparse";
 import {
   Rocket, Upload, Send, Loader2, RefreshCw, Users, MapPin, Phone,
   Shuffle, Package, Eye, CheckCircle, MessageCircle, Copy, ExternalLink,
-  Zap, TrendingUp, History, Clock
+  Zap, TrendingUp, History, Clock, Play, Pause, Radio
 } from "lucide-react";
 
 const COMMERCIAL_SLUGS = ["comercial", "consultor", "gestor-comercial", "gestor-trilia", "gestora-essencia", "gestor-digitallux"];
@@ -848,6 +849,233 @@ function HistoryTab() {
 }
 
 // ═══════════════════════════════════════════
+// BLAST SECTION — Motor de Disparo (Consultor)
+// ═══════════════════════════════════════════
+const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
+
+function BlastSection() {
+  const { collaborator } = useCollaborator();
+  const [messageTemplate, setMessageTemplate] = useState("Olá {nome}! Vi que você atua com imóveis...");
+  const [dailyLimit, setDailyLimit] = useState(100);
+  const [creating, setCreating] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [pausing, setPausing] = useState(false);
+  const [job, setJob] = useState<any>(null);
+  const [loadingJob, setLoadingJob] = useState(true);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const getToken = async () => {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token || "";
+  };
+
+  const callBlast = async (body: Record<string, any>) => {
+    const token = await getToken();
+    const res = await fetch(`${EDGE_BASE}/blast-engine`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `HTTP ${res.status}`);
+    }
+    return res.json();
+  };
+
+  const fetchJob = useCallback(async () => {
+    if (!collaborator?.id) return;
+    setLoadingJob(true);
+    try {
+      const data = await callBlast({ action: "my_job", collaborator_id: collaborator.id });
+      setJob(data?.job || null);
+    } catch {
+      setJob(null);
+    } finally {
+      setLoadingJob(false);
+    }
+  }, [collaborator?.id]);
+
+  useEffect(() => {
+    fetchJob();
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [fetchJob]);
+
+  const startAutoSend = (jobId: string) => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(async () => {
+      try {
+        const data = await callBlast({ action: "send_batch", job_id: jobId, batch_size: 10 });
+        setJob((prev: any) => prev ? { ...prev, ...data?.job } : prev);
+        if (data?.job?.status !== "running") {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          intervalRef.current = null;
+          toast.info("Disparo finalizado!");
+          fetchJob();
+        }
+      } catch (e: any) {
+        console.error("send_batch error:", e);
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }, 5000);
+  };
+
+  const handleCreate = async () => {
+    if (!collaborator?.id) return;
+    if (!messageTemplate.trim()) { toast.error("Preencha o template da mensagem"); return; }
+    setCreating(true);
+    try {
+      const data = await callBlast({
+        action: "create_job",
+        collaborator_id: collaborator.id,
+        message_template: messageTemplate,
+        daily_limit: dailyLimit,
+      });
+      toast.success("Job de disparo criado!");
+      const jobId = data?.job_id || data?.job?.id;
+      if (jobId) {
+        await fetchJob();
+        startAutoSend(jobId);
+      }
+    } catch (e: any) {
+      toast.error("Erro ao criar job: " + e.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleManualBatch = async () => {
+    if (!job?.id) return;
+    setSending(true);
+    try {
+      const data = await callBlast({ action: "send_batch", job_id: job.id, batch_size: 10 });
+      setJob((prev: any) => prev ? { ...prev, ...data?.job } : prev);
+      toast.success(`Lote enviado! ${data?.job?.sent_count ?? "?"} total enviados`);
+    } catch (e: any) {
+      toast.error("Erro: " + e.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handlePause = async () => {
+    if (!job?.id) return;
+    setPausing(true);
+    try {
+      await callBlast({ action: "pause", job_id: job.id });
+      toast.success("Job pausado");
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+      fetchJob();
+    } catch (e: any) {
+      toast.error("Erro: " + e.message);
+    } finally {
+      setPausing(false);
+    }
+  };
+
+  if (loadingJob) {
+    return (
+      <Card>
+        <CardContent className="py-8 flex items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Active job view
+  if (job && (job.status === "running" || job.status === "paused")) {
+    return (
+      <Card className="border-primary/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Radio className="h-5 w-5 text-primary" />
+            Motor de Disparo
+            <Badge className={job.status === "running" ? "bg-green-500/20 text-green-400 border-0" : "bg-yellow-500/20 text-yellow-400 border-0"}>
+              {job.status === "running" ? "Rodando" : "Pausado"}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="text-center p-3 rounded-lg bg-muted/50">
+              <p className="text-xs text-muted-foreground">Enviados</p>
+              <p className="text-xl font-bold text-foreground">{job.sent_count ?? 0}</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/50">
+              <p className="text-xs text-muted-foreground">Total Leads</p>
+              <p className="text-xl font-bold text-foreground">{job.total_leads ?? 0}</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/50">
+              <p className="text-xs text-muted-foreground">Enviados Hoje</p>
+              <p className="text-xl font-bold text-foreground">{job.sent_today ?? 0}</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/50">
+              <p className="text-xs text-muted-foreground">Pendentes</p>
+              <p className="text-xl font-bold text-foreground">{job.pending_leads ?? 0}</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={handleManualBatch} disabled={sending} className="gap-1.5" variant="outline">
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Enviar Lote
+            </Button>
+            <Button onClick={handlePause} disabled={pausing} variant="destructive" className="gap-1.5">
+              {pausing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />}
+              Pausar
+            </Button>
+            <Button onClick={fetchJob} variant="ghost" size="icon">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // No active job — create form
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Radio className="h-5 w-5 text-primary" /> Motor de Disparo
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {job === null && !loadingJob && (
+          <p className="text-sm text-muted-foreground">Nenhum job ativo. Configure e inicie um novo disparo.</p>
+        )}
+        <div className="space-y-2">
+          <Label>Template da mensagem</Label>
+          <Textarea
+            placeholder="Olá {nome}! Vi que você atua com imóveis..."
+            value={messageTemplate}
+            onChange={e => setMessageTemplate(e.target.value)}
+            rows={4}
+          />
+          <p className="text-xs text-muted-foreground">Use {"{{nome}}"} para inserir o nome do lead.</p>
+        </div>
+        <div className="space-y-2 max-w-xs">
+          <Label>Limite diário</Label>
+          <Input
+            type="number"
+            value={dailyLimit}
+            onChange={e => setDailyLimit(Math.max(10, Math.min(500, Number(e.target.value) || 100)))}
+            min={10}
+            max={500}
+          />
+        </div>
+        <Button onClick={handleCreate} disabled={creating} className="gap-1.5 bg-green-600 hover:bg-green-700 text-white">
+          {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          Iniciar Disparo
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════
 // CONSULTOR VIEW — Meus Leads (lead_items + Realtime)
 // ═══════════════════════════════════════════
 function ConsultorView() {
@@ -964,6 +1192,9 @@ function ConsultorView() {
 
   return (
     <>
+      {/* Motor de Disparo */}
+      <BlastSection />
+
       {/* Stats cards */}
       <div className="grid grid-cols-2 gap-3">
         <SummaryCard icon={<Package className="h-5 w-5" />} label="Leads Pendentes" value={totalPending} color="warning" />
