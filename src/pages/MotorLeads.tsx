@@ -308,11 +308,14 @@ function DistributeTab() {
   const [allCompanies, setAllCompanies] = useState<{ id: string; name: string }[]>([]);
   const [distCompanyId, setDistCompanyId] = useState<string | null>(null);
 
-  // Load all companies on mount and auto-select first
+  // Lead pool stats (Objetivo / Trilia counts from contact_leads)
+  const [leadPoolStats, setLeadPoolStats] = useState<{ objetivo: number; trilia: number } | null>(null);
+
+  // Load all companies on mount and auto-select first (only Objetivo/Trilia)
   useEffect(() => {
     const loadCompanies = async () => {
       const { data } = await supabase.from("companies").select("id, name").order("name");
-      const list = data || [];
+      const list = (data || []).filter(c => c.name.includes("Objetivo") || c.name.includes("Trilia"));
       setAllCompanies(list);
       if (list.length > 0 && !distCompanyId) {
         setDistCompanyId(list[0].id);
@@ -320,6 +323,18 @@ function DistributeTab() {
     };
     loadCompanies();
   }, []);
+
+  // Load lead pool stats when distCompanyId changes
+  useEffect(() => {
+    const loadStats = async () => {
+      const { data } = await supabase.rpc("get_contact_leads_stats");
+      if (data) {
+        const d = data as any;
+        setLeadPoolStats({ objetivo: d.objetivo_transporte ?? 0, trilia: d.trilia ?? 0 });
+      }
+    };
+    if (distCompanyId) loadStats();
+  }, [distCompanyId]);
 
   useEffect(() => { if (distCompanyId) loadFilterOptions(); }, [distCompanyId]);
   useEffect(() => { countAvailable(); }, [filterCity, filterDDD, distCompanyId]);
@@ -530,6 +545,12 @@ function DistributeTab() {
                 {allCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            {leadPoolStats && (
+              <div className="flex gap-2 mt-2">
+                <Badge variant="outline" className="text-xs">Objetivo: {leadPoolStats.objetivo.toLocaleString("pt-BR")} leads</Badge>
+                <Badge variant="outline" className="text-xs">Trilia: {leadPoolStats.trilia.toLocaleString("pt-BR")} leads</Badge>
+              </div>
+            )}
           </div>
 
           {/* Filters */}
