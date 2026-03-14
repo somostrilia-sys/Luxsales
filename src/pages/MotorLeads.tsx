@@ -32,8 +32,10 @@ const ELIGIBLE_SLUGS_BY_COMPANY: Record<string, string[]> = {
 };
 
 /** Resolve companyId: "all" means null (for RPCs) or fallback to collaborator's company */
-function resolveCompanyId(selectedCompanyId: string, fallback?: string | null): string | null {
+function resolveCompanyId(selectedCompanyId: string, fallback?: string | null, isCeo?: boolean): string | null {
   if (selectedCompanyId && selectedCompanyId !== "all") return selectedCompanyId;
+  // CEO com "Todas Empresas" → null (ver todos), outros usam sua própria empresa
+  if (isCeo) return null;
   return fallback || null;
 }
 
@@ -673,14 +675,14 @@ function DistributeTab() {
 // DASHBOARD TAB — RPC get_lead_stats_by_collaborator + Realtime
 // ═══════════════════════════════════════════
 function DashboardTab() {
-  const { collaborator } = useCollaborator();
+  const { collaborator, roleLevel } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
   const [loading, setLoading] = useState(true);
   const [autoRefill, setAutoRefill] = useState(false);
   const [togglingRefill, setTogglingRefill] = useState(false);
   const [stats, setStats] = useState<any[]>([]);
 
-  const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
+  const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id, roleLevel <= 1);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
