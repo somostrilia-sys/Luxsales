@@ -860,7 +860,7 @@ export default function Bots() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Gerenciamento de Bots</h1>
+          <h1 className="text-2xl font-bold text-foreground">{roleLevel >= 2 ? "Meu WhatsApp & Chips" : "Gerenciamento de Bots"}</h1>
           <p className="text-sm text-muted-foreground">Conecte seu WhatsApp e gerencie chips de disparo</p>
         </div>
 
