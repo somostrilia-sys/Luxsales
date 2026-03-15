@@ -77,6 +77,7 @@ const App = () => (
                   <Route path="/ceo" element={<ProtectedRoute minLevel={0}><CeoBolt /></ProtectedRoute>} />
                   <Route path="/motor-leads" element={<ProtectedRoute><MotorLeads /></ProtectedRoute>} />
                   <Route path="/voice-ai" element={<ProtectedRoute minLevel={1}><VoiceAI /></ProtectedRoute>} />
+                  <Route path="/call-campaigns" element={<ProtectedRoute minLevel={1}><CallCampaigns /></ProtectedRoute>} />
                   <Route path="/atendimento" element={<ProtectedRoute><AtendimentoLeads /></ProtectedRoute>} />
 
                   <Route path="*" element={<NotFound />} />

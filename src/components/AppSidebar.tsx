@@ -103,6 +103,15 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
+        {visibleVoice.length > 0 && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-muted-foreground text-[10px] uppercase tracking-widest font-semibold px-4 mb-1">Voz e Ligações</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>{renderItems(visibleVoice)}</SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         {visibleConsultant.length > 0 && (
           <SidebarGroup>
             {!collapsed && <SidebarGroupLabel className="text-muted-foreground text-[10px] uppercase tracking-widest font-semibold px-4 mb-1">Consultor</SidebarGroupLabel>}
