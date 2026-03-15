@@ -1047,9 +1047,14 @@ function BlastSection() {
     if (!job?.id) return;
     setPausing(true);
     try {
-      await callBlast({ action: "pause", job_id: job.id });
-      toast.success("Job pausado");
-      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+      if (job.status === "paused") {
+        await callBlast({ action: "resume", job_id: job.id });
+        toast.success("Disparo retomado");
+      } else {
+        await callBlast({ action: "pause", job_id: job.id });
+        toast.success("Disparo pausado");
+        if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+      }
       fetchJob();
     } catch (e: any) {
       toast.error("Erro: " + e.message);
@@ -1105,9 +1110,11 @@ function BlastSection() {
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Enviar Lote
             </Button>
-            <Button onClick={handlePause} disabled={pausing} variant="destructive" className="gap-1.5">
-              {pausing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />}
-              Pausar
+            <Button onClick={handlePause} disabled={pausing}
+              variant={job?.status === "paused" ? "default" : "destructive"}
+              className={`gap-1.5 ${job?.status === "paused" ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}>
+              {pausing ? <Loader2 className="h-4 w-4 animate-spin" /> : job?.status === "paused" ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+              {job?.status === "paused" ? "Retomar" : "Pausar"}
             </Button>
             <Button onClick={fetchJob} variant="ghost" size="icon">
               <RefreshCw className="h-4 w-4" />
