@@ -26,6 +26,7 @@ const IdentidadeVisual = lazy(() => import("./pages/IdentidadeVisual"));
 const CeoBolt = lazy(() => import("./pages/CeoBolt"));
 const MotorLeads = lazy(() => import("./pages/MotorLeads"));
 const AtendimentoLeads = lazy(() => import("./pages/AtendimentoLeads"));
+const VoiceAI = lazy(() => import("./pages/VoiceAI"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const Registro = lazy(() => import("./pages/Registro"));
@@ -74,6 +75,7 @@ const App = () => (
                   <Route path="/identidade-visual" element={<ProtectedRoute minLevel={0}><IdentidadeVisual /></ProtectedRoute>} />
                   <Route path="/ceo" element={<ProtectedRoute minLevel={0}><CeoBolt /></ProtectedRoute>} />
                   <Route path="/motor-leads" element={<ProtectedRoute><MotorLeads /></ProtectedRoute>} />
+                  <Route path="/voice-ai" element={<ProtectedRoute minLevel={1}><VoiceAI /></ProtectedRoute>} />
                   <Route path="/atendimento" element={<ProtectedRoute><AtendimentoLeads /></ProtectedRoute>} />
 
                   <Route path="*" element={<NotFound />} />
