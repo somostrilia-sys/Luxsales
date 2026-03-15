@@ -1,7 +1,7 @@
 // v2.5 — Refined dark dashboard sidebar
 import {
   LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone, Mic
+  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone, Mic, PhoneCall
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
