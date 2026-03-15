@@ -10,8 +10,10 @@ import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { toast } from "sonner";
 import {
   Send, Loader2, ArrowLeft, Search, Phone, MessageCircle,
-  Smartphone, Clock, User, ChevronRight
+  Smartphone, Clock, User, ChevronRight, RefreshCw
 } from "lucide-react";
+
+const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
 
 // ── Types ──
 
@@ -89,6 +91,7 @@ export default function AtendimentoLeads() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [search, setSearch] = useState("");
   const [chipInfo, setChipInfo] = useState<ChipInfo | null>(null);
+  const [polling, setPolling] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -119,6 +122,40 @@ export default function AtendimentoLeads() {
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
+
+  // ── Poll UAZAPI and refresh ──────────────────────────────────────────────
+  const pollAndRefresh = useCallback(async () => {
+    if (polling) return;
+    setPolling(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (token) {
+        await fetch(`${EDGE_BASE}/poll-whatsapp`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({}),
+          signal: AbortSignal.timeout(25000),
+        }).catch(() => null);
+      }
+      await loadConversations();
+    } catch {
+      // silently ignore
+    } finally {
+      setPolling(false);
+    }
+  }, [polling, loadConversations]);
+
+  // Auto-refresh every 2 minutes while page is open
+  useEffect(() => {
+    const interval = setInterval(() => {
+      pollAndRefresh();
+    }, 120000);
+    return () => clearInterval(interval);
+  }, [pollAndRefresh]);
 
   // ── Supabase Realtime subscription for new messages ──
   useEffect(() => {
@@ -490,15 +527,31 @@ export default function AtendimentoLeads() {
           </p>
         </div>
 
-        {/* Search */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por telefone ou mensagem..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
+        {/* Search + Atualizar */}
+        <div className="flex gap-2 max-w-lg">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por telefone ou mensagem..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={pollAndRefresh}
+            disabled={polling}
+            title="Buscar novas respostas de leads"
+          >
+            {polling ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            <span className="ml-1.5 hidden sm:inline">Atualizar</span>
+          </Button>
         </div>
 
         {/* Conversations list */}
