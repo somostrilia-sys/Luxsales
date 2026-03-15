@@ -10,6 +10,9 @@
 --    Used by Motor de Leads dashboard to show per-collaborator metrics
 --    Aggregates from consultant_lead_pool (actual dispatched leads)
 -- ──────────────────────────────────────────────────────────────
+-- Drop existing function first (return type may differ)
+DROP FUNCTION IF EXISTS get_lead_stats_by_collaborator(uuid);
+
 CREATE OR REPLACE FUNCTION get_lead_stats_by_collaborator(p_company_id UUID DEFAULT NULL)
 RETURNS TABLE (
   collaborator_id UUID,
