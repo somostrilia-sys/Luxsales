@@ -334,7 +334,7 @@ function DistributeTab() {
       const { data } = await supabase.rpc("get_contact_leads_stats");
       if (data) {
         const d = data as any;
-        setLeadPoolStats({ objetivo: d.objetivo_transporte ?? 0, trilia: d.trilia ?? 0 });
+        setLeadPoolStats({ objetivo: (d.objetivo_transporte ?? 0) + (d.objetivo_geral ?? 0), trilia: d.trilia ?? 0 });
       }
     };
     if (distCompanyId) loadStats();

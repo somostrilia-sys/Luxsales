@@ -48,8 +48,7 @@ const getDestino = (lead: Lead): string => {
 };
 
 const destinoConfig = [
-  { key: "objetivo-transporte", label: "Objetivo Auto & Truck", icon: Building2, color: "border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-300" },
-  { key: "objetivo-geral", label: "Objetivo Geral", icon: Building2, color: "border-indigo-500 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
+  { key: "objetivo", label: "Objetivo", icon: Building2, color: "border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-300" },
   { key: "trilia", label: "Trilia", icon: Briefcase, color: "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
   { key: "olx", label: "OLX", icon: Car, color: "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-300" },
   { key: "google", label: "Google Maps", icon: MapPin, color: "border-red-500 bg-red-500/10 text-red-700 dark:text-red-300" },
@@ -87,7 +86,7 @@ export default function BaseDados() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, pf: 0, pj: 0, email: 0, phone: 0 });
   const [destinoCounts, setDestinoCounts] = useState<Record<string, number>>({
-    "objetivo-transporte": 0, "objetivo-geral": 0, trilia: 0, olx: 0, google: 0, all: 0,
+    "objetivo": 0, trilia: 0, olx: 0, google: 0, all: 0,
   });
   const [tabCounts, setTabCounts] = useState<Record<string, number>>({});
   const [distributeOpen, setDistributeOpen] = useState(false);
@@ -114,8 +113,7 @@ export default function BaseDados() {
 
     setStats({ total: s.total ?? 0, pf: s.pf ?? 0, pj: s.pj ?? 0, email: s.com_email ?? 0, phone: s.com_telefone ?? 0 });
     setDestinoCounts({
-      "objetivo-transporte": s.objetivo_transporte ?? 0,
-      "objetivo-geral": s.objetivo_geral ?? 0,
+      "objetivo": (s.objetivo_transporte ?? 0) + (s.objetivo_geral ?? 0),
       trilia: s.trilia ?? 0,
       olx: s.olx ?? 0,
       google: s.google_maps ?? 0,
@@ -378,8 +376,7 @@ export default function BaseDados() {
 
   const handleDestinoClick = (key: string) => {
     const cardToTab: Record<string, string> = {
-      "objetivo-transporte": "objetivo-transporte",
-      "objetivo-geral": "objetivo-geral",
+      "objetivo": "objetivo-transporte",
       trilia: "trilia-consultoria",
       olx: "olx",
       google: "google_maps",
@@ -438,8 +435,7 @@ export default function BaseDados() {
             const Icon = d.icon;
             const count = destinoCounts[d.key] ?? 0;
             const isActive =
-              (d.key === "objetivo-transporte" && activeTab === "objetivo-transporte") ||
-              (d.key === "objetivo-geral" && activeTab === "objetivo-geral") ||
+              (d.key === "objetivo" && (activeTab === "objetivo-transporte" || activeTab === "objetivo-geral")) ||
               (d.key === "trilia" && activeTab === "trilia-consultoria") ||
               (d.key === "olx" && activeTab === "olx") ||
               (d.key === "google" && activeTab === "google_maps") ||
