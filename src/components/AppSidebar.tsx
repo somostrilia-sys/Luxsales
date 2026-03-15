@@ -1,7 +1,7 @@
 // v2.5 — Refined dark dashboard sidebar
 import {
   LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone, Mic
+  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone, Mic, PhoneCall
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -22,7 +22,6 @@ interface MenuItem {
 const managementItems: MenuItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, levels: [0, 1, 2] },
   { title: "Agentes de IA", url: "/agentes", icon: Cpu, levels: [0, 1] },
-  { title: "Voice AI", url: "/voice-ai", icon: Mic, levels: [0, 1] },
   { title: "Bots / WhatsApp", url: "/bots", icon: Bot, levels: [0, 1, 2, 3] },
   { title: "Colaboradores", url: "/colaboradores", icon: Users, levels: [0, 1] },
   { title: "Cadastro", url: "/cadastro", icon: UserPlus, levels: [0, 1] },
@@ -43,6 +42,11 @@ const consultantItems: MenuItem[] = [
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
 ];
 
+const voiceItems: MenuItem[] = [
+  { title: "Voice AI", url: "/voice-ai", icon: Mic, levels: [0, 1] },
+  { title: "Ligações IA", url: "/call-campaigns", icon: PhoneCall, levels: [0, 1] },
+];
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
@@ -50,6 +54,7 @@ export function AppSidebar() {
   const { signOut } = useAuth();
 
   const visibleManagement = managementItems.filter(i => i.levels.includes(roleLevel));
+  const visibleVoice = voiceItems.filter(i => i.levels.includes(roleLevel));
   const visibleConsultant = consultantItems.filter(i => i.levels.includes(roleLevel));
 
   const renderItems = (items: MenuItem[]) =>
@@ -94,6 +99,15 @@ export function AppSidebar() {
             {!collapsed && <SidebarGroupLabel className="text-muted-foreground text-[10px] uppercase tracking-widest font-semibold px-4 mb-1">Gestão</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>{renderItems(visibleManagement)}</SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {visibleVoice.length > 0 && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-muted-foreground text-[10px] uppercase tracking-widest font-semibold px-4 mb-1">Voz e Ligações</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>{renderItems(visibleVoice)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
