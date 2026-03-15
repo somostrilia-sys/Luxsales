@@ -1,4 +1,3 @@
-// v2.5 — Refined dark dashboard sidebar
 import {
   LayoutDashboard, Users, FileSearch, Database,
   BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone, Mic, PhoneCall
@@ -38,7 +37,6 @@ const consultantItems: MenuItem[] = [
   { title: "Atendimento", url: "/atendimento", icon: Phone, levels: [0, 1, 2, 3] },
   { title: "Conversas IA", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
   { title: "Meu Bot", url: "/meu-bot", icon: Bot, levels: [0, 1, 2, 3] },
-
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
 ];
 
@@ -64,65 +62,72 @@ export function AppSidebar() {
           <NavLink
             to={item.url}
             end={item.url === "/"}
-            className="hover:bg-sidebar-accent/60 transition-all duration-200 rounded-lg"
+            className="hover:bg-sidebar-accent/70 transition-all duration-150 rounded-xl gap-3 px-3 py-2"
             activeClassName="sidebar-active-gradient text-primary font-semibold"
           >
-            <item.icon className="mr-2 h-4 w-4 text-muted-foreground" />
-            {!collapsed && <span>{item.title}</span>}
+            <item.icon className="h-[18px] w-[18px] text-muted-foreground shrink-0" />
+            {!collapsed && <span className="text-[13px]">{item.title}</span>}
           </NavLink>
         </SidebarMenuButton>
       </SidebarMenuItem>
     ));
 
+  const SectionLabel = ({ children }: { children: React.ReactNode }) =>
+    !collapsed ? (
+      <SidebarGroupLabel className="text-muted-foreground/60 text-[10px] uppercase tracking-[0.12em] font-semibold px-4 mb-1">
+        {children}
+      </SidebarGroupLabel>
+    ) : null;
+
   return (
     <Sidebar collapsible="icon">
-      <SidebarContent className="pt-6 bg-sidebar border-r border-sidebar-border">
+      <SidebarContent className="pt-5 bg-sidebar border-r border-sidebar-border/60">
         {/* Logo */}
-        <div className="px-4 mb-6 flex items-center justify-center">
+        <div className="px-4 mb-5 flex items-center justify-center">
           {collaborator?.company?.logo_url ? (
             <img
               src={collaborator.company.logo_url}
               alt={collaborator.company.name}
-              className="h-12 shrink-0 object-contain"
+              className="h-10 shrink-0 object-contain"
             />
           ) : (
             <img
               src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/assets/logos/logo-walk-holding-transparent.png"
               alt="Walk Holding"
-              className="h-20 w-auto object-contain max-w-[200px] shrink-0 drop-shadow-[0_0_20px_hsl(217,91%,53%,0.1)]"
+              className="h-16 w-auto object-contain max-w-[180px] shrink-0 drop-shadow-[0_0_16px_hsl(217,91%,53%,0.08)]"
             />
           )}
         </div>
 
         {visibleManagement.length > 0 && (
           <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-muted-foreground text-[10px] uppercase tracking-widest font-semibold px-4 mb-1">Gestão</SidebarGroupLabel>}
+            <SectionLabel>Gestão</SectionLabel>
             <SidebarGroupContent>
-              <SidebarMenu>{renderItems(visibleManagement)}</SidebarMenu>
+              <SidebarMenu className="space-y-0.5">{renderItems(visibleManagement)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
 
         {visibleVoice.length > 0 && (
           <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-muted-foreground text-[10px] uppercase tracking-widest font-semibold px-4 mb-1">Voz e Ligações</SidebarGroupLabel>}
+            <SectionLabel>Voz e Ligações</SectionLabel>
             <SidebarGroupContent>
-              <SidebarMenu>{renderItems(visibleVoice)}</SidebarMenu>
+              <SidebarMenu className="space-y-0.5">{renderItems(visibleVoice)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
 
         {visibleConsultant.length > 0 && (
           <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-muted-foreground text-[10px] uppercase tracking-widest font-semibold px-4 mb-1">Consultor</SidebarGroupLabel>}
+            <SectionLabel>Consultor</SectionLabel>
             <SidebarGroupContent>
-              <SidebarMenu>{renderItems(visibleConsultant)}</SidebarMenu>
+              <SidebarMenu className="space-y-0.5">{renderItems(visibleConsultant)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
 
-        <SidebarFooter className="mt-auto p-3 border-t border-sidebar-border">
-          <div className="flex items-center gap-2">
+        <SidebarFooter className="mt-auto p-3 border-t border-sidebar-border/50">
+          <div className="flex items-center gap-2.5">
             {!collapsed && collaborator && (
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-sidebar-foreground truncate">{collaborator.name}</p>
@@ -133,7 +138,7 @@ export function AppSidebar() {
               variant="ghost"
               size="sm"
               onClick={signOut}
-              className="shrink-0 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+              className="shrink-0 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent rounded-xl"
             >
               <LogOut className="h-4 w-4" />
             </Button>
