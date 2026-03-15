@@ -22,6 +22,7 @@ interface MenuItem {
 const managementItems: MenuItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, levels: [0, 1, 2] },
   { title: "Agentes de IA", url: "/agentes", icon: Cpu, levels: [0, 1] },
+  { title: "Voice AI", url: "/voice-ai", icon: Mic, levels: [0, 1] },
   { title: "Bots / WhatsApp", url: "/bots", icon: Bot, levels: [0, 1, 2, 3] },
   { title: "Colaboradores", url: "/colaboradores", icon: Users, levels: [0, 1] },
   { title: "Cadastro", url: "/cadastro", icon: UserPlus, levels: [0, 1] },
