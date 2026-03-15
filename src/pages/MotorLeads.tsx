@@ -1178,6 +1178,7 @@ function BlastSection() {
 function ConsultorView() {
   const { collaborator } = useCollaborator();
   const [leads, setLeads] = useState<any[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -1187,16 +1188,25 @@ function ConsultorView() {
     if (!collaborator?.id) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("consultant_lead_pool")
-        .select("id, lead_name, phone, lead_city, lead_category, status, assigned_at")
-        .eq("collaborator_id", collaborator.id)
-        .eq("status", "pending")
-        .order("assigned_at", { ascending: true })
-        .limit(200);
-      if (error) throw error;
+      // Buscar total real (COUNT) e primeiros 200 registros em paralelo
+      const [countRes, dataRes] = await Promise.all([
+        supabase
+          .from("consultant_lead_pool")
+          .select("id", { count: "exact", head: true })
+          .eq("collaborator_id", collaborator.id)
+          .eq("status", "pending"),
+        supabase
+          .from("consultant_lead_pool")
+          .select("id, lead_name, phone, lead_city, lead_category, status, assigned_at")
+          .eq("collaborator_id", collaborator.id)
+          .eq("status", "pending")
+          .order("assigned_at", { ascending: true })
+          .limit(200),
+      ]);
+      if (dataRes.error) throw dataRes.error;
+      setTotalCount(countRes.count ?? 0);
       // Normaliza campos para compatibilidade com a UI existente
-      setLeads((data || []).map(l => ({
+      setLeads((dataRes.data || []).map(l => ({
         id: l.id,
         nome: l.lead_name,
         telefone: l.phone,
@@ -1294,9 +1304,6 @@ function ConsultorView() {
     else setSelected(new Set(filtered.map(l => l.id)));
   };
 
-  // Count stats from all assigned leads (not just filtered)
-  const totalPending = leads.length;
-
   return (
     <>
       {/* Motor de Disparo */}
@@ -1304,7 +1311,7 @@ function ConsultorView() {
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 gap-3">
-        <SummaryCard icon={<Package className="h-5 w-5" />} label="Leads Pendentes" value={totalPending} color="warning" />
+        <SummaryCard icon={<Package className="h-5 w-5" />} label="Leads Pendentes" value={totalCount} color="warning" />
         <Card>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
@@ -1329,6 +1336,11 @@ function ConsultorView() {
             className="pl-9"
           />
         </div>
+        {totalCount > leads.length && (
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            Mostrando {leads.length.toLocaleString("pt-BR")} de {totalCount.toLocaleString("pt-BR")}
+          </span>
+        )}
         <Button size="sm" variant="outline" onClick={fetchLeads} disabled={loading}>
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </Button>
