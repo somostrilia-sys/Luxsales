@@ -259,6 +259,14 @@ export default function AtendimentoLeads() {
         .eq("id", conv.chip_id)
         .maybeSingle();
       setChipInfo(chip as ChipInfo | null);
+    } else if (conv.chip_instance_token) {
+      // Fallback: buscar chip pelo instance_token (quando chip_id é null)
+      const { data: chip } = await supabase
+        .from("disposable_chips")
+        .select("id, chip_index, phone, status, instance_token")
+        .eq("instance_token", conv.chip_instance_token)
+        .maybeSingle();
+      setChipInfo(chip as ChipInfo | null);
     } else {
       setChipInfo(null);
     }
