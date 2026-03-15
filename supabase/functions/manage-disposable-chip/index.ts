@@ -240,28 +240,71 @@ Deno.serve(async (req) => {
       const { chip_id } = body;
       if (!chip_id) return json({ error: "chip_id required" }, 400);
 
-      const { data: chip } = await supabase
+      const { data: chip, error: fetchError } = await supabase
         .from("disposable_chips")
         .select("*")
         .eq("id", chip_id)
         .single();
-      if (!chip) return json({ error: "Chip não encontrado" }, 404);
 
-      // Try to delete instance on UAZAPI
-      if (chip.instance_token && chip.uazapi_admin_token) {
+      if (fetchError || !chip) {
+        // If chip doesn't exist in DB, treat as already deleted
+        if (fetchError?.code === "PGRST116") return json({ ok: true });
+        return json({ error: "Chip não encontrado" }, 404);
+      }
+
+      // Try to delete instance on UAZAPI (best-effort, never blocks DB deletion)
+      if (chip.instance_token && chip.uazapi_admin_token && chip.uazapi_server_url) {
         try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
           await fetch(`${chip.uazapi_server_url}/instance/delete`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "AdminToken": chip.uazapi_admin_token },
             body: JSON.stringify({ name: chip.instance_name }),
+            signal: controller.signal,
           });
+          clearTimeout(timeoutId);
         } catch (e) {
-          console.error("UAZAPI delete error:", e);
+          // UAZAPI errors should NEVER prevent DB cleanup
+          console.error("UAZAPI delete error (non-blocking):", e);
         }
       }
 
+      // Nullify chip references in related tables before deleting
+      try {
+        await supabase.from("messages").update({ chip_id: null }).eq("chip_id", chip_id);
+      } catch (e) {
+        console.error("Error clearing messages chip_id:", e);
+      }
+      try {
+        await supabase.from("prospection_messages").update({ chip_id: null }).eq("chip_id", chip_id);
+      } catch (e) {
+        console.error("Error clearing prospection_messages chip_id:", e);
+      }
+
+      // Delete the chip from DB
       const { error } = await supabase.from("disposable_chips").delete().eq("id", chip_id);
-      if (error) return json({ error: error.message }, 500);
+      if (error) {
+        console.error("DB delete error:", error);
+        // If FK constraint blocks, try force-nullifying all references
+        if (error.code === "23503") {
+          // Foreign key violation - try to find and clear all references
+          console.error("FK violation, attempting cleanup...");
+          try {
+            // Generic cleanup: set chip_id to null in any referencing tables
+            await supabase.rpc("exec_sql", { sql: `UPDATE messages SET chip_id = NULL WHERE chip_id = '${chip_id}'` });
+            await supabase.rpc("exec_sql", { sql: `UPDATE prospection_messages SET chip_id = NULL WHERE chip_id = '${chip_id}'` });
+            await supabase.rpc("exec_sql", { sql: `UPDATE conversations SET chip_id = NULL WHERE chip_id = '${chip_id}'` });
+          } catch (cleanupErr) {
+            console.error("Cleanup error:", cleanupErr);
+          }
+          // Retry delete
+          const { error: retryError } = await supabase.from("disposable_chips").delete().eq("id", chip_id);
+          if (retryError) return json({ error: "Erro ao remover chip: " + retryError.message }, 500);
+        } else {
+          return json({ error: "Erro ao remover chip: " + error.message }, 500);
+        }
+      }
 
       return json({ ok: true });
     }

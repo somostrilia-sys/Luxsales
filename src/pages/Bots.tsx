@@ -146,6 +146,15 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
       body: JSON.stringify(body),
     });
+    if (!resp.ok) {
+      // Try to parse error response, fallback to status text
+      try {
+        const errorData = await resp.json();
+        return { error: errorData?.error || `HTTP ${resp.status}: ${resp.statusText}` };
+      } catch {
+        return { error: `HTTP ${resp.status}: ${resp.statusText}` };
+      }
+    }
     return resp.json();
   };
 
@@ -235,7 +244,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   };
 
   const handleDelete = async (chip: DisposableChip) => {
-    if (!window.confirm(`Remover Chip? Esta ação é irreversível.`)) return;
+    if (!window.confirm(`Remover Chip #${chip.chip_index}? Esta ação é irreversível.`)) return;
     setDeleting(chip.id);
     // Stop polling first
     if (pollingRefs.current[chip.id]) {
@@ -246,14 +255,21 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
       const result = await callEdge({ action: "delete", chip_id: chip.id });
       if (result?.error) {
         toast.error("Erro ao remover: " + result.error);
+        // Even on error, try to refresh from DB to check current state
+        await fetchChips();
         setDeleting(null);
         return;
       }
-      toast.success("Chip removido");
-      // Update chips list locally (removes deleted chip, re-numbers automatically via displayIdx)
+      toast.success("Chip removido com sucesso");
+      // Remove from local state and also refresh from DB for consistency
       setChips(prev => prev.filter(c => c.id !== chip.id));
-    } catch (e) {
-      toast.error("Falha ao remover chip.");
+      // Refresh from DB after short delay to ensure consistency
+      setTimeout(() => fetchChips(), 500);
+    } catch (e: any) {
+      console.error("Chip delete error:", e);
+      toast.error("Falha ao remover chip. Tente novamente.");
+      // Refresh state from DB
+      await fetchChips();
     } finally {
       setDeleting(null);
     }

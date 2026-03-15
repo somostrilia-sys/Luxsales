@@ -684,16 +684,66 @@ function DashboardTab() {
     try {
       // Auto-refill config
       const { data: cfg } = await supabase
-        .from("system_configs").select("value").eq("key", "auto_refill_enabled").single();
+        .from("system_configs").select("value").eq("key", "auto_refill_enabled").maybeSingle();
       setAutoRefill(cfg?.value === "true");
 
-      // Stats via RPC
+      // Stats via RPC — try the dedicated function first
       const { data, error } = await supabase.rpc("get_lead_stats_by_collaborator", {
         p_company_id: companyId || null,
       });
-      if (error) throw error;
+
+      if (error) {
+        console.error("RPC get_lead_stats_by_collaborator error:", error);
+        // Fallback: query consultant_lead_pool directly with join to collaborators
+        const query = supabase
+          .from("consultant_lead_pool")
+          .select("collaborator_id, status, collaborator:collaborator_id(name, role_id)");
+
+        if (companyId) {
+          // Filter by company through collaborators join
+          const { data: collabs } = await supabase
+            .from("collaborators")
+            .select("id")
+            .eq("company_id", companyId);
+          const collabIds = (collabs || []).map(c => c.id);
+          if (collabIds.length > 0) {
+            query.in("collaborator_id", collabIds);
+          }
+        }
+
+        const { data: rawLeads, error: fallbackError } = await query;
+        if (fallbackError) throw fallbackError;
+
+        // Aggregate manually
+        const grouped: Record<string, any> = {};
+        (rawLeads || []).forEach((lead: any) => {
+          const cid = lead.collaborator_id;
+          if (!grouped[cid]) {
+            grouped[cid] = {
+              collaborator_id: cid,
+              collaborator_name: lead.collaborator?.name || "—",
+              role_slug: "",
+              total_atribuidos: 0,
+              total_pendentes: 0,
+              total_enviados: 0,
+              total_responderam: 0,
+              total_convertidos: 0,
+            };
+          }
+          grouped[cid].total_atribuidos++;
+          if (lead.status === "pending" || lead.status === "available") grouped[cid].total_pendentes++;
+          else if (lead.status === "sent") grouped[cid].total_enviados++;
+          else if (lead.status === "responded") grouped[cid].total_responderam++;
+          else if (lead.status === "converted") grouped[cid].total_convertidos++;
+        });
+
+        setStats(Object.values(grouped));
+        return;
+      }
+
       setStats(data || []);
     } catch (e: any) {
+      console.error("Dashboard load error:", e);
       toast.error("Erro ao carregar dashboard: " + e.message);
     } finally {
       setLoading(false);
@@ -793,7 +843,7 @@ function DashboardTab() {
                   </TableCell>
                 </TableRow>
               ) : stats.map((c: any) => {
-                const total = (c.total_atribuidos || 0);
+                const total = (c.total_enviados || 0) + (c.total_responderam || 0) + (c.total_convertidos || 0);
                 const rate = total > 0 ? Math.round(((c.total_responderam + c.total_convertidos) / total) * 100) : 0;
                 return (
                   <TableRow key={c.collaborator_id}>
@@ -1191,17 +1241,18 @@ function ConsultorView() {
     setLoading(true);
     try {
       // Buscar total real (COUNT) e primeiros 200 registros em paralelo
+      // Include both 'pending' and 'available' statuses (distribute_leads may use either)
       const [countRes, dataRes] = await Promise.all([
         supabase
           .from("consultant_lead_pool")
           .select("id", { count: "exact", head: true })
           .eq("collaborator_id", collaborator.id)
-          .eq("status", "pending"),
+          .in("status", ["pending", "available"]),
         supabase
           .from("consultant_lead_pool")
           .select("id, lead_name, phone, lead_city, lead_category, status, assigned_at")
           .eq("collaborator_id", collaborator.id)
-          .eq("status", "pending")
+          .in("status", ["pending", "available"])
           .order("assigned_at", { ascending: true })
           .limit(200),
       ]);
