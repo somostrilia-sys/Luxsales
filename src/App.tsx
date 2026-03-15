@@ -26,6 +26,7 @@ const IdentidadeVisual = lazy(() => import("./pages/IdentidadeVisual"));
 const CeoBolt = lazy(() => import("./pages/CeoBolt"));
 const MotorLeads = lazy(() => import("./pages/MotorLeads"));
 const AtendimentoLeads = lazy(() => import("./pages/AtendimentoLeads"));
+const VoiceAI = lazy(() => import("./pages/VoiceAI"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const Registro = lazy(() => import("./pages/Registro"));
