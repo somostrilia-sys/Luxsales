@@ -42,6 +42,11 @@ const consultantItems: MenuItem[] = [
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
 ];
 
+const voiceItems: MenuItem[] = [
+  { title: "Voice AI", url: "/voice-ai", icon: Mic, levels: [0, 1] },
+  { title: "Ligações IA", url: "/call-campaigns", icon: PhoneCall, levels: [0, 1] },
+];
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
@@ -49,6 +54,7 @@ export function AppSidebar() {
   const { signOut } = useAuth();
 
   const visibleManagement = managementItems.filter(i => i.levels.includes(roleLevel));
+  const visibleVoice = voiceItems.filter(i => i.levels.includes(roleLevel));
   const visibleConsultant = consultantItems.filter(i => i.levels.includes(roleLevel));
 
   const renderItems = (items: MenuItem[]) =>
