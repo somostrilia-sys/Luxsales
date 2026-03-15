@@ -1,4 +1,5 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,13 +28,12 @@ export default function CallCampaigns() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Ligações IA</h1>
-            <p className="text-muted-foreground text-sm">Campanhas de ligação automatizadas com inteligência artificial</p>
-          </div>
+        <PageHeader
+          title="Ligações IA"
+          subtitle="Campanhas de ligação automatizadas com inteligência artificial"
+        >
           <Button className="bg-emerald-600 hover:bg-emerald-700 text-white"><Plus className="h-4 w-4 mr-1.5" />Nova Campanha</Button>
-        </div>
+        </PageHeader>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[

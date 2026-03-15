@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -116,10 +117,10 @@ export default function Configuracoes() {
   return (
     <DashboardLayout>
       <div className="space-y-6 max-w-2xl">
-        <div className="animate-fade-in">
-          <h1 className="text-2xl font-bold">Configurações</h1>
-          <p className="text-muted-foreground text-sm">Horários de execução do Motor de Disparo e notificações</p>
-        </div>
+        <PageHeader
+          title="Configurações"
+          subtitle="Horários de execução do Motor de Disparo e notificações"
+        />
 
         <Card className="shadow-sm bg-card/80 backdrop-blur-sm">
           <CardHeader><CardTitle className="text-lg">Motor de Disparo — Horários</CardTitle></CardHeader>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { supabase } from "@/lib/supabase";
@@ -64,8 +65,7 @@ export default function Metricas() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Métricas</h1>
+        <PageHeader title="Métricas">
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -74,7 +74,7 @@ export default function Metricas() {
               <SelectItem value="30">30 dias</SelectItem>
             </SelectContent>
           </Select>
-        </div>
+        </PageHeader>
 
         {loading ? (
           <div className="flex justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Target, Bot, MessageSquare, TrendingUp, Users, Activity } from "lucide-react";
+import { Target, Bot, MessageSquare, TrendingUp, TrendingDown, Users, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { supabase } from "@/lib/supabase";
@@ -112,62 +113,60 @@ export default function Index() {
   };
 
   const kpis = [
-    { label: "Agentes Ativos", value: stats.agents, icon: Bot, color: "text-primary", bg: "bg-primary/10" },
-    { label: "Leads Gerados", value: stats.leads, icon: Target, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-    { label: "Mensagens Hoje", value: stats.messagestoday, icon: MessageSquare, color: "text-amber-400", bg: "bg-amber-500/10" },
-    { label: isCEO ? "Empresas" : "Taxa Conversão", value: isCEO ? stats.companies : "0%", icon: TrendingUp, color: "text-muted-foreground", bg: "bg-muted/50" },
+    { label: "Agentes Ativos", value: stats.agents, icon: Bot, color: "text-primary", bg: "bg-primary/10", trend: "+2", trendUp: true },
+    { label: "Leads Gerados", value: stats.leads, icon: Target, color: "text-emerald-400", bg: "bg-emerald-500/10", trend: "+12%", trendUp: true },
+    { label: "Mensagens Hoje", value: stats.messagestoday, icon: MessageSquare, color: "text-amber-400", bg: "bg-amber-500/10", trend: "+8%", trendUp: true },
+    { label: isCEO ? "Empresas" : "Taxa Conversão", value: isCEO ? stats.companies : "0%", icon: TrendingUp, color: "text-muted-foreground", bg: "bg-muted/50", trend: "0%", trendUp: true },
   ];
 
   return (
     <DashboardLayout>
       <div className="space-y-6 max-w-[1400px]">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Dashboard Overview</h1>
-            <p className="text-sm text-muted-foreground mt-1">Gerencie seus projetos, equipe e estatísticas</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Select value={period} onValueChange={setPeriod}>
-              <SelectTrigger className="w-[130px] h-9 text-xs bg-secondary/60 border-border/60 rounded-xl">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">Hoje</SelectItem>
-                <SelectItem value="7">7 dias</SelectItem>
-                <SelectItem value="30">30 dias</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        <PageHeader title="Dashboard Overview" subtitle="Gerencie seus projetos, equipe e estatísticas">
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-[130px] h-9 text-xs bg-secondary/60 border-border/60 rounded-xl">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">Hoje</SelectItem>
+              <SelectItem value="7">7 dias</SelectItem>
+              <SelectItem value="30">30 dias</SelectItem>
+            </SelectContent>
+          </Select>
+        </PageHeader>
 
         {/* KPI Cards — Omni style */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {kpis.map(s => (
-            <Card key={s.label} className="bg-card border-border/60 hover:border-border transition-colors">
+            <Card key={s.label} className="bg-card border-border/60 hover:border-border transition-all duration-200 hover:shadow-[var(--shadow-card-hover)]">
               <CardContent className="p-5">
-                <div className="flex items-center gap-4">
+                <div className="flex items-start justify-between mb-3">
                   <div className={`h-11 w-11 rounded-2xl ${s.bg} flex items-center justify-center shrink-0`}>
                     <s.icon className={`h-5 w-5 ${s.color}`} />
                   </div>
-                  <div className="min-w-0">
-                    {loading ? (
-                      <Skeleton className="h-7 w-16" />
-                    ) : (
-                      <p className="text-2xl font-bold tracking-tight">{typeof s.value === "number" ? s.value.toLocaleString("pt-BR") : s.value}</p>
-                    )}
-                    <p className="text-[11px] text-muted-foreground font-medium mt-0.5">{s.label}</p>
+                  <div className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg ${
+                    s.trendUp ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10"
+                  }`}>
+                    {s.trendUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                    {s.trend}
                   </div>
                 </div>
+                {loading ? (
+                  <Skeleton className="h-7 w-16" />
+                ) : (
+                  <p className="text-2xl font-bold tracking-tight">{typeof s.value === "number" ? s.value.toLocaleString("pt-BR") : s.value}</p>
+                )}
+                <p className="text-[11px] text-muted-foreground font-medium mt-1">{s.label}</p>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        {/* Main content grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Chart — spans 2 columns */}
-          <Card className="lg:col-span-2 bg-card border-border/60">
+        {/* Main content grid — Bento */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Chart — spans 8 columns */}
+          <Card className="lg:col-span-8 bg-card border-border/60">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-semibold">Leads por Dia</CardTitle>
@@ -202,8 +201,8 @@ export default function Index() {
             </CardContent>
           </Card>
 
-          {/* Team Members — right column */}
-          <Card className="bg-card border-border/60">
+          {/* Team Members — 4 columns */}
+          <Card className="lg:col-span-4 bg-card border-border/60">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-semibold">Equipe</CardTitle>

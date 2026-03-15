@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -284,10 +285,10 @@ export default function Cadastro() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Cadastro de Colaboradores</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Registre novos colaboradores ou gere links de convite</p>
-        </div>
+        <PageHeader
+          title="Cadastro de Colaboradores"
+          subtitle="Registre novos colaboradores ou gere links de convite"
+        />
 
         <Tabs defaultValue="individual">
           <TabsList>

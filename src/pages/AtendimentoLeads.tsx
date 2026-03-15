@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -528,12 +529,10 @@ export default function AtendimentoLeads() {
   return (
     <DashboardLayout>
       <div className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold">Atendimento de Leads</h1>
-          <p className="text-sm text-muted-foreground">
-            Responda leads diretamente pelo painel — as mensagens saem pelo chip que iniciou o contato
-          </p>
-        </div>
+        <PageHeader
+          title="Atendimento de Leads"
+          subtitle="Responda leads diretamente pelo painel — as mensagens saem pelo chip que iniciou o contato"
+        />
 
         {/* Search + Atualizar */}
         <div className="flex gap-2 max-w-lg">

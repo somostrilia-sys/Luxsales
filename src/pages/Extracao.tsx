@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -106,17 +107,11 @@ export default function Extracao() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <FileSearch className="h-6 w-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Extração de Leads</h1>
-            <p className="text-muted-foreground text-sm">
-              Busque novos leads externos por localização e fonte
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          title="Extração de Leads"
+          subtitle="Busque novos leads externos por localização e fonte"
+          badge={<div className="p-2 rounded-lg bg-primary/10"><FileSearch className="h-6 w-6 text-primary" /></div>}
+        />
 
         {/* Extraction Form */}
         <Card className="border-border">

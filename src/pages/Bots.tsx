@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -1003,10 +1004,10 @@ export default function Bots() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">{roleLevel >= 2 ? "Meu WhatsApp & Chips" : "Gerenciamento de Bots"}</h1>
-          <p className="text-sm text-muted-foreground">Conecte seu WhatsApp e gerencie chips de disparo</p>
-        </div>
+        <PageHeader
+          title={roleLevel >= 2 ? "Meu WhatsApp & Chips" : "Gerenciamento de Bots"}
+          subtitle="Conecte seu WhatsApp e gerencie chips de disparo"
+        />
 
         {roleLevel <= 1 && (
         <Tabs defaultValue="bots" className="w-full">

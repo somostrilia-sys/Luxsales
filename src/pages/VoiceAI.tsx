@@ -1,4 +1,5 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -236,10 +237,10 @@ export default function VoiceAI() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Walk Voice AI</h1>
-          <p className="text-sm text-muted-foreground">Clonagem de voz e geração de áudios personalizados</p>
-        </div>
+        <PageHeader
+          title="Walk Voice AI"
+          subtitle="Clonagem de voz e geração de áudios personalizados"
+        />
 
         <Tabs defaultValue="vozes">
           <TabsList className="bg-secondary/50 border border-border/60">

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { Navigate } from "react-router-dom";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -422,14 +423,14 @@ export default function BaseDados() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">Base de Dados</h1>
-          {isLive && (
+        <PageHeader
+          title="Base de Dados"
+          badge={isLive ? (
             <Badge className="bg-green-500/20 text-green-600 dark:text-green-400 animate-pulse gap-1">
               <Radio className="h-3 w-3" /> Ao vivo
             </Badge>
-          )}
-        </div>
+          ) : undefined}
+        />
 
         {/* Destination company cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

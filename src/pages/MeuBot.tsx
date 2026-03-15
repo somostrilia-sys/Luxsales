@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -163,8 +164,7 @@ export default function MeuBot() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <h1 className="text-2xl font-bold">Meu Bot</h1>
+        <PageHeader title="Meu Bot">
           {profile && (
             <div className="flex items-center gap-3 text-sm bg-muted/50 rounded-lg px-4 py-2">
               <User className="h-4 w-4 text-primary" />
@@ -185,7 +185,7 @@ export default function MeuBot() {
               )}
             </div>
           )}
-        </div>
+        </PageHeader>
 
         <Card className="flex flex-col" style={{ minHeight: 500 }}>
           <CardHeader className="pb-2">

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -135,15 +136,15 @@ export default function Agentes() {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2"><Bot className="h-6 w-6 text-primary" />Agentes de IA</h1>
-            <p className="text-sm text-muted-foreground">Gerencie os agentes disponíveis para cada nível de acesso</p>
-          </div>
+        <PageHeader
+          title="Agentes de IA"
+          subtitle="Gerencie os agentes disponíveis para cada nível de acesso"
+          badge={<Bot className="h-6 w-6 text-primary" />}
+        >
           <Button onClick={() => setModalOpen(true)} className="gap-2 w-fit">
             <Plus className="h-4 w-4" /> Novo Agente
           </Button>
-        </div>
+        </PageHeader>
 
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3">

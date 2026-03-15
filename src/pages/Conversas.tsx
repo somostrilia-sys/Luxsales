@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
@@ -141,8 +142,10 @@ export default function Conversas() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Conversas</h1>
-        <p className="text-muted-foreground text-sm">Converse com seus agentes de IA</p>
+        <PageHeader
+          title="Conversas"
+          subtitle="Converse com seus agentes de IA"
+        />
         {loading ? (
           <div className="flex justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
         ) : agents.length === 0 ? (

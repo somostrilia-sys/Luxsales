@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -298,11 +299,10 @@ export default function Colaboradores() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Colaboradores</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Gerencie a equipe e links de convite</p>
-          </div>
+        <PageHeader
+          title="Colaboradores"
+          subtitle="Gerencie a equipe e links de convite"
+        >
           <div className="flex gap-2">
             {canManageInvites && (
               <>
@@ -317,7 +317,7 @@ export default function Colaboradores() {
             )}
             <Button onClick={openCreate} className="btn-modern"><Plus className="h-4 w-4 mr-1" /> Novo Colaborador</Button>
           </div>
-        </div>
+        </PageHeader>
 
         <div className="flex gap-3">
           <Select value={filterCompany} onValueChange={setFilterCompany}>

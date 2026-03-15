@@ -1,6 +1,7 @@
 // Motor de Leads v4.0 — Reescrito do zero
 import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,17 +52,11 @@ export default function MotorLeads() {
   return (
     <DashboardLayout>
       <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Rocket className="h-6 w-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Motor de Leads</h1>
-            <p className="text-muted-foreground text-sm">
-              {isAdmin ? "Upload, distribuição e acompanhamento de leads" : "Seus leads para prospecção"}
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          title="Motor de Leads"
+          subtitle={isAdmin ? "Upload, distribuição e acompanhamento de leads" : "Seus leads para prospecção"}
+          badge={<div className="p-2 rounded-lg bg-primary/10"><Rocket className="h-6 w-6 text-primary" /></div>}
+        />
         {isAdmin ? <AdminView /> : <ConsultorView />}
       </div>
     </DashboardLayout>
