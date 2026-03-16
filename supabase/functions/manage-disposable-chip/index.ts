@@ -201,7 +201,23 @@ Deno.serve(async (req) => {
       }).select().single();
 
       if (error) return json({ error: error.message }, 500);
-      return json({ ok: true, chip });
+
+      const resolvedProxyUrl = resolveProxyUrl(chip, chip.id);
+      if (resolvedProxyUrl) {
+        const { error: proxyError } = await supabase
+          .from("disposable_chipset_proxy")
+          .upsert({
+            chip_id: chip.id,
+            proxy_url: resolvedProxyUrl,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "chip_id" });
+
+        if (proxyError) {
+          console.error("Error saving chip proxy:", proxyError);
+        }
+      }
+
+      return json({ ok: true, chip, proxy_url: resolvedProxyUrl });
     }
 
     if (action === "connect") {
