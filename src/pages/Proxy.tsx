@@ -133,11 +133,29 @@ export default function Proxy() {
     if (chipIds.length > 0) {
       const { data: monitorRows, error: monitorError } = await supabase
         .from("disposable_chipset_proxy")
-        .select("chip_id, proxy_url, source, status, last_tested_at, last_success_at, last_error, last_http_status, last_response_ms, exit_ip, target_url, metadata")
+        .select("chip_id, proxy_url, created_at, updated_at")
         .in("chip_id", chipIds);
 
       if (monitorError) throw monitorError;
-      monitorMap = new Map(((monitorRows as ProxyMonitor[]) || []).map((monitor) => [monitor.chip_id, monitor]));
+      monitorMap = new Map(
+        ((monitorRows as Array<{ chip_id: string; proxy_url: string | null; updated_at?: string | null }> | null) || []).map((monitor) => [
+          monitor.chip_id,
+          {
+            chip_id: monitor.chip_id,
+            proxy_url: monitor.proxy_url,
+            source: "configured",
+            status: monitor.proxy_url ? "configured" : "missing",
+            last_tested_at: monitor.updated_at ?? null,
+            last_success_at: null,
+            last_error: null,
+            last_http_status: null,
+            last_response_ms: null,
+            exit_ip: null,
+            target_url: null,
+            metadata: null,
+          } satisfies ProxyMonitor,
+        ])
+      );
     }
 
     const mapped = ((chipRows as ChipRow[]) || []).map((chip) => ({
