@@ -260,6 +260,7 @@ export default function VoiceAI() {
   const [savingTraining, setSavingTraining] = useState(false);
   const [savingCampaign, setSavingCampaign] = useState(false);
   const [testingTrainingVoice, setTestingTrainingVoice] = useState(false);
+  const [testingQuickCall, setTestingQuickCall] = useState(false);
   const [previewingVoiceKey, setPreviewingVoiceKey] = useState<string | null>(null);
 
   const stats = useMemo(() => {
