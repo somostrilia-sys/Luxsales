@@ -6,6 +6,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+type SupabaseClientLike = ReturnType<typeof createClient>;
+
 type ProxyConfig = {
   host: string;
   port: number | null;
@@ -34,6 +36,17 @@ type ProxyMonitorRecord = {
   target_url?: string | null;
   metadata?: Record<string, unknown>;
   updated_at: string;
+};
+
+type ProxyMonitorResult = ProxyMonitorRecord & {
+  ok: boolean;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  qr_code: string | null;
+  instance_token: string | null;
+  connected: boolean;
+  phone: string | null;
 };
 
 function json(data: Record<string, unknown>, status = 200) {
