@@ -1245,6 +1245,22 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
     }
   };
 
+  const [resetting, setResetting] = useState(false);
+  const handleReset = async () => {
+    if (!job?.id) return;
+    setResetting(true);
+    try {
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+      await callBlast({ action: "reset_job", job_id: job.id });
+      toast.success("Disparo resetado — retomando envios");
+      fetchJob();
+    } catch (e: any) {
+      toast.error("Erro ao resetar: " + e.message);
+    } finally {
+      setResetting(false);
+    }
+  };
+
   if (loadingJob) {
     return (
       <Card>
@@ -1307,6 +1323,10 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
               className={`gap-1.5 ${job?.status === "paused" ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}>
               {pausing ? <Loader2 className="h-4 w-4 animate-spin" /> : job?.status === "paused" ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
               {job?.status === "paused" ? "Retomar" : "Pausar"}
+            </Button>
+            <Button onClick={handleReset} disabled={resetting} variant="outline" className="gap-1.5 border-orange-500/50 text-orange-400 hover:bg-orange-500/10">
+              {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Resetar
             </Button>
             <Button onClick={fetchJob} variant="ghost" size="icon">
               <RefreshCw className="h-4 w-4" />
