@@ -18,6 +18,7 @@ type ProxyConfig = {
 
 type ProxyMonitorStatus = "unknown" | "healthy" | "degraded" | "error";
 type ProxySource = "manual" | "chip" | "iproyal" | "none";
+type ProxyLogAction = "create" | "connect" | "test";
 
 type ProxyMonitorRecord = {
   chip_id: string;
