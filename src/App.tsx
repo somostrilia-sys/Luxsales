@@ -21,6 +21,7 @@ const Metricas = lazy(() => import("./pages/Metricas"));
 const Conversas = lazy(() => import("./pages/Conversas"));
 const MeuBot = lazy(() => import("./pages/MeuBot"));
 const Bots = lazy(() => import("./pages/Bots"));
+const Proxy = lazy(() => import("./pages/Proxy"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
 const IdentidadeVisual = lazy(() => import("./pages/IdentidadeVisual"));
 const CeoBolt = lazy(() => import("./pages/CeoBolt"));
@@ -66,6 +67,7 @@ const App = () => (
                   <Route path="/extracao" element={<ProtectedRoute><Extracao /></ProtectedRoute>} />
                   <Route path="/agentes" element={<ProtectedRoute minLevel={1}><Agentes /></ProtectedRoute>} />
                   <Route path="/bots" element={<ProtectedRoute><Bots /></ProtectedRoute>} />
+                  <Route path="/proxy" element={<ProtectedRoute><Proxy /></ProtectedRoute>} />
                   <Route path="/base-dados" element={<ProtectedRoute minLevel={2}><BaseDados /></ProtectedRoute>} />
                   <Route path="/conversas" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
                   <Route path="/meu-bot" element={<ProtectedRoute><MeuBot /></ProtectedRoute>} />

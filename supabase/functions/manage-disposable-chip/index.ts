@@ -18,6 +18,7 @@ type ProxyConfig = {
 
 type ProxyMonitorStatus = "unknown" | "healthy" | "degraded" | "error";
 type ProxySource = "manual" | "chip" | "iproyal" | "none";
+type ProxyLogAction = "create" | "connect" | "test";
 
 type ProxyMonitorRecord = {
   chip_id: string;
@@ -185,6 +186,19 @@ function extractExitIp(...values: unknown[]) {
   return null;
 }
 
+function extractGeo(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return { city: null, region: null, country: null };
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    city: typeof record.city === "string" ? record.city : null,
+    region: typeof record.region === "string" ? record.region : typeof record.region_code === "string" ? record.region_code : null,
+    country: typeof record.country === "string" ? record.country : typeof record.country_code === "string" ? record.country_code : null,
+  };
+}
+
 async function saveProxyMonitor(supabase: ReturnType<typeof createClient>, monitor: ProxyMonitorRecord) {
   const payload = {
     chip_id: monitor.chip_id,
@@ -209,6 +223,60 @@ async function saveProxyMonitor(supabase: ReturnType<typeof createClient>, monit
     proxy_last_tested_at: monitor.last_tested_at,
     updated_at: monitor.updated_at,
   }).eq("id", monitor.chip_id);
+}
+
+async function saveProxyLog(
+  supabase: ReturnType<typeof createClient>,
+  log: {
+    chip_id: string;
+    action: ProxyLogAction;
+    proxy_url: string | null;
+    success: boolean;
+    status?: string | null;
+    ip?: string | null;
+    city?: string | null;
+    region?: string | null;
+    country?: string | null;
+    error_message?: string | null;
+    response_time_ms?: number | null;
+  },
+) {
+  const { error } = await supabase.from("proxy_logs").insert({
+    chip_id: log.chip_id,
+    action: log.action,
+    proxy_url: log.proxy_url,
+    success: log.success,
+    status: log.status ?? null,
+    ip: log.ip ?? null,
+    city: log.city ?? null,
+    region: log.region ?? null,
+    country: log.country ?? null,
+    error_message: log.error_message ?? null,
+    response_time_ms: log.response_time_ms ?? null,
+  });
+
+  if (error) console.error("Error saving proxy log:", error);
+}
+
+async function fetchIpMetadataThroughProxy(proxyUrl: string) {
+  const client = Deno.createHttpClient({ proxy: { url: proxyUrl } });
+  try {
+    const startedAt = Date.now();
+    const response = await fetchWithTimeout("https://ipapi.co/json/", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      client,
+    } as RequestInit & { client: Deno.HttpClient }, 15000);
+    const body = await parseResponseBody(response);
+    return {
+      ok: response.ok,
+      status: response.status,
+      body,
+      responseMs: Date.now() - startedAt,
+    };
+  } finally {
+    client.close();
+  }
 }
 
 async function createUazapiInstance(
@@ -281,11 +349,13 @@ async function runProxyMonitor(
   options?: {
     includeQrProbe?: boolean;
     storedProxy?: { proxy_url?: string | null; source?: string | null } | null;
+    action?: ProxyLogAction;
   },
 ) {
   const chipId = String(chip.id);
   const serverUrl = String(chip.uazapi_server_url || "").trim();
   const now = new Date().toISOString();
+  const action = options?.action || "test";
   const target = resolveProxyTarget(chip, chipId, options?.storedProxy);
 
   if (!target.proxy_url) {
@@ -298,12 +368,91 @@ async function runProxyMonitor(
       last_error: "Nenhum proxy resolvido para este chip",
       target_url: `${serverUrl}/instance/proxy`,
       updated_at: now,
-      metadata: { stage: "resolve" },
+      metadata: { stage: "resolve", action },
     };
     await saveProxyMonitor(supabase, failedMonitor);
-    return { ok: false, ...failedMonitor };
+    await saveProxyLog(supabase, {
+      chip_id: chipId,
+      action,
+      proxy_url: null,
+      success: false,
+      status: "resolve_error",
+      error_message: failedMonitor.last_error,
+    });
+    return { ok: false, ...failedMonitor, city: null, region: null, country: null };
   }
 
+  let geoStatus = 0;
+  let geoBody: unknown = null;
+  let geoResponseMs: number | null = null;
+
+  try {
+    const geoResult = await fetchIpMetadataThroughProxy(target.proxy_url);
+    geoStatus = geoResult.status;
+    geoBody = geoResult.body;
+    geoResponseMs = geoResult.responseMs;
+
+    if (!geoResult.ok) {
+      const geoErrorMonitor: ProxyMonitorRecord = {
+        chip_id: chipId,
+        proxy_url: target.proxy_url,
+        source: target.source,
+        status: "error",
+        last_tested_at: now,
+        last_error: typeof geoBody === "string"
+          ? geoBody
+          : (geoBody as Record<string, unknown> | null)?.reason as string || "Falha ao validar IP externo via proxy",
+        last_http_status: geoStatus,
+        last_response_ms: geoResponseMs,
+        exit_ip: extractExitIp(geoBody),
+        target_url: "https://ipapi.co/json/",
+        updated_at: now,
+        metadata: { stage: "external_test", action, geo_response: geoBody },
+      };
+      await saveProxyMonitor(supabase, geoErrorMonitor);
+      const geo = extractGeo(geoBody);
+      await saveProxyLog(supabase, {
+        chip_id: chipId,
+        action,
+        proxy_url: target.proxy_url,
+        success: false,
+        status: "external_test_error",
+        ip: geoErrorMonitor.exit_ip ?? null,
+        city: geo.city,
+        region: geo.region,
+        country: geo.country,
+        error_message: geoErrorMonitor.last_error,
+        response_time_ms: geoResponseMs,
+      });
+      return { ok: false, ...geoErrorMonitor, ...geo };
+    }
+  } catch (error) {
+    const failedMonitor: ProxyMonitorRecord = {
+      chip_id: chipId,
+      proxy_url: target.proxy_url,
+      source: target.source,
+      status: "error",
+      last_tested_at: now,
+      last_error: (error as Error).message || "Falha ao executar teste HTTP real via proxy",
+      last_response_ms: geoResponseMs,
+      target_url: "https://ipapi.co/json/",
+      updated_at: now,
+      metadata: { stage: "external_test", action },
+    };
+    await saveProxyMonitor(supabase, failedMonitor);
+    await saveProxyLog(supabase, {
+      chip_id: chipId,
+      action,
+      proxy_url: target.proxy_url,
+      success: false,
+      status: "external_test_exception",
+      error_message: failedMonitor.last_error,
+      response_time_ms: geoResponseMs,
+    });
+    return { ok: false, ...failedMonitor, city: null, region: null, country: null };
+  }
+
+  const geo = extractGeo(geoBody);
   const { instanceToken } = await ensureInstanceToken(supabase, chip);
   const startedAt = Date.now();
   const proxyRes = await fetchWithTimeout(`${serverUrl}/instance/proxy`, {
@@ -325,13 +474,27 @@ async function runProxyMonitor(
         ? proxyBody
         : (proxyBody as Record<string, unknown> | null)?.message as string || "Falha ao aplicar proxy na UAZAPI",
       last_http_status: proxyRes.status,
-      last_response_ms: responseMs,
+      last_response_ms: geoResponseMs ?? responseMs,
+      exit_ip: extractExitIp(geoBody),
       target_url: `${serverUrl}/instance/proxy`,
       updated_at: now,
-      metadata: { stage: "apply", response: proxyBody },
+      metadata: { stage: "apply", action, response: proxyBody, geo_response: geoBody, city: geo.city, region: geo.region, country: geo.country },
     };
     await saveProxyMonitor(supabase, failedMonitor);
-    return { ok: false, ...failedMonitor };
+    await saveProxyLog(supabase, {
+      chip_id: chipId,
+      action,
+      proxy_url: target.proxy_url,
+      success: false,
+      status: "apply_error",
+      ip: failedMonitor.exit_ip ?? null,
+      city: geo.city,
+      region: geo.region,
+      country: geo.country,
+      error_message: failedMonitor.last_error,
+      response_time_ms: failedMonitor.last_response_ms,
+    });
+    return { ok: false, ...failedMonitor, ...geo };
   }
 
   const statusRes = await fetchWithTimeout(`${serverUrl}/instance/status`, {
@@ -362,7 +525,7 @@ async function runProxyMonitor(
   const phone = (statusBody as Record<string, unknown> | null)?.phone
     || (statusBody as Record<string, unknown> | null)?.number
     || null;
-  const exitIp = extractExitIp(proxyBody, statusBody, qrBody);
+  const exitIp = extractExitIp(geoBody, proxyBody, statusBody, qrBody);
   const healthy = proxyRes.ok && statusRes.ok && (connected || !options?.includeQrProbe || qrProbeOk);
   const monitorStatus: ProxyMonitorStatus = healthy ? "healthy" : (proxyRes.ok && statusRes.ok ? "degraded" : "error");
   const lastError = healthy
@@ -382,22 +545,40 @@ async function runProxyMonitor(
     last_success_at: healthy ? now : null,
     last_error: lastError,
     last_http_status: proxyRes.status,
-    last_response_ms: responseMs,
+    last_response_ms: geoResponseMs ?? responseMs,
     exit_ip: exitIp,
     target_url: `${serverUrl}/instance/proxy`,
     updated_at: now,
     metadata: {
       connected,
       phone,
+      city: geo.city,
+      region: geo.region,
+      country: geo.country,
       include_qr_probe: Boolean(options?.includeQrProbe),
       qr_probe_ok: qrProbeOk,
       proxy_response: proxyBody,
       status_response: statusBody,
       qr_probe_response: qrBody,
+      geo_response: geoBody,
+      action,
     },
   };
 
   await saveProxyMonitor(supabase, monitor);
+  await saveProxyLog(supabase, {
+    chip_id: chipId,
+    action,
+    proxy_url: target.proxy_url,
+    success: healthy,
+    status: monitor.status,
+    ip: exitIp,
+    city: geo.city,
+    region: geo.region,
+    country: geo.country,
+    error_message: lastError,
+    response_time_ms: monitor.last_response_ms,
+  });
 
   return {
     ok: healthy,
@@ -406,6 +587,9 @@ async function runProxyMonitor(
     qr_code: qrCode,
     connected,
     phone,
+    city: geo.city,
+    region: geo.region,
+    country: geo.country,
   };
 }
 
@@ -511,18 +695,23 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
 
       const resolvedTarget = resolveProxyTarget(chip, chip.id, parsedProxy ? { proxy_url: body.proxy_url, source: "manual" } : null);
-      await saveProxyMonitor(supabase, {
-        chip_id: chip.id,
-        proxy_url: resolvedTarget.proxy_url,
-        source: resolvedTarget.source,
-        status: "unknown",
-        last_tested_at: new Date().toISOString(),
-        target_url: `${serverUrl}/instance/proxy`,
-        updated_at: new Date().toISOString(),
-        metadata: { stage: "create" },
+      const initialMonitor = await runProxyMonitor(supabase, chip, {
+        storedProxy: parsedProxy ? { proxy_url: body.proxy_url, source: "manual" } : null,
+        includeQrProbe: false,
+        action: "create",
       });
 
-      return json({ ok: true, chip, proxy_url: resolvedTarget.proxy_url, proxy_source: resolvedTarget.source });
+      return json({
+        ok: true,
+        chip,
+        proxy_url: resolvedTarget.proxy_url,
+        proxy_source: resolvedTarget.source,
+        proxy_status: initialMonitor.status,
+        proxy_exit_ip: initialMonitor.exit_ip,
+        city: initialMonitor.city,
+        region: initialMonitor.region,
+        country: initialMonitor.country,
+      });
     }
 
     if (action === "connect") {
@@ -546,6 +735,7 @@ Deno.serve(async (req) => {
         const monitor = await runProxyMonitor(supabase, chip, {
           storedProxy,
           includeQrProbe: true,
+          action: "connect",
         });
 
         if (!monitor.qr_code) {
@@ -581,7 +771,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (action === "monitor_proxy") {
+    if (action === "monitor_proxy" || action === "test_proxy") {
       const { chip_id, include_qr_probe } = body;
       if (!chip_id) return json({ error: "chip_id required" }, 400);
 
@@ -601,10 +791,16 @@ Deno.serve(async (req) => {
       const monitor = await runProxyMonitor(supabase, chip, {
         storedProxy,
         includeQrProbe: include_qr_probe === true,
+        action: "test",
       });
 
       return json({
         ok: monitor.ok,
+        success: monitor.ok,
+        ip: monitor.exit_ip,
+        city: monitor.city,
+        region: monitor.region,
+        country: monitor.country,
         proxy_url: monitor.proxy_url,
         proxy_source: monitor.source,
         proxy_status: monitor.status,
