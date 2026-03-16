@@ -136,6 +136,7 @@ const initialTrainingState = (): TrainingFormState => ({
   objections: initialObjections(),
   rules: "Nunca diga 'seguro', sempre use 'proteção veicular'. Não feche venda, apenas agende com consultor humano.",
   callGoal: "Qualificar lead",
+  testPhone: "",
 });
 
 const initialCampaignForm: CampaignFormState = {
