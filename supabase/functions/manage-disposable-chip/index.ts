@@ -512,7 +512,7 @@ async function runProxyMonitor(
       error_message: failedMonitor.last_error,
       response_time_ms: failedMonitor.last_response_ms,
     });
-    return { ok: false, ...failedMonitor, ...geo };
+    return { ok: false, ...failedMonitor, ...geo, qr_code: null, instance_token: instanceToken, connected: false, phone: null };
   }
 
   const statusRes = await fetchWithTimeout(`${serverUrl}/instance/status`, {
