@@ -340,9 +340,6 @@ function DistributeTab() {
     if (distCompanyId) loadStats();
   }, [distCompanyId]);
 
-  useEffect(() => { if (distCompanyId) loadFilterOptions(); }, [distCompanyId]);
-  useEffect(() => { countAvailable(); }, [filterCity, filterDDD, distCompanyId]);
-
   const selectedCompanyName = allCompanies.find(c => c.id === distCompanyId)?.name || "";
 
   const loadFilterOptions = async () => {
@@ -377,11 +374,10 @@ function DistributeTab() {
       (dddData || []).forEach(item => { if (item.ddd) dddSet.add(item.ddd); });
       setDDDs(Array.from(dddSet).sort());
 
-      // Load commercial collaborators filtered by selected company
-      const selectedCompanyName = allCompanies.find(c => c.id === distCompanyId)?.name?.toLowerCase() || "";
+      const companyNameLower = allCompanies.find(c => c.id === distCompanyId)?.name?.toLowerCase() || "";
       const eligibleSlugs = ELIGIBLE_SLUGS_BY_COMPANY[
-        selectedCompanyName.includes("objetivo") ? "objetivo" :
-        selectedCompanyName.includes("trilia")   ? "trilia"   : ""
+        companyNameLower.includes("objetivo") ? "objetivo" :
+        companyNameLower.includes("trilia")   ? "trilia"   : ""
       ] || [];
 
       const { data: roles } = await supabase
@@ -421,6 +417,9 @@ function DistributeTab() {
       setAvailableCount(0);
     }
   }, [distCompanyId]);
+
+  useEffect(() => { if (distCompanyId) loadFilterOptions(); }, [distCompanyId]);
+  useEffect(() => { countAvailable(); }, [countAvailable, filterCity, filterDDD, distCompanyId]);
 
   const handleSyncBeforeDistribute = useCallback(async () => {
     if (!distCompanyId) return;
