@@ -1106,6 +1106,62 @@ export type Database = {
           },
         ]
       }
+      proxy_logs: {
+        Row: {
+          action: string
+          chip_id: string
+          city: string | null
+          country: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          ip: string | null
+          proxy_url: string | null
+          region: string | null
+          response_time_ms: number | null
+          status: string | null
+          success: boolean
+        }
+        Insert: {
+          action: string
+          chip_id: string
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          ip?: string | null
+          proxy_url?: string | null
+          region?: string | null
+          response_time_ms?: number | null
+          status?: string | null
+          success?: boolean
+        }
+        Update: {
+          action?: string
+          chip_id?: string
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          ip?: string | null
+          proxy_url?: string | null
+          region?: string | null
+          response_time_ms?: number | null
+          status?: string | null
+          success?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proxy_logs_chip_id_fkey"
+            columns: ["chip_id"]
+            isOneToOne: false
+            referencedRelation: "disposable_chips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       roles: {
         Row: {
           active: boolean | null
