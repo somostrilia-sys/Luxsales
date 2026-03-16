@@ -41,7 +41,7 @@ type ProxyMonitor = {
   last_response_ms: number | null;
   exit_ip: string | null;
   target_url: string | null;
-  metadata?: Record<string, any> | null;
+  metadata?: Record<string, string | number | boolean | null> | null;
 };
 
 type ChipRow = {
@@ -50,7 +50,6 @@ type ChipRow = {
   instance_name: string | null;
   status: string;
   collaborator_id: string;
-  disposable_chipset_proxy?: ProxyMonitor[] | ProxyMonitor | null;
 };
 
 type ChipOption = {
@@ -70,6 +69,13 @@ function formatLocation(log: Pick<ProxyLog, "city" | "region" | "country">) {
   return [log.city, log.region, log.country].filter(Boolean).join(", ") || "—";
 }
 
+function formatMonitorLocation(monitor: ProxyMonitor | null, fallback: ProxyLog | null) {
+  const city = typeof monitor?.metadata?.city === "string" ? monitor.metadata.city : null;
+  const region = typeof monitor?.metadata?.region === "string" ? monitor.metadata.region : null;
+  const country = typeof monitor?.metadata?.country === "string" ? monitor.metadata.country : null;
+  return [city, region, country].filter(Boolean).join(", ") || (fallback ? formatLocation(fallback) : "—");
+}
+
 export default function Proxy() {
   const { collaborator, roleLevel } = useCollaborator();
   const isAdmin = roleLevel <= 1;
@@ -83,7 +89,8 @@ export default function Proxy() {
 
   const callEdge = useCallback(async (body: Record<string, unknown>) => {
     const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const token = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
     const resp = await fetch(`${EDGE_BASE}/manage-disposable-chip`, {
       method: "POST",
       headers: {
@@ -93,7 +100,7 @@ export default function Proxy() {
       body: JSON.stringify(body),
     });
 
-    let payload: any = null;
+    let payload: Record<string, unknown> | null = null;
     try {
       payload = await resp.json();
     } catch {
@@ -108,55 +115,71 @@ export default function Proxy() {
   }, []);
 
   const fetchChips = useCallback(async () => {
-    const query = supabase
+    let chipQuery = supabase
       .from("disposable_chips")
-      .select("id, chip_index, instance_name, status, collaborator_id, disposable_chipset_proxy(*)")
-      .order("chip_index");
+      .select("id, chip_index, instance_name, status, collaborator_id")
+      .order("chip_index", { ascending: true });
 
-    const scopedQuery = isAdmin || !collaborator?.id
-      ? query
-      : query.eq("collaborator_id", collaborator.id);
+    if (!isAdmin && collaborator?.id) {
+      chipQuery = chipQuery.eq("collaborator_id", collaborator.id);
+    }
 
-    const { data, error } = await scopedQuery;
-    if (error) throw error;
+    const { data: chipRows, error: chipError } = await chipQuery;
+    if (chipError) throw chipError;
 
-    const mapped = ((data as ChipRow[]) || []).map((chip) => ({
+    const chipIds = ((chipRows as ChipRow[]) || []).map((chip) => chip.id);
+
+    let monitorMap = new Map<string, ProxyMonitor>();
+    if (chipIds.length > 0) {
+      const { data: monitorRows, error: monitorError } = await supabase
+        .from("disposable_chipset_proxy")
+        .select("chip_id, proxy_url, source, status, last_tested_at, last_success_at, last_error, last_http_status, last_response_ms, exit_ip, target_url, metadata")
+        .in("chip_id", chipIds);
+
+      if (monitorError) throw monitorError;
+      monitorMap = new Map(((monitorRows as ProxyMonitor[]) || []).map((monitor) => [monitor.chip_id, monitor]));
+    }
+
+    const mapped = ((chipRows as ChipRow[]) || []).map((chip) => ({
       id: chip.id,
       chip_index: chip.chip_index,
       instance_name: chip.instance_name,
       status: chip.status,
-      monitor: Array.isArray(chip.disposable_chipset_proxy)
-        ? chip.disposable_chipset_proxy[0] || null
-        : chip.disposable_chipset_proxy || null,
+      monitor: monitorMap.get(chip.id) || null,
     }));
 
     setChips(mapped);
-    setSelectedChipId((current) => current === "all" || mapped.some((chip) => chip.id === current)
-      ? current
-      : (mapped[0]?.id || "all"));
+    setSelectedChipId((current) => {
+      if (current === "all") return current;
+      return mapped.some((chip) => chip.id === current) ? current : "all";
+    });
   }, [collaborator?.id, isAdmin]);
 
   const fetchLogs = useCallback(async () => {
+    let allowedChipIds: string[] | null = null;
+
+    if (!isAdmin && collaborator?.id) {
+      const { data: ownedChips, error: ownedChipsError } = await supabase
+        .from("disposable_chips")
+        .select("id")
+        .eq("collaborator_id", collaborator.id);
+
+      if (ownedChipsError) throw ownedChipsError;
+      allowedChipIds = (ownedChips || []).map((chip: { id: string }) => chip.id);
+
+      if (allowedChipIds.length === 0) {
+        setLogs([]);
+        return;
+      }
+    }
+
     let query = supabase
       .from("proxy_logs")
       .select("id, chip_id, action, proxy_url, ip, city, region, country, success, status, error_message, response_time_ms, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
 
-    if (!isAdmin && collaborator?.id) {
-      const { data: ownedChips } = await supabase
-        .from("disposable_chips")
-        .select("id")
-        .eq("collaborator_id", collaborator.id);
-
-      const chipIds = (ownedChips || []).map((chip: any) => chip.id);
-      if (chipIds.length === 0) {
-        setLogs([]);
-        return;
-      }
-      query = query.in("chip_id", chipIds);
-    }
-
+    if (allowedChipIds) query = query.in("chip_id", allowedChipIds);
     if (selectedChipId !== "all") query = query.eq("chip_id", selectedChipId);
     if (selectedAction !== "all") query = query.eq("action", selectedAction);
     if (selectedStatus === "success") query = query.eq("success", true);
@@ -187,12 +210,15 @@ export default function Proxy() {
     [chips, selectedChipId],
   );
 
+  const latestLog = useMemo(
+    () => (selectedChipId === "all" ? logs[0] || null : logs.find((log) => log.chip_id === selectedChipId) || null),
+    [logs, selectedChipId],
+  );
+
   const todayCount = useMemo(
     () => logs.filter((log) => new Date(log.created_at).toDateString() === new Date().toDateString()).length,
     [logs],
   );
-
-  const latestLog = logs[0] || null;
 
   const handleTestNow = async () => {
     if (!selectedChip || selectedChipId === "all") {
@@ -205,7 +231,7 @@ export default function Proxy() {
     setTesting(false);
 
     if (result?.error) {
-      toast.error(result.error);
+      toast.error(String(result.error));
     } else {
       toast.success("Teste real do proxy concluído");
     }
@@ -214,18 +240,18 @@ export default function Proxy() {
   };
 
   const statusBadge = selectedChip?.monitor?.status === "healthy"
-    ? <Badge className="bg-primary/10 text-primary border-primary/20"><ShieldCheck className="h-3 w-3 mr-1" /> Proxy Online</Badge>
+    ? <Badge className="bg-primary/10 text-primary border-primary/20"><ShieldCheck className="h-3 w-3 mr-1" />Proxy online</Badge>
     : selectedChip?.monitor?.status === "error"
-      ? <Badge className="bg-destructive/10 text-destructive border-destructive/20"><TriangleAlert className="h-3 w-3 mr-1" /> Proxy Offline</Badge>
-      : <Badge variant="outline"><Activity className="h-3 w-3 mr-1" /> Sem teste recente</Badge>;
+      ? <Badge className="bg-destructive/10 text-destructive border-destructive/20"><TriangleAlert className="h-3 w-3 mr-1" />Proxy offline</Badge>
+      : <Badge variant="outline"><Activity className="h-3 w-3 mr-1" />Sem teste recente</Badge>;
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <PageHeader
           title="Proxy"
-          subtitle="Teste real, status atual e logs operacionais do proxy por chip"
-          badge={<div className="p-2 rounded-lg bg-primary/10"><Network className="h-6 w-6 text-primary" /></div>}
+          subtitle="Monitoramento real de proxies por chip com dados do Supabase e teste sob demanda"
+          badge={<div className="rounded-lg bg-primary/10 p-2"><Network className="h-6 w-6 text-primary" /></div>}
         />
 
         <div className="grid gap-4 lg:grid-cols-[1.4fr,1fr,1fr]">
@@ -243,14 +269,14 @@ export default function Proxy() {
                     <SelectItem value="all">Todos os chips</SelectItem>
                     {chips.map((chip) => (
                       <SelectItem key={chip.id} value={chip.id}>
-                        Chip #{chip.chip_index} {chip.instance_name ? `• ${chip.instance_name}` : ""}
+                        Chip #{chip.chip_index}{chip.instance_name ? ` • ${chip.instance_name}` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <Button onClick={handleTestNow} disabled={testing || !selectedChip || selectedChipId === "all"} className="gap-2">
                   {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Network className="h-4 w-4" />}
-                  Testar Proxy Agora
+                  Testar agora
                 </Button>
                 <Button variant="outline" onClick={refreshAll}>Atualizar</Button>
               </div>
@@ -258,16 +284,17 @@ export default function Proxy() {
               <div className="flex flex-wrap items-center gap-2">
                 {statusBadge}
                 {selectedChip?.monitor?.proxy_url && <Badge variant="outline">{maskProxyUrl(selectedChip.monitor.proxy_url)}</Badge>}
+                {selectedChip && <Badge variant="outline">Status do chip: {selectedChip.status}</Badge>}
               </div>
 
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">IP externo</p>
-                  <p className="text-sm font-medium break-all">{selectedChip?.monitor?.exit_ip || latestLog?.ip || "—"}</p>
+                  <p className="break-all text-sm font-medium">{selectedChip?.monitor?.exit_ip || latestLog?.ip || "—"}</p>
                 </div>
                 <div className="rounded-lg border border-border p-3">
-                  <p className="text-xs text-muted-foreground">Cidade / Estado / País</p>
-                  <p className="text-sm font-medium">{selectedChip?.monitor?.metadata?.city || formatLocation(latestLog || { city: null, region: null, country: null })}</p>
+                  <p className="text-xs text-muted-foreground">Localização</p>
+                  <p className="text-sm font-medium">{formatMonitorLocation(selectedChip?.monitor || null, latestLog)}</p>
                 </div>
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">Último teste</p>
@@ -284,14 +311,26 @@ export default function Proxy() {
                   {selectedChip.monitor.last_error}
                 </div>
               )}
+
+              {!loading && chips.length === 0 && (
+                <div className="rounded-lg border border-border px-4 py-6 text-sm text-muted-foreground">
+                  Nenhum chip de disparo encontrado no Supabase para o escopo deste usuário.
+                </div>
+              )}
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-base">Resumo rápido</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Resumo rápido</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="rounded-lg border border-border p-3">
-                <p className="text-xs text-muted-foreground">Conexões via proxy hoje</p>
+                <p className="text-xs text-muted-foreground">Chips encontrados</p>
+                <p className="text-2xl font-semibold">{chips.length}</p>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-xs text-muted-foreground">Testes hoje</p>
                 <p className="text-2xl font-semibold">{todayCount}</p>
               </div>
               <div className="rounded-lg border border-border p-3">
@@ -302,7 +341,9 @@ export default function Proxy() {
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-base">Filtros</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Filtros</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-3">
               <Select value={selectedAction} onValueChange={setSelectedAction}>
                 <SelectTrigger><SelectValue placeholder="Ação" /></SelectTrigger>
@@ -333,7 +374,7 @@ export default function Proxy() {
             {loading ? (
               <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
             ) : logs.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">Nenhum log encontrado para os filtros atuais.</div>
+              <div className="py-8 text-center text-sm text-muted-foreground">Nenhum log real encontrado para os filtros atuais.</div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
@@ -342,7 +383,7 @@ export default function Proxy() {
                       <TableHead>Chip</TableHead>
                       <TableHead>Ação</TableHead>
                       <TableHead>IP usado</TableHead>
-                      <TableHead>Cidade</TableHead>
+                      <TableHead>Localização</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Tempo</TableHead>
                       <TableHead>Data</TableHead>
