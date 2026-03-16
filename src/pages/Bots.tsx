@@ -96,6 +96,47 @@ function maskKey(key: string) {
 }
 
 // ── Proxy Editor (inline por chip) ──
+interface ProxyMonitor {
+  chip_id: string;
+  proxy_url: string | null;
+  source: "manual" | "chip" | "iproyal" | "none";
+  status: "unknown" | "healthy" | "degraded" | "error";
+  last_tested_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  last_http_status: number | null;
+  last_response_ms: number | null;
+  exit_ip: string | null;
+  target_url: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+interface DisposableChip {
+  id: string;
+  collaborator_id: string;
+  chip_index: number;
+  instance_name: string | null;
+  instance_token: string | null;
+  status: string;
+  qr_code: string | null;
+  phone: string | null;
+  uazapi_server_url: string;
+  uazapi_admin_token: string;
+  proxy_url?: string | null;
+  proxy_monitor?: ProxyMonitor | null;
+}
+
+function maskProxyUrl(url: string) {
+  return url.replace(/:([^@]+)@/, ":••••@");
+}
+
+function formatProxySource(source?: string | null) {
+  if (source === "iproyal") return "IPRoyal fallback";
+  if (source === "chip") return "Proxy do chip";
+  if (source === "manual") return "Proxy manual";
+  return "Sem proxy";
+}
+
 function ProxyEditor({
   chip,
   callEdge,
@@ -108,6 +149,10 @@ function ProxyEditor({
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(chip.proxy_url || "");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setValue(chip.proxy_url || "");
+  }, [chip.proxy_url]);
 
   const save = async () => {
     setSaving(true);
@@ -123,11 +168,11 @@ function ProxyEditor({
     return (
       <div className="flex items-center gap-2 text-xs">
         {chip.proxy_url ? (
-          <span className="text-green-400/80 font-mono truncate max-w-[220px]" title={chip.proxy_url}>
-            🔒 {chip.proxy_url.replace(/:([^@]+)@/, ":••••@")}
+          <span className="font-mono truncate max-w-[220px]" title={chip.proxy_url}>
+            🔒 {maskProxyUrl(chip.proxy_url)}
           </span>
         ) : (
-          <span className="text-muted-foreground/50">Sem proxy</span>
+          <span className="text-muted-foreground/70">Sem proxy manual salvo</span>
         )}
         <button
           onClick={() => { setValue(chip.proxy_url || ""); setEditing(true); }}
@@ -157,21 +202,63 @@ function ProxyEditor({
   );
 }
 
-// ── Disposable Chips Section ──
+function ProxyMonitorPanel({ chip }: { chip: DisposableChip }) {
+  const monitor = chip.proxy_monitor;
 
-interface DisposableChip {
-  id: string;
-  collaborator_id: string;
-  chip_index: number;
-  instance_name: string | null;
-  instance_token: string | null;
-  status: string;
-  qr_code: string | null;
-  phone: string | null;
-  uazapi_server_url: string;
-  uazapi_admin_token: string;
-  proxy_url?: string | null;
+  const statusTone = monitor?.status === "healthy"
+    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+    : monitor?.status === "degraded"
+      ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+      : monitor?.status === "error"
+        ? "border-destructive/30 bg-destructive/10 text-destructive"
+        : "border-border bg-muted/30 text-muted-foreground";
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge className={statusTone}>
+          {monitor?.status === "healthy" ? <ShieldCheck className="h-3 w-3 mr-1" /> : monitor?.status === "error" ? <TriangleAlert className="h-3 w-3 mr-1" /> : <Activity className="h-3 w-3 mr-1" />}
+          {monitor?.status === "healthy" ? "Monitorado e operacional" : monitor?.status === "degraded" ? "Monitorado com ressalvas" : monitor?.status === "error" ? "Falha real detectada" : "Sem teste recente"}
+        </Badge>
+        <Badge variant="outline">{formatProxySource(monitor?.source)}</Badge>
+        {monitor?.last_http_status && <Badge variant="outline">HTTP {monitor.last_http_status}</Badge>}
+      </div>
+
+      <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-md border border-border px-3 py-2">
+          <p className="text-muted-foreground flex items-center gap-1"><Timer className="h-3 w-3" /> Latência</p>
+          <p className="font-medium">{monitor?.last_response_ms ? `${monitor.last_response_ms} ms` : "—"}</p>
+        </div>
+        <div className="rounded-md border border-border px-3 py-2">
+          <p className="text-muted-foreground flex items-center gap-1"><Network className="h-3 w-3" /> IP de saída</p>
+          <p className="font-medium break-all">{monitor?.exit_ip || "—"}</p>
+        </div>
+        <div className="rounded-md border border-border px-3 py-2">
+          <p className="text-muted-foreground">Último teste</p>
+          <p className="font-medium">{monitor?.last_tested_at ? new Date(monitor.last_tested_at).toLocaleString("pt-BR") : "Nunca"}</p>
+        </div>
+        <div className="rounded-md border border-border px-3 py-2">
+          <p className="text-muted-foreground">Último sucesso</p>
+          <p className="font-medium">{monitor?.last_success_at ? new Date(monitor.last_success_at).toLocaleString("pt-BR") : "—"}</p>
+        </div>
+      </div>
+
+      {chip.proxy_url && (
+        <div className="text-xs font-mono break-all rounded-md border border-border px-3 py-2">
+          {maskProxyUrl(chip.proxy_url)}
+        </div>
+      )}
+
+      {monitor?.last_error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {monitor.last_error}
+        </div>
+      )}
+    </div>
+  );
 }
+
+// ── Disposable Chips Section ──
 
 const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
 
