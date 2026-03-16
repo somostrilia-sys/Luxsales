@@ -205,12 +205,11 @@ export default function Proxy() {
 
     const { data, error } = await query;
     if (error) throw error;
-    setLogs(
-      (((data as Omit<ProxyLog, "proxy_url">[] | null) || []).map((log) => ({
-        ...log,
-        proxy_url: null,
-      })) as ProxyLog[])
-    );
+    const safeLogs = ((data ?? []) as unknown as Array<Omit<ProxyLog, "proxy_url">>).map((log) => ({
+      ...log,
+      proxy_url: null,
+    }));
+    setLogs(safeLogs);
   }, [collaborator?.id, isAdmin, selectedAction, selectedChipId, selectedStatus]);
 
   const refreshAll = useCallback(async () => {
