@@ -735,6 +735,7 @@ Deno.serve(async (req) => {
         const monitor = await runProxyMonitor(supabase, chip, {
           storedProxy,
           includeQrProbe: true,
+          action: "connect",
         });
 
         if (!monitor.qr_code) {
