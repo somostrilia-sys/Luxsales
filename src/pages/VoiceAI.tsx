@@ -88,6 +88,7 @@ type TrainingFormState = {
   objections: ObjectionItem[];
   rules: string;
   callGoal: ObjetivoLigacao;
+  testPhone: string;
 };
 
 type CampaignFormState = {
