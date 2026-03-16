@@ -1247,19 +1247,6 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
   };
 
   const [resetting, setResetting] = useState(false);
-  const handleReset = async () => {
-    if (!job?.id) return;
-    setResetting(true);
-    try {
-      const data = await callBlast({ action: "reset_job", job_id: job.id });
-      toast.success("Disparo resetado");
-      fetchJob();
-    } catch (e: any) {
-      toast.error("Erro ao resetar: " + e.message);
-    } finally {
-      setResetting(false);
-    }
-  };
 
   if (loadingJob) {
     return (
