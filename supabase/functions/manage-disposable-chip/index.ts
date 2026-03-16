@@ -310,21 +310,26 @@ async function createUazapiInstance(
   });
 
   const createData = await parseResponseBody(createRes);
+  const createDataRecord = typeof createData === "object" && createData !== null
+    ? createData as Record<string, unknown>
+    : null;
+  const nestedInstance = typeof createDataRecord?.instance === "object" && createDataRecord.instance !== null
+    ? createDataRecord.instance as Record<string, unknown>
+    : null;
+
   if (!createRes.ok) {
     throw new Error(
       typeof createData === "string"
         ? createData
-        : (createData as Record<string, unknown> | null)?.message as string || `Falha ao criar instância (${createRes.status})`,
+        : createDataRecord?.message as string || `Falha ao criar instância (${createRes.status})`,
     );
   }
 
-  return (createData as Record<string, unknown> | null)?.token
-    || (createData as Record<string, unknown> | null)?.instance?.token
-    || "";
+  return String(createDataRecord?.token || nestedInstance?.token || "");
 }
 
 async function ensureInstanceToken(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   chip: Record<string, unknown>,
 ) {
   let instanceToken = String(chip.instance_token || "").trim();
