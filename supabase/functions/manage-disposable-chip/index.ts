@@ -301,6 +301,24 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (action === "set_proxy") {
+      const { chip_id, proxy_url } = body;
+      if (!chip_id) return json({ error: "chip_id required" }, 400);
+
+      const payload = {
+        chip_id,
+        proxy_url: typeof proxy_url === "string" && proxy_url.trim() ? proxy_url.trim() : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from("disposable_chipset_proxy")
+        .upsert(payload, { onConflict: "chip_id" });
+
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
     if (action === "delete") {
       const { chip_id } = body;
       if (!chip_id) return json({ error: "chip_id required" }, 400);
