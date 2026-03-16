@@ -193,7 +193,7 @@ export default function Proxy() {
 
     let query = supabase
       .from("proxy_logs")
-      .select("id, chip_id, action, proxy_url, ip, city, region, country, success, status, error_message, response_time_ms, created_at")
+      .select("id, chip_id, action, ip, city, region, country, success, status, error_message, response_time_ms, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -205,7 +205,12 @@ export default function Proxy() {
 
     const { data, error } = await query;
     if (error) throw error;
-    setLogs((data as ProxyLog[]) || []);
+    setLogs(
+      (((data as Omit<ProxyLog, "proxy_url">[] | null) || []).map((log) => ({
+        ...log,
+        proxy_url: null,
+      })) as ProxyLog[])
+    );
   }, [collaborator?.id, isAdmin, selectedAction, selectedChipId, selectedStatus]);
 
   const refreshAll = useCallback(async () => {
