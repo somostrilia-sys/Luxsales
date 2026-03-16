@@ -21,6 +21,7 @@ const Metricas = lazy(() => import("./pages/Metricas"));
 const Conversas = lazy(() => import("./pages/Conversas"));
 const MeuBot = lazy(() => import("./pages/MeuBot"));
 const Bots = lazy(() => import("./pages/Bots"));
+const Proxy = lazy(() => import("./pages/Proxy"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
 const IdentidadeVisual = lazy(() => import("./pages/IdentidadeVisual"));
 const CeoBolt = lazy(() => import("./pages/CeoBolt"));
