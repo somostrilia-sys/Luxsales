@@ -695,18 +695,23 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
 
       const resolvedTarget = resolveProxyTarget(chip, chip.id, parsedProxy ? { proxy_url: body.proxy_url, source: "manual" } : null);
-      await saveProxyMonitor(supabase, {
-        chip_id: chip.id,
-        proxy_url: resolvedTarget.proxy_url,
-        source: resolvedTarget.source,
-        status: "unknown",
-        last_tested_at: new Date().toISOString(),
-        target_url: `${serverUrl}/instance/proxy`,
-        updated_at: new Date().toISOString(),
-        metadata: { stage: "create" },
+      const initialMonitor = await runProxyMonitor(supabase, chip, {
+        storedProxy: parsedProxy ? { proxy_url: body.proxy_url, source: "manual" } : null,
+        includeQrProbe: false,
+        action: "create",
       });
 
-      return json({ ok: true, chip, proxy_url: resolvedTarget.proxy_url, proxy_source: resolvedTarget.source });
+      return json({
+        ok: true,
+        chip,
+        proxy_url: resolvedTarget.proxy_url,
+        proxy_source: resolvedTarget.source,
+        proxy_status: initialMonitor.status,
+        proxy_exit_ip: initialMonitor.exit_ip,
+        city: initialMonitor.city,
+        region: initialMonitor.region,
+        country: initialMonitor.country,
+      });
     }
 
     if (action === "connect") {
