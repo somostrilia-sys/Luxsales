@@ -467,7 +467,7 @@ async function runProxyMonitor(
       error_message: failedMonitor.last_error,
       response_time_ms: geoResponseMs,
     });
-    return { ok: false, ...failedMonitor, city: null, region: null, country: null };
+    return { ok: false, ...failedMonitor, city: null, region: null, country: null, qr_code: null, instance_token: null, connected: false, phone: null };
   }
 
   const geo = extractGeo(geoBody);
