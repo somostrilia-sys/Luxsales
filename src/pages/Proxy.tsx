@@ -15,7 +15,7 @@ const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
 
 type ProxyLog = {
   id: string;
-  chip_id: string;
+  chip_id: string | null;
   action: string;
   proxy_url: string | null;
   ip: string | null;
