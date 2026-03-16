@@ -311,6 +311,7 @@ export default function VoiceAI() {
             : initialObjections(),
           rules: latestTraining.rules || initialTrainingState().rules,
           callGoal: (latestTraining.call_goal as ObjetivoLigacao) || "Qualificar lead",
+          testPhone: "",
         });
       }
     } catch (error) {
