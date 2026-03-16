@@ -250,7 +250,6 @@ Deno.serve(async (req) => {
           status: "connecting",
           proxy_enabled: Boolean(chipProxy?.proxy_url),
         });
-        });
       } catch (e) {
         console.error("UAZAPI QR error:", e);
         return json({ error: "Falha ao obter QR code" }, 500);
