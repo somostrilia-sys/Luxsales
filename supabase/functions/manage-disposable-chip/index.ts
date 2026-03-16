@@ -6,11 +6,77 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+type ProxyConfig = {
+  host: string;
+  port: number | null;
+  username: string;
+  password: string;
+  protocol: string;
+  enabled: boolean;
+  last_tested_at: string | null;
+};
+
 function json(data: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+function normalizeProxyConfig(source: Record<string, unknown>): ProxyConfig {
+  const rawPort = source.proxy_port;
+  const parsedPort = typeof rawPort === "number"
+    ? rawPort
+    : typeof rawPort === "string" && rawPort.trim()
+      ? Number(rawPort)
+      : null;
+
+  return {
+    host: String(source.proxy_host || "").trim(),
+    port: Number.isFinite(parsedPort) ? parsedPort : null,
+    username: String(source.proxy_username || "").trim(),
+    password: String(source.proxy_password || "").trim(),
+    protocol: String(source.proxy_protocol || "http").trim().toLowerCase(),
+    enabled: source.proxy_enabled === true || source.proxy_enabled === "true",
+    last_tested_at: source.proxy_last_tested_at
+      ? String(source.proxy_last_tested_at)
+      : null,
+  };
+}
+
+function buildUazapiProxyPayload(proxy: ProxyConfig) {
+  if (!proxy.enabled || !proxy.host || !proxy.port) return undefined;
+
+  return {
+    enabled: true,
+    host: proxy.host,
+    port: proxy.port,
+    username: proxy.username || undefined,
+    password: proxy.password || undefined,
+    protocol: proxy.protocol || "http",
+    last_tested_at: proxy.last_tested_at || undefined,
+  };
+}
+
+async function createUazapiInstance(
+  serverUrl: string,
+  adminToken: string,
+  instanceName: string,
+  proxy: ProxyConfig,
+) {
+  const payload = {
+    name: instanceName,
+    ...(buildUazapiProxyPayload(proxy) ? { proxy: buildUazapiProxyPayload(proxy) } : {}),
+  };
+
+  const createRes = await fetch(`${serverUrl}/instance/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "AdminToken": adminToken },
+    body: JSON.stringify(payload),
+  });
+
+  const createData = await createRes.json();
+  return createData?.token || createData?.instance?.token || "";
 }
 
 Deno.serve(async (req) => {
@@ -24,12 +90,12 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    // ── CREATE ──
     if (action === "create") {
       const { collaborator_id } = body;
       if (!collaborator_id) return json({ error: "collaborator_id required" }, 400);
 
-      // Count existing chips
+      const proxy = normalizeProxyConfig(body);
+
       const { data: existing } = await supabase
         .from("disposable_chips")
         .select("id")
@@ -37,16 +103,12 @@ Deno.serve(async (req) => {
       if ((existing || []).length >= 5) return json({ error: "Limite de 5 chips atingido" }, 400);
 
       const chipIndex = (existing || []).length + 1;
-
-      // Determinar conta UaZapi: chips 1-3 = conta B, chips 4-5 = conta C
       const uazapiAccount = chipIndex <= 3 ? "account_b" : "account_c";
 
-      // Buscar URL e token da conta correta
       let serverUrl = body.uazapi_server_url || "";
       let finalAdminToken = body.uazapi_admin_token || "";
 
       if (!serverUrl || !finalAdminToken) {
-        // Buscar na tabela uazapi_accounts
         const { data: account } = await supabase
           .from("uazapi_accounts")
           .select("api_url, admin_token")
@@ -59,7 +121,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Fallback: env vars por conta
       if (!serverUrl) {
         serverUrl = uazapiAccount === "account_b"
           ? (Deno.env.get("UAZAPI_ACCOUNT_B_URL") || "https://walk2.uazapi.com")
@@ -71,7 +132,6 @@ Deno.serve(async (req) => {
           : (Deno.env.get("UAZAPI_ACCOUNT_C_TOKEN") || "");
       }
 
-      // Last resort: system_configs
       if (!finalAdminToken) {
         const { data: cfg } = await supabase
           .from("system_configs")
@@ -81,25 +141,17 @@ Deno.serve(async (req) => {
         finalAdminToken = cfg?.value || "";
       }
 
-      // Create instance on UAZAPI
       const instanceName = `chip_${collaborator_id.slice(0, 8)}_${chipIndex}`;
       let instanceToken = "";
 
       if (finalAdminToken) {
         try {
-          const createRes = await fetch(`${serverUrl}/instance/create`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "AdminToken": finalAdminToken },
-            body: JSON.stringify({ name: instanceName }),
-          });
-          const createData = await createRes.json();
-          instanceToken = createData?.token || createData?.instance?.token || "";
+          instanceToken = await createUazapiInstance(serverUrl, finalAdminToken, instanceName, proxy);
         } catch (e) {
           console.error("UAZAPI create instance error:", e);
         }
       }
 
-      // Insert chip record
       const { data: chip, error } = await supabase.from("disposable_chips").insert({
         collaborator_id,
         chip_index: chipIndex,
@@ -109,13 +161,19 @@ Deno.serve(async (req) => {
         instance_name: instanceName,
         instance_token: instanceToken,
         status: "disconnected",
+        proxy_host: proxy.host || null,
+        proxy_port: proxy.port,
+        proxy_username: proxy.username || null,
+        proxy_password: proxy.password || null,
+        proxy_protocol: proxy.protocol || "http",
+        proxy_enabled: proxy.enabled,
+        proxy_last_tested_at: proxy.last_tested_at,
       }).select().single();
 
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true, chip });
     }
 
-    // ── CONNECT (get QR) ──
     if (action === "connect") {
       const { chip_id } = body;
       if (!chip_id) return json({ error: "chip_id required" }, 400);
@@ -131,19 +189,13 @@ Deno.serve(async (req) => {
       const adminToken = chip.uazapi_admin_token;
       let instanceToken = chip.instance_token;
       let instanceName = chip.instance_name;
+      const proxy = normalizeProxyConfig(chip);
 
-      // If no instance yet, create one
       if (!instanceToken && adminToken) {
         try {
           instanceName = instanceName || `chip_${chip.collaborator_id.slice(0, 8)}_${chip.chip_index}`;
-          const createRes = await fetch(`${serverUrl}/instance/create`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "AdminToken": adminToken },
-            body: JSON.stringify({ name: instanceName }),
-          });
-          const createData = await createRes.json();
-          instanceToken = createData?.token || createData?.instance?.token || "";
-          
+          instanceToken = await createUazapiInstance(serverUrl, adminToken, instanceName, proxy);
+
           await supabase.from("disposable_chips").update({
             instance_name: instanceName,
             instance_token: instanceToken,
@@ -159,7 +211,6 @@ Deno.serve(async (req) => {
         return json({ error: "Token da instância não disponível. Configure o admin token." }, 400);
       }
 
-      // Request QR code
       try {
         const qrRes = await fetch(`${serverUrl}/instance/qrcode`, {
           method: "POST",
@@ -188,7 +239,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── STATUS ──
     if (action === "status") {
       const { chip_id } = body;
       if (!chip_id) return json({ error: "chip_id required" }, 400);
@@ -217,7 +267,6 @@ Deno.serve(async (req) => {
         const qrExpired = statusData?.qr_expired === true;
         const newStatus = connected ? "connected" : (qrCode ? "connecting" : "disconnected");
 
-        // Update DB
         const updateData: Record<string, unknown> = {
           status: newStatus,
           updated_at: new Date().toISOString(),
@@ -235,7 +284,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── DELETE ──
     if (action === "delete") {
       const { chip_id } = body;
       if (!chip_id) return json({ error: "chip_id required" }, 400);
@@ -247,16 +295,14 @@ Deno.serve(async (req) => {
         .single();
 
       if (fetchError || !chip) {
-        // If chip doesn't exist in DB, treat as already deleted
         if (fetchError?.code === "PGRST116") return json({ ok: true });
         return json({ error: "Chip não encontrado" }, 404);
       }
 
-      // Try to delete instance on UAZAPI (best-effort, never blocks DB deletion)
       if (chip.instance_token && chip.uazapi_admin_token && chip.uazapi_server_url) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
           await fetch(`${chip.uazapi_server_url}/instance/delete`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "AdminToken": chip.uazapi_admin_token },
@@ -265,12 +311,10 @@ Deno.serve(async (req) => {
           });
           clearTimeout(timeoutId);
         } catch (e) {
-          // UAZAPI errors should NEVER prevent DB cleanup
           console.error("UAZAPI delete error (non-blocking):", e);
         }
       }
 
-      // Nullify chip references in related tables before deleting
       try {
         await supabase.from("messages").update({ chip_id: null }).eq("chip_id", chip_id);
       } catch (e) {
@@ -282,23 +326,18 @@ Deno.serve(async (req) => {
         console.error("Error clearing prospection_messages chip_id:", e);
       }
 
-      // Delete the chip from DB
       const { error } = await supabase.from("disposable_chips").delete().eq("id", chip_id);
       if (error) {
         console.error("DB delete error:", error);
-        // If FK constraint blocks, try force-nullifying all references
         if (error.code === "23503") {
-          // Foreign key violation - try to find and clear all references
           console.error("FK violation, attempting cleanup...");
           try {
-            // Generic cleanup: set chip_id to null in any referencing tables
-            await supabase.rpc("exec_sql", { sql: `UPDATE messages SET chip_id = NULL WHERE chip_id = '${chip_id}'` });
-            await supabase.rpc("exec_sql", { sql: `UPDATE prospection_messages SET chip_id = NULL WHERE chip_id = '${chip_id}'` });
-            await supabase.rpc("exec_sql", { sql: `UPDATE conversations SET chip_id = NULL WHERE chip_id = '${chip_id}'` });
+            await supabase.from("messages").update({ chip_id: null }).eq("chip_id", chip_id);
+            await supabase.from("prospection_messages").update({ chip_id: null }).eq("chip_id", chip_id);
+            await supabase.from("conversations").update({ chip_id: null }).eq("chip_id", chip_id);
           } catch (cleanupErr) {
             console.error("Cleanup error:", cleanupErr);
           }
-          // Retry delete
           const { error: retryError } = await supabase.from("disposable_chips").delete().eq("id", chip_id);
           if (retryError) return json({ error: "Erro ao remover chip: " + retryError.message }, 500);
         } else {
