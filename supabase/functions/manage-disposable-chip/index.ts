@@ -58,6 +58,36 @@ function buildUazapiProxyPayload(proxy: ProxyConfig) {
   };
 }
 
+function buildProxyUrlFromParts(proxy: ProxyConfig) {
+  if (!proxy.host || !proxy.port) return null;
+
+  const protocol = proxy.protocol || "http";
+  const credentials = proxy.username
+    ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password || "")}@`
+    : "";
+
+  return `${protocol}://${credentials}${proxy.host}:${proxy.port}`;
+}
+
+function buildDefaultIprRoyalProxyUrl(chipId: string) {
+  const host = (Deno.env.get("IPROYAL_PROXY_HOST") || "").trim();
+  const port = (Deno.env.get("IPROYAL_PROXY_PORT") || "").trim();
+  const usernameTemplate = (Deno.env.get("IPROYAL_PROXY_USERNAME") || "").trim();
+  const password = (Deno.env.get("IPROYAL_PROXY_PASSWORD") || "").trim();
+
+  if (!host || !port || !usernameTemplate || !password) return null;
+
+  const sessionId = chipId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24) || crypto.randomUUID().replace(/-/g, "");
+  const username = usernameTemplate.replace(/\{\{\s*session_id\s*\}\}/gi, sessionId);
+
+  return `http://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}`;
+}
+
+function resolveProxyUrl(chipLike: Record<string, unknown>, chipId: string, storedProxyUrl?: string | null) {
+  const normalized = normalizeProxyConfig(chipLike);
+  return storedProxyUrl?.trim() || buildProxyUrlFromParts(normalized) || buildDefaultIprRoyalProxyUrl(chipId);
+}
+
 async function createUazapiInstance(
   serverUrl: string,
   adminToken: string,
@@ -171,7 +201,23 @@ Deno.serve(async (req) => {
       }).select().single();
 
       if (error) return json({ error: error.message }, 500);
-      return json({ ok: true, chip });
+
+      const resolvedProxyUrl = resolveProxyUrl(chip, chip.id);
+      if (resolvedProxyUrl) {
+        const { error: proxyError } = await supabase
+          .from("disposable_chipset_proxy")
+          .upsert({
+            chip_id: chip.id,
+            proxy_url: resolvedProxyUrl,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "chip_id" });
+
+        if (proxyError) {
+          console.error("Error saving chip proxy:", proxyError);
+        }
+      }
+
+      return json({ ok: true, chip, proxy_url: resolvedProxyUrl });
     }
 
     if (action === "connect") {
@@ -218,9 +264,24 @@ Deno.serve(async (req) => {
           .eq("chip_id", chip_id)
           .maybeSingle();
 
-        const proxyPayload = chipProxy?.proxy_url
-          ? { enabled: true, proxy: chipProxy.proxy_url }
+        const resolvedProxyUrl = resolveProxyUrl(chip, chip_id, chipProxy?.proxy_url);
+        const proxyPayload = resolvedProxyUrl
+          ? { enabled: true, proxy: resolvedProxyUrl }
           : { enabled: false };
+
+        if (resolvedProxyUrl && chipProxy?.proxy_url !== resolvedProxyUrl) {
+          const { error: proxyError } = await supabase
+            .from("disposable_chipset_proxy")
+            .upsert({
+              chip_id,
+              proxy_url: resolvedProxyUrl,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "chip_id" });
+
+          if (proxyError) {
+            console.error("Error syncing chip proxy:", proxyError);
+          }
+        }
 
         await fetch(`${serverUrl}/instance/proxy`, {
           method: "POST",
@@ -248,7 +309,8 @@ Deno.serve(async (req) => {
           qr_code: qrCode,
           instance_token: instanceToken,
           status: "connecting",
-          proxy_enabled: Boolean(chipProxy?.proxy_url),
+          proxy_enabled: Boolean(resolvedProxyUrl),
+          proxy_url: resolvedProxyUrl,
         });
       } catch (e) {
         console.error("UAZAPI QR error:", e);
