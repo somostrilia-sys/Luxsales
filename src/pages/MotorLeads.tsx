@@ -974,7 +974,8 @@ function HistoryTab() {
 // ═══════════════════════════════════════════
 const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
 
-function BlastSection() {
+// Bug #006 fix: accept selectedLeadIds from ConsultorView
+function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) {
   const { collaborator } = useCollaborator();
   const [messageTemplates, setMessageTemplates] = useState([
     "Olá {nome}! Vi que você atua nessa área e quero apresentar uma solução que pode proteger seus veículos com muito mais segurança e custo acessível. Posso te mostrar em 5 minutos?",
@@ -989,7 +990,9 @@ function BlastSection() {
   const [pausing, setPausing] = useState(false);
   const [job, setJob] = useState<any>(null);
   const [loadingJob, setLoadingJob] = useState(true);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Bug #002 fix: use timeout ref + consecutive error counter instead of fixed interval
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const consecutiveErrorsRef = useRef(0);
 
   const getToken = async () => {
     const { data } = await supabase.auth.getSession();
@@ -1025,28 +1028,65 @@ function BlastSection() {
 
   useEffect(() => {
     fetchJob();
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
   }, [fetchJob]);
 
-  const startAutoSend = (jobId: string) => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(async () => {
-      try {
-        const data = await callBlast({ action: "send_batch", job_id: jobId, batch_size: 10 });
-        setJob((prev: any) => prev ? { ...prev, ...data?.job } : prev);
-        if (data?.job?.status !== "running") {
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          intervalRef.current = null;
-          toast.info("Disparo finalizado!");
-          fetchJob();
+  // Bug #002 fix: recursive timeout using next_delay_ms from blast-engine response
+  // Stops only when remaining=0, daily_limit reached, or 3 consecutive errors
+  const startAutoSend = useCallback((jobId: string) => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    consecutiveErrorsRef.current = 0;
+
+    const scheduleSend = (delayMs: number) => {
+      timeoutRef.current = setTimeout(async () => {
+        try {
+          const data = await callBlast({ action: "send_batch", job_id: jobId, batch_size: 1 });
+          consecutiveErrorsRef.current = 0;
+
+          // Update counters from send_batch response (bug fix: send_batch returns ok/sent/remaining, NOT .job)
+          setJob((prev: any) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              sent_count: (prev.sent_count || 0) + (data?.sent || 0),
+              sent_today: (prev.sent_today || 0) + (data?.sent || 0),
+              pending_leads: data?.remaining ?? prev.pending_leads,
+            };
+          });
+
+          // Stop conditions
+          if (data?.remaining === 0) {
+            toast.info("Disparo finalizado! Todos os leads foram enviados.");
+            timeoutRef.current = null;
+            fetchJob();
+            return;
+          }
+          if (data?.ok === false && data?.reason === "daily_limit_reached") {
+            toast.warning(data?.message || "Limite diário atingido. Disparo continuará amanhã.");
+            timeoutRef.current = null;
+            return;
+          }
+
+          // Schedule next send using blast-engine recommended delay (30s/90s alternating)
+          const nextDelay = data?.next_delay_ms ?? 30000;
+          scheduleSend(nextDelay);
+
+        } catch (e: any) {
+          consecutiveErrorsRef.current++;
+          console.error("send_batch error:", e);
+          if (consecutiveErrorsRef.current >= 3) {
+            toast.error("Disparo pausado após 3 falhas consecutivas. Clique 'Enviar Lote' para retomar.");
+            timeoutRef.current = null;
+            return;
+          }
+          // Retry after 30s on transient error
+          scheduleSend(30000);
         }
-      } catch (e: any) {
-        console.error("send_batch error:", e);
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }, 5000);
-  };
+      }, delayMs);
+    };
+
+    scheduleSend(1000); // start after 1s to let UI settle
+  }, [collaborator?.id, fetchJob]);
 
   const handleCreate = async () => {
     if (!collaborator?.id) return;
@@ -1060,12 +1100,41 @@ function BlastSection() {
         message_template: activeTemplates[0],
         message_templates: activeTemplates,
         daily_limit: dailyLimit,
+        // Bug #004 fix: pass selected lead IDs so job only covers selected leads
+        lead_ids: selectedLeadIds.length > 0 ? selectedLeadIds : undefined,
       });
+
+      if (!data?.ok) {
+        toast.error("Erro ao criar job: " + (data?.error || "Erro desconhecido"));
+        return;
+      }
+
       toast.success("Job de disparo criado!");
       const jobId = data?.job_id || data?.job?.id;
+
       if (jobId) {
-        await fetchJob();
+        // Bug #001 + #005 fix: set job state DIRECTLY from response — no fetchJob spinner dance
+        const newJob = data?.job ?? {
+          id: jobId,
+          status: "running",
+          sent_count: 0,
+          total_leads: data?.total_leads || 0,
+          sent_today: 0,
+          pending_leads: data?.total_leads || 0,
+          daily_limit: dailyLimit,
+        };
+        setJob(newJob);
+        setLoadingJob(false);
+        // Start auto-send loop immediately
         startAutoSend(jobId);
+        // Background refresh after 3s (no spinner)
+        setTimeout(() => {
+          if (collaborator?.id) {
+            callBlast({ action: "my_job", collaborator_id: collaborator.id })
+              .then(d => { if (d?.job) setJob(d.job); })
+              .catch(() => {});
+          }
+        }, 3000);
       }
     } catch (e: any) {
       toast.error("Erro ao criar job: " + e.message);
@@ -1078,11 +1147,45 @@ function BlastSection() {
     if (!job?.id) return;
     setSending(true);
     try {
-      const data = await callBlast({ action: "send_batch", job_id: job.id, batch_size: 10 });
-      setJob((prev: any) => prev ? { ...prev, ...data?.job } : prev);
-      toast.success(`Lote enviado! ${data?.job?.sent_count ?? "?"} total enviados`);
+      const data = await callBlast({ action: "send_batch", job_id: job.id, batch_size: 1 });
+
+      // Bug #003 fix: handle ok=false reasons before treating as success
+      if (data?.ok === false) {
+        if (data?.reason === "outside_schedule") {
+          toast.warning(data.message || "Fora do horário de disparo (08:00–18:00)");
+        } else if (data?.reason === "offline_cycle") {
+          toast.warning(data.message || "Ciclo offline ativo (pausa anti-ban)");
+        } else if (data?.reason === "daily_limit_reached") {
+          toast.warning(data.message || "Limite diário atingido");
+        } else {
+          toast.error("Erro: " + (data?.error || data?.reason || "Erro ao enviar"));
+        }
+        return;
+      }
+
+      // Update job counters from response (bug fix: use data.sent, not data?.job?.sent_count)
+      setJob((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          sent_count: (prev.sent_count || 0) + (data?.sent || 0),
+          sent_today: (prev.sent_today || 0) + (data?.sent || 0),
+          pending_leads: data?.remaining ?? prev.pending_leads,
+        };
+      });
+
+      if (data?.sent > 0) {
+        toast.success(`Mensagem enviada! Total: ${(job.sent_count || 0) + (data?.sent || 0)} enviadas`);
+      } else {
+        toast.info("Nenhuma mensagem enviada agora (verifique horário e leads pendentes)");
+      }
+
+      // Restart auto-send loop if it was stopped
+      if (!timeoutRef.current && data?.remaining > 0) {
+        startAutoSend(job.id);
+      }
     } catch (e: any) {
-      toast.error("Erro: " + e.message);
+      toast.error("Erro ao enviar: " + e.message);
     } finally {
       setSending(false);
     }
@@ -1095,14 +1198,17 @@ function BlastSection() {
       if (job.status === "paused") {
         await callBlast({ action: "resume", job_id: job.id });
         toast.success("Disparo retomado");
+        setJob((prev: any) => prev ? { ...prev, status: "running" } : prev);
+        startAutoSend(job.id);
       } else {
         await callBlast({ action: "pause", job_id: job.id });
         toast.success("Disparo pausado");
-        if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+        if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+        setJob((prev: any) => prev ? { ...prev, status: "paused" } : prev);
       }
-      fetchJob();
     } catch (e: any) {
       toast.error("Erro: " + e.message);
+      fetchJob();
     } finally {
       setPausing(false);
     }
@@ -1182,6 +1288,18 @@ function BlastSection() {
         {job === null && !loadingJob && (
           <p className="text-sm text-muted-foreground">Nenhum job ativo. Configure e inicie um novo disparo.</p>
         )}
+        {/* Bug #004 fix: show selected leads count when leads are selected in table */}
+        {selectedLeadIds.length > 0 ? (
+          <div className="flex items-center gap-2 p-2.5 rounded-md bg-green-500/10 border border-green-500/30 text-sm text-green-700 dark:text-green-400">
+            <CheckCircle className="h-4 w-4 shrink-0" />
+            <span><strong>{selectedLeadIds.length.toLocaleString("pt-BR")}</strong> leads selecionados para este disparo</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 p-2.5 rounded-md bg-muted/50 text-xs text-muted-foreground">
+            <MessageCircle className="h-4 w-4 shrink-0" />
+            <span>Nenhum lead selecionado — o disparo usará todos os seus leads pendentes. Selecione leads na tabela abaixo para disparar apenas para eles.</span>
+          </div>
+        )}
         <div className="space-y-3">
           <div>
             <Label className="text-sm font-medium">Templates de mensagem</Label>
@@ -1217,7 +1335,9 @@ function BlastSection() {
         </div>
         <Button onClick={handleCreate} disabled={creating} className="gap-1.5 bg-green-600 hover:bg-green-700 text-white">
           {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-          Iniciar Disparo
+          {selectedLeadIds.length > 0
+            ? `Iniciar Disparo (${selectedLeadIds.length.toLocaleString("pt-BR")} leads)`
+            : "Iniciar Disparo"}
         </Button>
       </CardContent>
     </Card>
@@ -1359,8 +1479,8 @@ function ConsultorView() {
 
   return (
     <>
-      {/* Motor de Disparo */}
-      <BlastSection />
+      {/* Motor de Disparo — Bug #006 fix: pass selected IDs so BlastSection can use them */}
+      <BlastSection selectedLeadIds={Array.from(selected)} />
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 gap-3">
