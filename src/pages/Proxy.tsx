@@ -15,7 +15,7 @@ const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
 
 type ProxyLog = {
   id: string;
-  chip_id: string;
+  chip_id: string | null;
   action: string;
   proxy_url: string | null;
   ip: string | null;
@@ -133,11 +133,29 @@ export default function Proxy() {
     if (chipIds.length > 0) {
       const { data: monitorRows, error: monitorError } = await supabase
         .from("disposable_chipset_proxy")
-        .select("chip_id, proxy_url, source, status, last_tested_at, last_success_at, last_error, last_http_status, last_response_ms, exit_ip, target_url, metadata")
+        .select("chip_id, proxy_url, created_at, updated_at")
         .in("chip_id", chipIds);
 
       if (monitorError) throw monitorError;
-      monitorMap = new Map(((monitorRows as ProxyMonitor[]) || []).map((monitor) => [monitor.chip_id, monitor]));
+      monitorMap = new Map(
+        ((monitorRows as Array<{ chip_id: string; proxy_url: string | null; updated_at?: string | null }> | null) || []).map((monitor) => [
+          monitor.chip_id,
+          {
+            chip_id: monitor.chip_id,
+            proxy_url: monitor.proxy_url,
+            source: "configured",
+            status: monitor.proxy_url ? "configured" : "missing",
+            last_tested_at: monitor.updated_at ?? null,
+            last_success_at: null,
+            last_error: null,
+            last_http_status: null,
+            last_response_ms: null,
+            exit_ip: null,
+            target_url: null,
+            metadata: null,
+          } satisfies ProxyMonitor,
+        ])
+      );
     }
 
     const mapped = ((chipRows as ChipRow[]) || []).map((chip) => ({
@@ -175,7 +193,7 @@ export default function Proxy() {
 
     let query = supabase
       .from("proxy_logs")
-      .select("id, chip_id, action, proxy_url, ip, city, region, country, success, status, error_message, response_time_ms, created_at")
+      .select("id, chip_id, action, proxy_url_used, external_ip, ip_city, ip_region, ip_country, success, error_message, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -187,7 +205,34 @@ export default function Proxy() {
 
     const { data, error } = await query;
     if (error) throw error;
-    setLogs((data as ProxyLog[]) || []);
+    const safeLogs: ProxyLog[] = ((data ?? []) as unknown as Array<{
+      id: string;
+      chip_id: string | null;
+      action: string;
+      proxy_url_used: string | null;
+      external_ip: string | null;
+      ip_city: string | null;
+      ip_region: string | null;
+      ip_country: string | null;
+      success: boolean | null;
+      error_message: string | null;
+      created_at: string | null;
+    }>).map((log) => ({
+      id: log.id,
+      chip_id: log.chip_id,
+      action: log.action,
+      proxy_url: log.proxy_url_used,
+      ip: log.external_ip,
+      city: log.ip_city,
+      region: log.ip_region,
+      country: log.ip_country,
+      success: Boolean(log.success),
+      status: log.success ? "success" : "error",
+      error_message: log.error_message,
+      response_time_ms: null,
+      created_at: log.created_at ?? new Date().toISOString(),
+    }));
+    setLogs(safeLogs);
   }, [collaborator?.id, isAdmin, selectedAction, selectedChipId, selectedStatus]);
 
   const refreshAll = useCallback(async () => {

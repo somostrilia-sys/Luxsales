@@ -75,8 +75,8 @@ export default function Index() {
         .eq("consultant_id", consultantId);
       leadsCount = count || 0;
     } else {
-      const { data: leadsStatsRes } = await supabase.rpc('get_contact_leads_stats');
-      leadsCount = leadsStatsRes?.total || 0;
+      const { data: leadsStatsRes } = await supabase.rpc("get_contact_leads_stats");
+      leadsCount = Number((leadsStatsRes as { total?: number } | null)?.total ?? 0);
     }
 
     let agentsQ = supabase.from("agent_definitions").select("id", { count: "exact", head: true }).eq("active", true);
