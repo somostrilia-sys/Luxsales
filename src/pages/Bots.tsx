@@ -95,6 +95,68 @@ function maskKey(key: string) {
   return key.slice(0, 7) + "..." + key.slice(-5);
 }
 
+// ── Proxy Editor (inline por chip) ──
+function ProxyEditor({
+  chip,
+  callEdge,
+  onUpdate,
+}: {
+  chip: DisposableChip;
+  callEdge: (body: Record<string, unknown>) => Promise<any>;
+  onUpdate: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(chip.proxy_url || "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const result = await callEdge({ action: "set_proxy", chip_id: chip.id, proxy_url: value.trim() || null });
+    setSaving(false);
+    if (result?.error) { toast.error("Erro ao salvar proxy: " + result.error); return; }
+    toast.success(value.trim() ? "Proxy configurado!" : "Proxy removido");
+    setEditing(false);
+    onUpdate();
+  };
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        {chip.proxy_url ? (
+          <span className="text-green-400/80 font-mono truncate max-w-[220px]" title={chip.proxy_url}>
+            🔒 {chip.proxy_url.replace(/:([^@]+)@/, ":••••@")}
+          </span>
+        ) : (
+          <span className="text-muted-foreground/50">Sem proxy</span>
+        )}
+        <button
+          onClick={() => { setValue(chip.proxy_url || ""); setEditing(true); }}
+          className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+        >
+          {chip.proxy_url ? "Editar" : "+ Proxy"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex gap-2 items-center">
+      <input
+        type="text"
+        className="flex-1 text-xs bg-background border border-border rounded px-2 py-1 font-mono placeholder:text-muted-foreground/40"
+        placeholder="http://user:senha@host:porta"
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        autoFocus
+      />
+      <Button size="sm" variant="outline" className="text-xs h-7 px-2" onClick={() => setEditing(false)}>✕</Button>
+      <Button size="sm" className="text-xs h-7 px-2" onClick={save} disabled={saving}>
+        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Salvar"}
+      </Button>
+    </div>
+  );
+}
+
 // ── Disposable Chips Section ──
 
 interface DisposableChip {
@@ -108,6 +170,7 @@ interface DisposableChip {
   phone: string | null;
   uazapi_server_url: string;
   uazapi_admin_token: string;
+  proxy_url?: string | null;
 }
 
 const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
@@ -121,8 +184,9 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   const [activeQrChipId, setActiveQrChipId] = useState<string | null>(null);
   const pollingRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
-  // Form para novo chip (servidor + token)
+  // Form para novo chip
   const [showAddForm, setShowAddForm] = useState(false);
+  const [newProxyUrl, setNewProxyUrl] = useState("");
 
   const fetchChips = useCallback(async () => {
     if (!collaboratorId) { setChips([]); setLoading(false); return; }
@@ -189,10 +253,12 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
     const result = await callEdge({
       action: "create",
       collaborator_id: collaboratorId,
+      ...(newProxyUrl.trim() ? { proxy_url: newProxyUrl.trim() } : {}),
     });
     setAdding(false);
     if (result?.error) { toast.error("Erro: " + result.error); return; }
-    toast.success(`Chip #${result.chip?.chip_index} criado no UAZAPI!`);
+    toast.success(`Chip #${result.chip?.chip_index} criado!`);
+    setNewProxyUrl("");
     setShowAddForm(false);
     fetchChips();
   };
@@ -302,8 +368,20 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         {showAddForm && (
           <div className="border border-amber-500/30 rounded-lg p-4 space-y-3 bg-amber-500/5">
             <p className="text-sm font-medium text-amber-400">Novo Chip Descartável</p>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">
+                Proxy URL <span className="text-muted-foreground/50">(opcional — recomendado para evitar ban)</span>
+              </label>
+              <input
+                type="text"
+                className="w-full text-xs bg-background border border-border rounded px-2 py-1.5 font-mono placeholder:text-muted-foreground/40"
+                placeholder="http://user:senha@host:porta  ou  socks5://user:senha@host:porta"
+                value={newProxyUrl}
+                onChange={e => setNewProxyUrl(e.target.value)}
+              />
+            </div>
             <div className="flex gap-2 justify-end">
-              <Button size="sm" variant="outline" onClick={() => setShowAddForm(false)}>Cancelar</Button>
+              <Button size="sm" variant="outline" onClick={() => { setShowAddForm(false); setNewProxyUrl(""); }}>Cancelar</Button>
               <Button size="sm" onClick={addChip} disabled={adding} className="gap-2">
                 {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 {adding ? "Criando..." : "Criar Chip"}
@@ -354,6 +432,9 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                     </Button>
                   </div>
                 </div>
+
+                {/* Proxy info / edição inline */}
+                <ProxyEditor chip={chip} callEdge={callEdge} onUpdate={fetchChips} />
 
                 {/* QR Code */}
                 {activeQrChipId === chip.id && chip.qr_code && chip.status !== "connected" && (
