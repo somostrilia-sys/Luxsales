@@ -193,7 +193,7 @@ export default function Proxy() {
 
     let query = supabase
       .from("proxy_logs")
-      .select("id, chip_id, action, ip, city, region, country, success, status, error_message, response_time_ms, created_at")
+      .select("id, chip_id, action, proxy_url_used, external_ip, ip_city, ip_region, ip_country, success, error_message, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -205,9 +205,32 @@ export default function Proxy() {
 
     const { data, error } = await query;
     if (error) throw error;
-    const safeLogs = ((data ?? []) as unknown as Array<Omit<ProxyLog, "proxy_url">>).map((log) => ({
-      ...log,
-      proxy_url: null,
+    const safeLogs: ProxyLog[] = ((data ?? []) as unknown as Array<{
+      id: string;
+      chip_id: string | null;
+      action: string;
+      proxy_url_used: string | null;
+      external_ip: string | null;
+      ip_city: string | null;
+      ip_region: string | null;
+      ip_country: string | null;
+      success: boolean | null;
+      error_message: string | null;
+      created_at: string | null;
+    }>).map((log) => ({
+      id: log.id,
+      chip_id: log.chip_id,
+      action: log.action,
+      proxy_url: log.proxy_url_used,
+      ip: log.external_ip,
+      city: log.ip_city,
+      region: log.ip_region,
+      country: log.ip_country,
+      success: Boolean(log.success),
+      status: log.success ? "success" : "error",
+      error_message: log.error_message,
+      response_time_ms: null,
+      created_at: log.created_at ?? new Date().toISOString(),
     }));
     setLogs(safeLogs);
   }, [collaborator?.id, isAdmin, selectedAction, selectedChipId, selectedStatus]);
