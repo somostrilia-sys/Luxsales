@@ -58,6 +58,36 @@ function buildUazapiProxyPayload(proxy: ProxyConfig) {
   };
 }
 
+function buildProxyUrlFromParts(proxy: ProxyConfig) {
+  if (!proxy.host || !proxy.port) return null;
+
+  const protocol = proxy.protocol || "http";
+  const credentials = proxy.username
+    ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password || "")}@`
+    : "";
+
+  return `${protocol}://${credentials}${proxy.host}:${proxy.port}`;
+}
+
+function buildDefaultIprRoyalProxyUrl(chipId: string) {
+  const host = (Deno.env.get("IPROYAL_PROXY_HOST") || "").trim();
+  const port = (Deno.env.get("IPROYAL_PROXY_PORT") || "").trim();
+  const usernameTemplate = (Deno.env.get("IPROYAL_PROXY_USERNAME") || "").trim();
+  const password = (Deno.env.get("IPROYAL_PROXY_PASSWORD") || "").trim();
+
+  if (!host || !port || !usernameTemplate || !password) return null;
+
+  const sessionId = chipId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24) || crypto.randomUUID().replace(/-/g, "");
+  const username = usernameTemplate.replace(/\{\{\s*session_id\s*\}\}/gi, sessionId);
+
+  return `http://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}`;
+}
+
+function resolveProxyUrl(chipLike: Record<string, unknown>, chipId: string, storedProxyUrl?: string | null) {
+  const normalized = normalizeProxyConfig(chipLike);
+  return storedProxyUrl?.trim() || buildProxyUrlFromParts(normalized) || buildDefaultIprRoyalProxyUrl(chipId);
+}
+
 async function createUazapiInstance(
   serverUrl: string,
   adminToken: string,
