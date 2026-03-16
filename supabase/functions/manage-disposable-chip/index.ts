@@ -397,7 +397,7 @@ async function runProxyMonitor(
       status: "resolve_error",
       error_message: failedMonitor.last_error,
     });
-    return { ok: false, ...failedMonitor, city: null, region: null, country: null };
+    return { ok: false, ...failedMonitor, city: null, region: null, country: null, qr_code: null, instance_token: null, connected: false, phone: null };
   }
 
   let geoStatus = 0;
