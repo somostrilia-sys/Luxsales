@@ -260,7 +260,7 @@ function ProxyMonitorPanel({ chip }: { chip: DisposableChip }) {
 
 // ── Disposable Chips Section ──
 
-const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
+const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
 function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | null }) {
   const [chips, setChips] = useState<DisposableChip[]>([]);

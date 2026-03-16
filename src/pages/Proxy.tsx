@@ -11,7 +11,7 @@ import { supabase } from "@/lib/supabase";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { toast } from "sonner";
 
-const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
+const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
 type ProxyLog = {
   id: string;
