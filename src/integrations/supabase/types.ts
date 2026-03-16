@@ -535,6 +535,13 @@ export type Database = {
           instance_token: string | null
           last_reset_at: string | null
           phone: string | null
+          proxy_enabled: boolean
+          proxy_host: string | null
+          proxy_last_tested_at: string | null
+          proxy_password: string | null
+          proxy_port: number | null
+          proxy_protocol: string | null
+          proxy_username: string | null
           qr_code: string | null
           status: string
           uazapi_account: string | null
@@ -553,6 +560,13 @@ export type Database = {
           instance_token?: string | null
           last_reset_at?: string | null
           phone?: string | null
+          proxy_enabled?: boolean
+          proxy_host?: string | null
+          proxy_last_tested_at?: string | null
+          proxy_password?: string | null
+          proxy_port?: number | null
+          proxy_protocol?: string | null
+          proxy_username?: string | null
           qr_code?: string | null
           status?: string
           uazapi_account?: string | null
@@ -571,6 +585,13 @@ export type Database = {
           instance_token?: string | null
           last_reset_at?: string | null
           phone?: string | null
+          proxy_enabled?: boolean
+          proxy_host?: string | null
+          proxy_last_tested_at?: string | null
+          proxy_password?: string | null
+          proxy_port?: number | null
+          proxy_protocol?: string | null
+          proxy_username?: string | null
           qr_code?: string | null
           status?: string
           uazapi_account?: string | null
