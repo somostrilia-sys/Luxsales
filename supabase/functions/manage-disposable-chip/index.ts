@@ -186,6 +186,19 @@ function extractExitIp(...values: unknown[]) {
   return null;
 }
 
+function extractGeo(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return { city: null, region: null, country: null };
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    city: typeof record.city === "string" ? record.city : null,
+    region: typeof record.region === "string" ? record.region : typeof record.region_code === "string" ? record.region_code : null,
+    country: typeof record.country === "string" ? record.country : typeof record.country_code === "string" ? record.country_code : null,
+  };
+}
+
 async function saveProxyMonitor(supabase: ReturnType<typeof createClient>, monitor: ProxyMonitorRecord) {
   const payload = {
     chip_id: monitor.chip_id,
@@ -210,6 +223,60 @@ async function saveProxyMonitor(supabase: ReturnType<typeof createClient>, monit
     proxy_last_tested_at: monitor.last_tested_at,
     updated_at: monitor.updated_at,
   }).eq("id", monitor.chip_id);
+}
+
+async function saveProxyLog(
+  supabase: ReturnType<typeof createClient>,
+  log: {
+    chip_id: string;
+    action: ProxyLogAction;
+    proxy_url: string | null;
+    success: boolean;
+    status?: string | null;
+    ip?: string | null;
+    city?: string | null;
+    region?: string | null;
+    country?: string | null;
+    error_message?: string | null;
+    response_time_ms?: number | null;
+  },
+) {
+  const { error } = await supabase.from("proxy_logs").insert({
+    chip_id: log.chip_id,
+    action: log.action,
+    proxy_url: log.proxy_url,
+    success: log.success,
+    status: log.status ?? null,
+    ip: log.ip ?? null,
+    city: log.city ?? null,
+    region: log.region ?? null,
+    country: log.country ?? null,
+    error_message: log.error_message ?? null,
+    response_time_ms: log.response_time_ms ?? null,
+  });
+
+  if (error) console.error("Error saving proxy log:", error);
+}
+
+async function fetchIpMetadataThroughProxy(proxyUrl: string) {
+  const client = Deno.createHttpClient({ proxy: { url: proxyUrl } });
+  try {
+    const startedAt = Date.now();
+    const response = await fetchWithTimeout("https://ipapi.co/json/", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      client,
+    } as RequestInit & { client: Deno.HttpClient }, 15000);
+    const body = await parseResponseBody(response);
+    return {
+      ok: response.ok,
+      status: response.status,
+      body,
+      responseMs: Date.now() - startedAt,
+    };
+  } finally {
+    client.close();
+  }
 }
 
 async function createUazapiInstance(
