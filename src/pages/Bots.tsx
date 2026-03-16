@@ -376,7 +376,6 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
     try {
       const result = await callEdge({ action: "connect", chip_id: chip.id });
       if (result?.error) {
-        // If error but within retries, wait 2s and try once more (instance may have just been created)
         if (retryCount < 2) {
           toast.info("Criando instância, aguarde...");
           await new Promise(r => setTimeout(r, 2500));
@@ -384,6 +383,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         }
         toast.error("Erro ao conectar: " + result.error);
         setConnecting(null);
+        fetchChips();
         return;
       }
       const qrCode = result?.qr_code;
@@ -392,10 +392,10 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         : c
       ));
       if (qrCode) {
-        toast.info("QR pronto — escaneie agora no WhatsApp");
+        toast.success(`Proxy ${result?.proxy_status === "healthy" ? "validado" : "aplicado"} antes do QR`);
         startStatusPolling(chip.id);
+        fetchChips();
       } else if (retryCount < 2) {
-        // No QR yet — instance just created, retry immediately
         await new Promise(r => setTimeout(r, 2000));
         return handleConnect(chip, retryCount + 1);
       } else {
@@ -409,7 +409,25 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
       }
       toast.error("Falha ao conectar chip. Tente novamente.");
       setConnecting(null);
+      fetchChips();
     }
+  };
+
+  const handleTestProxy = async (chip: DisposableChip) => {
+    setTestingProxy(chip.id);
+    const result = await callEdge({ action: "monitor_proxy", chip_id: chip.id, include_qr_probe: true });
+    setTestingProxy(null);
+
+    if (result?.error) {
+      toast.error(result.error);
+      fetchChips();
+      return;
+    }
+
+    toast.success(result?.proxy_status === "healthy"
+      ? "Proxy validado com sucesso"
+      : "Teste concluído com observações");
+    fetchChips();
   };
 
   const handleDelete = async (chip: DisposableChip) => {
