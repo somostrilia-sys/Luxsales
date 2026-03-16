@@ -21,7 +21,7 @@ import Papa from "papaparse";
 import {
   Rocket, Upload, Send, Loader2, RefreshCw, Users, MapPin, Phone,
   Shuffle, Package, Eye, CheckCircle, MessageCircle, Copy, ExternalLink,
-  Zap, TrendingUp, History, Clock, Play, Pause, Radio
+  Zap, TrendingUp, History, Clock, Play, Pause, Radio, Timer
 } from "lucide-react";
 
 // Slugs elegíveis para receber leads por empresa:
@@ -41,6 +41,28 @@ function resolveCompanyId(selectedCompanyId: string, fallback?: string | null, i
 }
 
 
+
+// ── Countdown component for next send ──────────────────────────
+function NextSendCountdown({ nextSendAt, status }: { nextSendAt?: string | null; status?: string }) {
+  const [seconds, setSeconds] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!nextSendAt || status !== "running") { setSeconds(null); return; }
+    const calc = () => {
+      const diff = Math.max(0, Math.floor((new Date(nextSendAt).getTime() - Date.now()) / 1000));
+      setSeconds(diff);
+    };
+    calc();
+    const iv = setInterval(calc, 1000);
+    return () => clearInterval(iv);
+  }, [nextSendAt, status]);
+
+  if (status !== "running") return <p className="text-xl font-bold text-yellow-400">⏸</p>;
+  if (seconds === null || seconds <= 0) return <p className="text-xl font-bold text-green-400 animate-pulse">Enviando...</p>;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return <p className="text-xl font-bold text-primary tabular-nums">{m > 0 ? `${m}m ${s.toString().padStart(2, "0")}s` : `${s}s`}</p>;
+}
 
 // ═══════════════════════════════════════════
 // MAIN
@@ -1027,7 +1049,9 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
 
   useEffect(() => {
     fetchJob();
-    return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
+    // Auto-refresh job status every 15s to update countdown + stats
+    const refreshIv = setInterval(() => { fetchJob(); }, 15000);
+    return () => { clearInterval(refreshIv); if (timeoutRef.current) clearTimeout(timeoutRef.current); };
   }, [fetchJob]);
 
   // Bug #002 fix: recursive timeout using next_delay_ms from blast-engine response
@@ -1245,7 +1269,7 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="text-center p-3 rounded-lg bg-muted/50">
               <p className="text-xs text-muted-foreground">Enviados</p>
               <p className="text-xl font-bold text-foreground">{job.sent_count ?? 0}</p>
@@ -1262,7 +1286,17 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
               <p className="text-xs text-muted-foreground">Pendentes</p>
               <p className="text-xl font-bold text-foreground">{job.pending_leads ?? 0}</p>
             </div>
+            <div className="text-center p-3 rounded-lg bg-muted/50">
+              <p className="text-xs text-muted-foreground">Próx. Envio</p>
+              <NextSendCountdown nextSendAt={job.next_send_at} status={job.status} />
+            </div>
           </div>
+          {job.status === "running" && (
+            <div className="flex items-center gap-2 p-2 rounded-md bg-green-500/10 border border-green-500/30 text-xs text-green-400">
+              <Timer className="h-3.5 w-3.5 shrink-0" />
+              <span>Anti-ban ativo: envios alternados 30s/90s • pausa 3-5min a cada 30 msgs • rotação de chips • horário 08:00-20:00</span>
+            </div>
+          )}
           <div className="flex gap-2">
             <Button onClick={handleManualBatch} disabled={sending} className="gap-1.5" variant="outline">
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
