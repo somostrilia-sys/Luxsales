@@ -1,3 +1,4 @@
+// rebuild v2
 // Motor de Leads v4.0 — Reescrito do zero
 import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
