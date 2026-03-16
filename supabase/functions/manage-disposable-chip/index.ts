@@ -771,7 +771,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (action === "monitor_proxy") {
+    if (action === "monitor_proxy" || action === "test_proxy") {
       const { chip_id, include_qr_probe } = body;
       if (!chip_id) return json({ error: "chip_id required" }, 400);
 
@@ -791,10 +791,16 @@ Deno.serve(async (req) => {
       const monitor = await runProxyMonitor(supabase, chip, {
         storedProxy,
         includeQrProbe: include_qr_probe === true,
+        action: "test",
       });
 
       return json({
         ok: monitor.ok,
+        success: monitor.ok,
+        ip: monitor.exit_ip,
+        city: monitor.city,
+        region: monitor.region,
+        country: monitor.country,
         proxy_url: monitor.proxy_url,
         proxy_source: monitor.source,
         proxy_status: monitor.status,
