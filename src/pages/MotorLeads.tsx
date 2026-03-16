@@ -1088,6 +1088,14 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
     scheduleSend(1000); // start after 1s to let UI settle
   }, [collaborator?.id, fetchJob]);
 
+  // Bug #008 fix: auto-start loop when page loads with existing running job
+  // (or when job transitions to running after resume)
+  useEffect(() => {
+    if (job?.status === "running" && job?.id && !timeoutRef.current) {
+      startAutoSend(job.id);
+    }
+  }, [job?.id, job?.status, startAutoSend]);
+
   const handleCreate = async () => {
     if (!collaborator?.id) return;
     const activeTemplates = messageTemplates.filter(t => t.trim().length > 0);
