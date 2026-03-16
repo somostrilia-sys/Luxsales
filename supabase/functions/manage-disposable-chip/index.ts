@@ -248,8 +248,9 @@ Deno.serve(async (req) => {
           .eq("chip_id", chip_id)
           .maybeSingle();
 
-        const proxyPayload = chipProxy?.proxy_url
-          ? { enabled: true, proxy: chipProxy.proxy_url }
+        const resolvedProxyUrl = resolveProxyUrl(chip, chip_id, chipProxy?.proxy_url);
+        const proxyPayload = resolvedProxyUrl
+          ? { enabled: true, proxy: resolvedProxyUrl }
           : { enabled: false };
 
         await fetch(`${serverUrl}/instance/proxy`, {
