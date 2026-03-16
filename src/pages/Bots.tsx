@@ -268,6 +268,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   const [adding, setAdding] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [testingProxy, setTestingProxy] = useState<string | null>(null);
   const [activeQrChipId, setActiveQrChipId] = useState<string | null>(null);
   const pollingRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
@@ -275,17 +276,29 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProxyUrl, setNewProxyUrl] = useState("");
 
+  const mapChipRow = useCallback((row: any): DisposableChip => {
+    const monitor = Array.isArray(row.disposable_chipset_proxy)
+      ? row.disposable_chipset_proxy[0] || null
+      : row.disposable_chipset_proxy || null;
+
+    return {
+      ...row,
+      proxy_url: monitor?.proxy_url || null,
+      proxy_monitor: monitor,
+    };
+  }, []);
+
   const fetchChips = useCallback(async () => {
     if (!collaboratorId) { setChips([]); setLoading(false); return; }
     setLoading(true);
     const { data } = await supabase
       .from("disposable_chips")
-      .select("*")
+      .select("*, disposable_chipset_proxy(*)")
       .eq("collaborator_id", collaboratorId)
       .order("chip_index");
-    setChips((data as DisposableChip[]) || []);
+    setChips(((data as any[]) || []).map(mapChipRow));
     setLoading(false);
-  }, [collaboratorId]);
+  }, [collaboratorId, mapChipRow]);
 
   useEffect(() => { fetchChips(); return () => { Object.values(pollingRefs.current).forEach(clearInterval); }; }, [fetchChips]);
 
@@ -297,16 +310,19 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
       body: JSON.stringify(body),
     });
-    if (!resp.ok) {
-      // Try to parse error response, fallback to status text
-      try {
-        const errorData = await resp.json();
-        return { error: errorData?.error || `HTTP ${resp.status}: ${resp.statusText}` };
-      } catch {
-        return { error: `HTTP ${resp.status}: ${resp.statusText}` };
-      }
+
+    let payload: any = null;
+    try {
+      payload = await resp.json();
+    } catch {
+      payload = null;
     }
-    return resp.json();
+
+    if (!resp.ok) {
+      return { ...(payload || {}), error: payload?.error || `HTTP ${resp.status}: ${resp.statusText}` };
+    }
+
+    return payload;
   };
 
   const startStatusPolling = useCallback((chipId: string) => {
@@ -320,19 +336,19 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         setConnecting(null);
         setActiveQrChipId(prev => prev === chipId ? null : prev);
         toast.success("✅ Chip conectado com sucesso!");
+        fetchChips();
       } else if (result?.status === "connecting" && result?.qr_code) {
-        // QR refreshed on UAZAPI side — update display so user always sees fresh QR
         setChips(prev => prev.map(c => c.id === chipId ? { ...c, qr_code: result.qr_code, status: "connecting" } : c));
       } else if (result?.status === "disconnected" || result?.qr_expired) {
-        // QR timed out — auto-request a new one via connect action
         const newQr = await callEdge({ action: "connect", chip_id: chipId });
         if (newQr?.qr_code) {
           setChips(prev => prev.map(c => c.id === chipId ? { ...c, qr_code: newQr.qr_code, status: "connecting" } : c));
           toast.info("QR atualizado — escaneie agora");
+          fetchChips();
         }
       }
-    }, 8000); // poll every 8s — UAZAPI QR lasts ~20s, enough time to refresh
-  }, [callEdge]);
+    }, 8000);
+  }, [callEdge, fetchChips]);
 
   const addChip = async () => {
     if (!collaboratorId) { toast.error("Colaborador não encontrado"); return; }
