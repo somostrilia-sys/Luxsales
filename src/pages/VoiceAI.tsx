@@ -519,6 +519,45 @@ export default function VoiceAI() {
                 <CardDescription>Defina identidade, abordagem, regras e objetivo das ligações automatizadas.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                <Card className="border-border/60 bg-secondary/20">
+                  <CardContent className="p-4">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+                      <div className="grid flex-1 gap-3 md:grid-cols-[1.2fr,1fr]">
+                        <div className="space-y-2">
+                          <Label>Número de teste</Label>
+                          <Input
+                            type="tel"
+                            inputMode="numeric"
+                            placeholder="5511999999999"
+                            value={trainingForm.testPhone}
+                            onChange={(e) => handleTestPhoneChange(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Voz para teste rápido</Label>
+                          <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                            <SelectTrigger><SelectValue placeholder="Selecione uma voz" /></SelectTrigger>
+                            <SelectContent>
+                              {voiceProfiles.map((voice) => (
+                                <SelectItem key={voice.id} value={voice.voice_key}>{voice.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={handleQuickCall}
+                        disabled={testingQuickCall || !selectedVoice}
+                        className="bg-success text-success-foreground hover:bg-success/90"
+                      >
+                        {testingQuickCall ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PhoneCall className="mr-2 h-4 w-4" />}
+                        Ligar
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Produto</Label>
@@ -622,20 +661,43 @@ export default function VoiceAI() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex flex-wrap gap-3">
-                      <Button onClick={saveTraining} disabled={savingTraining}>
-                        {savingTraining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                        Salvar Treinamento
-                      </Button>
-                      <Button variant="secondary" onClick={testTrainingVoice} disabled={testingTrainingVoice || !selectedVoice}>
-                        {testingTrainingVoice ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-                        Testar Voz
-                      </Button>
-                    </div>
-                    {trainingAudioUrl ? <audio controls className="w-full" src={trainingAudioUrl} /> : null}
                     <p className="text-xs text-muted-foreground">A voz de teste usa o script de abertura e a voz selecionada para a campanha.</p>
                   </div>
                 </div>
+
+                <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+                  <div className="space-y-2">
+                    <Label>Número de Teste</Label>
+                    <Input
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder="5511999999999"
+                      value={trainingForm.testPhone}
+                      onChange={(e) => handleTestPhoneChange(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleQuickCall}
+                    disabled={testingQuickCall || !selectedVoice}
+                    className="bg-success text-success-foreground hover:bg-success/90"
+                  >
+                    {testingQuickCall ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PhoneCall className="mr-2 h-4 w-4" />}
+                    Ligar Teste
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button onClick={saveTraining} disabled={savingTraining}>
+                    {savingTraining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Salvar Treinamento
+                  </Button>
+                  <Button variant="secondary" onClick={testTrainingVoice} disabled={testingTrainingVoice || !selectedVoice}>
+                    {testingTrainingVoice ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                    Testar Voz
+                  </Button>
+                </div>
+                {trainingAudioUrl ? <audio controls className="w-full" src={trainingAudioUrl} /> : null}
               </CardContent>
             </Card>
           </TabsContent>
