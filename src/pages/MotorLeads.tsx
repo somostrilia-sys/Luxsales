@@ -1251,9 +1251,8 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
     if (!job?.id) return;
     setResetting(true);
     try {
-      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
-      await callBlast({ action: "reset_job", job_id: job.id });
-      toast.success("Disparo resetado — retomando envios");
+      const data = await callBlast({ action: "reset_job", job_id: job.id });
+      toast.success("Disparo resetado");
       fetchJob();
     } catch (e: any) {
       toast.error("Erro ao resetar: " + e.message);
