@@ -1031,6 +1031,14 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
     return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
   }, [fetchJob]);
 
+  // Bug #008 fix: auto-start loop when page loads with existing running job
+  // (or when job transitions to running after resume)
+  useEffect(() => {
+    if (job?.status === "running" && job?.id && !timeoutRef.current) {
+      startAutoSend(job.id);
+    }
+  }, [job?.id, job?.status, startAutoSend]);
+
   // Bug #002 fix: recursive timeout using next_delay_ms from blast-engine response
   // Stops only when remaining=0, daily_limit reached, or 3 consecutive errors
   const startAutoSend = useCallback((jobId: string) => {
