@@ -410,7 +410,7 @@ async function runProxyMonitor(
     geoBody = geoResult.body;
     geoResponseMs = geoResult.responseMs;
 
-    if (!geoResult.ok) {
+      if (!geoResult.ok) {
       const geoErrorMonitor: ProxyMonitorRecord = {
         chip_id: chipId,
         proxy_url: target.proxy_url,
@@ -442,7 +442,7 @@ async function runProxyMonitor(
         error_message: geoErrorMonitor.last_error,
         response_time_ms: geoResponseMs,
       });
-      return { ok: false, ...geoErrorMonitor, ...geo };
+      return { ok: false, ...geoErrorMonitor, ...geo, qr_code: null, instance_token: null, connected: false, phone: null };
     }
   } catch (error) {
     const failedMonitor: ProxyMonitorRecord = {
