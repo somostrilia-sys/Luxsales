@@ -212,6 +212,22 @@ Deno.serve(async (req) => {
       }
 
       try {
+        const { data: chipProxy } = await supabase
+          .from("disposable_chipset_proxy")
+          .select("proxy_url")
+          .eq("chip_id", chip_id)
+          .maybeSingle();
+
+        const proxyPayload = chipProxy?.proxy_url
+          ? { enabled: true, proxy: chipProxy.proxy_url }
+          : { enabled: false };
+
+        await fetch(`${serverUrl}/instance/proxy`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "InstanceToken": instanceToken },
+          body: JSON.stringify(proxyPayload),
+        });
+
         const qrRes = await fetch(`${serverUrl}/instance/qrcode`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "InstanceToken": instanceToken },
@@ -232,6 +248,8 @@ Deno.serve(async (req) => {
           qr_code: qrCode,
           instance_token: instanceToken,
           status: "connecting",
+          proxy_enabled: Boolean(chipProxy?.proxy_url),
+        });
         });
       } catch (e) {
         console.error("UAZAPI QR error:", e);
