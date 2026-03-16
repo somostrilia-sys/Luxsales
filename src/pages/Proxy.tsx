@@ -7,11 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, Network, ShieldCheck, TriangleAlert, Activity } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { toast } from "sonner";
 
-const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
 
 type ProxyLog = {
   id: string;
