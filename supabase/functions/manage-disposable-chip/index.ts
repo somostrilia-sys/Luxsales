@@ -604,7 +604,7 @@ async function runProxyMonitor(
     instance_token: instanceToken,
     qr_code: qrCode,
     connected,
-    phone,
+    phone: typeof phone === "string" ? phone : null,
     city: geo.city,
     region: geo.region,
     country: geo.country,
