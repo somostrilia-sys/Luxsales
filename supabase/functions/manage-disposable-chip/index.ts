@@ -6,6 +6,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+type SupabaseClientLike = ReturnType<typeof createClient>;
+
 type ProxyConfig = {
   host: string;
   port: number | null;
@@ -34,6 +36,17 @@ type ProxyMonitorRecord = {
   target_url?: string | null;
   metadata?: Record<string, unknown>;
   updated_at: string;
+};
+
+type ProxyMonitorResult = ProxyMonitorRecord & {
+  ok: boolean;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  qr_code: string | null;
+  instance_token: string | null;
+  connected: boolean;
+  phone: string | null;
 };
 
 function json(data: Record<string, unknown>, status = 200) {
@@ -297,21 +310,26 @@ async function createUazapiInstance(
   });
 
   const createData = await parseResponseBody(createRes);
+  const createDataRecord = typeof createData === "object" && createData !== null
+    ? createData as Record<string, unknown>
+    : null;
+  const nestedInstance = typeof createDataRecord?.instance === "object" && createDataRecord.instance !== null
+    ? createDataRecord.instance as Record<string, unknown>
+    : null;
+
   if (!createRes.ok) {
     throw new Error(
       typeof createData === "string"
         ? createData
-        : (createData as Record<string, unknown> | null)?.message as string || `Falha ao criar instância (${createRes.status})`,
+        : createDataRecord?.message as string || `Falha ao criar instância (${createRes.status})`,
     );
   }
 
-  return (createData as Record<string, unknown> | null)?.token
-    || (createData as Record<string, unknown> | null)?.instance?.token
-    || "";
+  return String(createDataRecord?.token || nestedInstance?.token || "");
 }
 
 async function ensureInstanceToken(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   chip: Record<string, unknown>,
 ) {
   let instanceToken = String(chip.instance_token || "").trim();
@@ -344,14 +362,14 @@ async function ensureInstanceToken(
 }
 
 async function runProxyMonitor(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   chip: Record<string, unknown>,
   options?: {
     includeQrProbe?: boolean;
     storedProxy?: { proxy_url?: string | null; source?: string | null } | null;
     action?: ProxyLogAction;
   },
-) {
+): Promise<ProxyMonitorResult> {
   const chipId = String(chip.id);
   const serverUrl = String(chip.uazapi_server_url || "").trim();
   const now = new Date().toISOString();
@@ -379,7 +397,7 @@ async function runProxyMonitor(
       status: "resolve_error",
       error_message: failedMonitor.last_error,
     });
-    return { ok: false, ...failedMonitor, city: null, region: null, country: null };
+    return { ok: false, ...failedMonitor, city: null, region: null, country: null, qr_code: null, instance_token: null, connected: false, phone: null };
   }
 
   let geoStatus = 0;
@@ -392,7 +410,7 @@ async function runProxyMonitor(
     geoBody = geoResult.body;
     geoResponseMs = geoResult.responseMs;
 
-    if (!geoResult.ok) {
+      if (!geoResult.ok) {
       const geoErrorMonitor: ProxyMonitorRecord = {
         chip_id: chipId,
         proxy_url: target.proxy_url,
@@ -424,7 +442,7 @@ async function runProxyMonitor(
         error_message: geoErrorMonitor.last_error,
         response_time_ms: geoResponseMs,
       });
-      return { ok: false, ...geoErrorMonitor, ...geo };
+      return { ok: false, ...geoErrorMonitor, ...geo, qr_code: null, instance_token: null, connected: false, phone: null };
     }
   } catch (error) {
     const failedMonitor: ProxyMonitorRecord = {
@@ -449,7 +467,7 @@ async function runProxyMonitor(
       error_message: failedMonitor.last_error,
       response_time_ms: geoResponseMs,
     });
-    return { ok: false, ...failedMonitor, city: null, region: null, country: null };
+    return { ok: false, ...failedMonitor, city: null, region: null, country: null, qr_code: null, instance_token: null, connected: false, phone: null };
   }
 
   const geo = extractGeo(geoBody);
@@ -494,7 +512,7 @@ async function runProxyMonitor(
       error_message: failedMonitor.last_error,
       response_time_ms: failedMonitor.last_response_ms,
     });
-    return { ok: false, ...failedMonitor, ...geo };
+    return { ok: false, ...failedMonitor, ...geo, qr_code: null, instance_token: instanceToken, connected: false, phone: null };
   }
 
   const statusRes = await fetchWithTimeout(`${serverUrl}/instance/status`, {
@@ -586,7 +604,7 @@ async function runProxyMonitor(
     instance_token: instanceToken,
     qr_code: qrCode,
     connected,
-    phone,
+    phone: typeof phone === "string" ? phone : null,
     city: geo.city,
     region: geo.region,
     country: geo.country,

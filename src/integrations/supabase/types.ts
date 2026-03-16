@@ -276,6 +276,7 @@ export type Database = {
           message_template: string
           message_templates: string[] | null
           name: string
+          next_send_at: string | null
           refill_count: number | null
           refill_threshold: number | null
           reply_count: number | null
@@ -302,6 +303,7 @@ export type Database = {
           message_template?: string
           message_templates?: string[] | null
           name?: string
+          next_send_at?: string | null
           refill_count?: number | null
           refill_threshold?: number | null
           reply_count?: number | null
@@ -328,6 +330,7 @@ export type Database = {
           message_template?: string
           message_templates?: string[] | null
           name?: string
+          next_send_at?: string | null
           refill_count?: number | null
           refill_threshold?: number | null
           reply_count?: number | null
@@ -4182,18 +4185,38 @@ export type Database = {
         Args: { p_bolt_collaborator_id: string }
         Returns: Json
       }
-      count_available_leads: { Args: { p_company_id?: string }; Returns: Json }
-      distribute_leads: {
-        Args: {
-          p_assigned_by?: string
-          p_assigned_to: string
-          p_company_id?: string
-          p_filtro_cidade?: string
-          p_filtro_ddd?: string
-          p_quantidade?: number
-        }
-        Returns: Json
+      claim_next_lead: {
+        Args: { p_collaborator_id: string; p_lead_ids?: string[] }
+        Returns: {
+          id: string
+          lead_name: string
+          phone: string
+        }[]
       }
+      count_available_leads: { Args: { p_company_id?: string }; Returns: Json }
+      distribute_leads:
+        | {
+            Args: {
+              p_assigned_by?: string
+              p_assigned_to: string
+              p_company_id?: string
+              p_filtro_cidade?: string
+              p_filtro_ddd?: string
+              p_quantidade?: number
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_assigned_by?: string
+              p_assigned_to: string
+              p_company_id?: string
+              p_filtro_cidade?: string
+              p_filtro_ddd?: string
+              p_quantidade: number
+            }
+            Returns: Json
+          }
       get_contact_leads_stats: { Args: never; Returns: Json }
       get_lead_pool_summary: {
         Args: never
