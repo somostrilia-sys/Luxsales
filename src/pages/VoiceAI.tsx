@@ -153,6 +153,17 @@ const formatDate = (value?: string | null) => {
   return new Date(value).toLocaleString("pt-BR");
 };
 
+const formatBrazilPhone = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 13);
+
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 7) return `+${digits.slice(0, 2)} ${digits.slice(2)}`;
+  if (digits.length <= 12) return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+  return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+};
+
+const normalizePhoneDigits = (value: string) => value.replace(/\D/g, "").slice(0, 13);
+
 const normalizeVoice = (item: any): VoiceProfile => ({
   id: String(item.id ?? item.voice_key ?? crypto.randomUUID()),
   voice_key: String(item.voice_key ?? item.key ?? item.id ?? ""),
