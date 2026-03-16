@@ -41,8 +41,8 @@ const consultantItems: MenuItem[] = [
 ];
 
 const voiceItems: MenuItem[] = [
-  { title: "Voice AI", url: "/voice-ai", icon: Mic, levels: [0, 1] },
-  { title: "Ligações IA", url: "/call-campaigns", icon: PhoneCall, levels: [0, 1] },
+  { title: "Ligações IA", url: "/voice-ai", icon: PhoneCall, levels: [0, 1] },
+  { title: "Campanhas IA", url: "/call-campaigns", icon: Mic, levels: [0, 1] },
 ];
 
 export function AppSidebar() {
