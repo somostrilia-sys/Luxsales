@@ -269,6 +269,20 @@ Deno.serve(async (req) => {
           ? { enabled: true, proxy: resolvedProxyUrl }
           : { enabled: false };
 
+        if (resolvedProxyUrl && chipProxy?.proxy_url !== resolvedProxyUrl) {
+          const { error: proxyError } = await supabase
+            .from("disposable_chipset_proxy")
+            .upsert({
+              chip_id,
+              proxy_url: resolvedProxyUrl,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "chip_id" });
+
+          if (proxyError) {
+            console.error("Error syncing chip proxy:", proxyError);
+          }
+        }
+
         await fetch(`${serverUrl}/instance/proxy`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "InstanceToken": instanceToken },
@@ -298,3 +312,142 @@ Deno.serve(async (req) => {
           proxy_enabled: Boolean(resolvedProxyUrl),
           proxy_url: resolvedProxyUrl,
         });
+      } catch (e) {
+        console.error("UAZAPI QR error:", e);
+        return json({ error: "Falha ao obter QR code" }, 500);
+      }
+    }
+
+    if (action === "status") {
+      const { chip_id } = body;
+      if (!chip_id) return json({ error: "chip_id required" }, 400);
+
+      const { data: chip } = await supabase
+        .from("disposable_chips")
+        .select("*")
+        .eq("id", chip_id)
+        .single();
+      if (!chip) return json({ error: "Chip não encontrado" }, 404);
+
+      if (!chip.instance_token) {
+        return json({ status: "disconnected", phone: null });
+      }
+
+      try {
+        const statusRes = await fetch(`${chip.uazapi_server_url}/instance/status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "InstanceToken": chip.instance_token },
+        });
+        const statusData = await statusRes.json();
+
+        const connected = statusData?.status === "connected" || statusData?.connected === true;
+        const phone = statusData?.phone || statusData?.number || null;
+        const qrCode = statusData?.qrcode || statusData?.qr_code || null;
+        const qrExpired = statusData?.qr_expired === true;
+        const newStatus = connected ? "connected" : (qrCode ? "connecting" : "disconnected");
+
+        const updateData: Record<string, unknown> = {
+          status: newStatus,
+          updated_at: new Date().toISOString(),
+        };
+        if (phone) updateData.phone = phone;
+        if (connected) updateData.qr_code = null;
+        else if (qrCode) updateData.qr_code = qrCode;
+
+        await supabase.from("disposable_chips").update(updateData).eq("id", chip_id);
+
+        return json({ status: newStatus, phone, qr_code: qrCode, qr_expired: qrExpired });
+      } catch (e) {
+        console.error("UAZAPI status error:", e);
+        return json({ status: chip.status, phone: chip.phone });
+      }
+    }
+
+    if (action === "set_proxy") {
+      const { chip_id, proxy_url } = body;
+      if (!chip_id) return json({ error: "chip_id required" }, 400);
+
+      const payload = {
+        chip_id,
+        proxy_url: typeof proxy_url === "string" && proxy_url.trim() ? proxy_url.trim() : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from("disposable_chipset_proxy")
+        .upsert(payload, { onConflict: "chip_id" });
+
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
+    if (action === "delete") {
+      const { chip_id } = body;
+      if (!chip_id) return json({ error: "chip_id required" }, 400);
+
+      const { data: chip, error: fetchError } = await supabase
+        .from("disposable_chips")
+        .select("*")
+        .eq("id", chip_id)
+        .single();
+
+      if (fetchError || !chip) {
+        if (fetchError?.code === "PGRST116") return json({ ok: true });
+        return json({ error: "Chip não encontrado" }, 404);
+      }
+
+      if (chip.instance_token && chip.uazapi_admin_token && chip.uazapi_server_url) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          await fetch(`${chip.uazapi_server_url}/instance/delete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "AdminToken": chip.uazapi_admin_token },
+            body: JSON.stringify({ name: chip.instance_name }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+        } catch (e) {
+          console.error("UAZAPI delete error (non-blocking):", e);
+        }
+      }
+
+      try {
+        await supabase.from("messages").update({ chip_id: null }).eq("chip_id", chip_id);
+      } catch (e) {
+        console.error("Error clearing messages chip_id:", e);
+      }
+      try {
+        await supabase.from("prospection_messages").update({ chip_id: null }).eq("chip_id", chip_id);
+      } catch (e) {
+        console.error("Error clearing prospection_messages chip_id:", e);
+      }
+
+      const { error } = await supabase.from("disposable_chips").delete().eq("id", chip_id);
+      if (error) {
+        console.error("DB delete error:", error);
+        if (error.code === "23503") {
+          console.error("FK violation, attempting cleanup...");
+          try {
+            await supabase.from("messages").update({ chip_id: null }).eq("chip_id", chip_id);
+            await supabase.from("prospection_messages").update({ chip_id: null }).eq("chip_id", chip_id);
+            await supabase.from("conversations").update({ chip_id: null }).eq("chip_id", chip_id);
+          } catch (cleanupErr) {
+            console.error("Cleanup error:", cleanupErr);
+          }
+          const { error: retryError } = await supabase.from("disposable_chips").delete().eq("id", chip_id);
+          if (retryError) return json({ error: "Erro ao remover chip: " + retryError.message }, 500);
+        } else {
+          return json({ error: "Erro ao remover chip: " + error.message }, 500);
+        }
+      }
+
+      return json({ ok: true });
+    }
+
+    return json({ error: "Ação inválida" }, 400);
+  } catch (e) {
+    console.error("Edge function error:", e);
+    return json({ error: (e as Error).message || "Erro interno" }, 500);
+  }
+});
