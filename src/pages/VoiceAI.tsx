@@ -375,16 +375,46 @@ export default function VoiceAI() {
       return;
     }
 
+    const loadingToast = toast.loading("Gerando áudio de teste...");
     setTestingTrainingVoice(true);
     try {
       const audioUrl = await generateVoiceAudio(trainingForm.openingScript, selectedVoice);
       setTrainingAudioUrl(audioUrl);
-      toast.success("Áudio gerado com sucesso.");
+      toast.success("Áudio gerado! Em breve a ligação será iniciada.", { id: loadingToast });
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : "Erro ao testar a voz.");
+      toast.error(error instanceof Error ? error.message : "Erro ao testar a voz.", { id: loadingToast });
     } finally {
       setTestingTrainingVoice(false);
+    }
+  };
+
+  const handleTestPhoneChange = (value: string) => {
+    setTrainingForm((current) => ({ ...current, testPhone: formatBrazilPhone(value) }));
+  };
+
+  const handleQuickCall = async () => {
+    if (!selectedVoice) {
+      toast.error("Selecione uma voz antes de ligar.");
+      return;
+    }
+
+    if (normalizePhoneDigits(trainingForm.testPhone).length < 12) {
+      toast.error("Informe um número de teste válido.");
+      return;
+    }
+
+    const loadingToast = toast.loading("Gerando áudio de teste...");
+    setTestingQuickCall(true);
+    try {
+      const audioUrl = await generateVoiceAudio(trainingForm.openingScript, selectedVoice);
+      setTrainingAudioUrl(audioUrl);
+      toast.success("Áudio gerado! Em breve a ligação será iniciada.", { id: loadingToast });
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Erro ao iniciar teste.", { id: loadingToast });
+    } finally {
+      setTestingQuickCall(false);
     }
   };
 
