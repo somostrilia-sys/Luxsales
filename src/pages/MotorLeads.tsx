@@ -886,8 +886,6 @@ function HistoryTab() {
 
   const companyId = resolveCompanyId(selectedCompanyId, collaborator?.company_id);
 
-  useEffect(() => { loadHistory(); }, [companyId]);
-
   const loadHistory = async () => {
     if (!companyId) return;
     setLoading(true);
@@ -906,6 +904,8 @@ function HistoryTab() {
       setLoading(false);
     }
   };
+
+  useEffect(() => { loadHistory(); }, [companyId]);
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
