@@ -491,7 +491,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
             <p className="text-sm font-medium text-amber-400">Novo Chip Descartável</p>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">
-                Proxy URL <span className="text-muted-foreground/50">(opcional — recomendado para evitar ban)</span>
+                Proxy URL <span className="text-muted-foreground/50">(opcional — se vazio, usa o fallback IPRoyal automaticamente)</span>
               </label>
               <input
                 type="text"
@@ -501,6 +501,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                 onChange={e => setNewProxyUrl(e.target.value)}
               />
             </div>
+            <p className="text-xs text-muted-foreground">Depois de criar, use <strong>Testar proxy</strong> para validar de verdade a aplicação do proxy antes de abrir o QR.</p>
             <div className="flex gap-2 justify-end">
               <Button size="sm" variant="outline" onClick={() => { setShowAddForm(false); setNewProxyUrl(""); }}>Cancelar</Button>
               <Button size="sm" onClick={addChip} disabled={adding} className="gap-2">
