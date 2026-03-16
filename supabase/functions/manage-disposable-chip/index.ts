@@ -362,14 +362,14 @@ async function ensureInstanceToken(
 }
 
 async function runProxyMonitor(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   chip: Record<string, unknown>,
   options?: {
     includeQrProbe?: boolean;
     storedProxy?: { proxy_url?: string | null; source?: string | null } | null;
     action?: ProxyLogAction;
   },
-) {
+): Promise<ProxyMonitorResult> {
   const chipId = String(chip.id);
   const serverUrl = String(chip.uazapi_server_url || "").trim();
   const now = new Date().toISOString();
