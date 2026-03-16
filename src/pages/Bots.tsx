@@ -523,14 +523,23 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
           <div className="space-y-3">
             {chips.map((chip, displayIdx) => (
               <div key={chip.id} className="border border-border rounded-lg p-4 space-y-3">
-                {/* Header do chip */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-sm font-semibold">Chip #{displayIdx + 1}</span>
                     {statusBadge(chip.status)}
                     {chip.phone && <span className="text-xs text-muted-foreground">{chip.phone}</span>}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1 text-xs"
+                      onClick={() => handleTestProxy(chip)}
+                      disabled={testingProxy === chip.id || connecting === chip.id}
+                    >
+                      {testingProxy === chip.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
+                      {testingProxy === chip.id ? "Testando..." : "Testar proxy"}
+                    </Button>
                     {chip.status !== "connected" && (
                       <Badge
                         onClick={() => { if (!connecting) { handleConnect(chip); setActiveQrChipId(chip.id); } }}
@@ -554,10 +563,9 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                   </div>
                 </div>
 
-                {/* Proxy info / edição inline */}
                 <ProxyEditor chip={chip} callEdge={callEdge} onUpdate={fetchChips} />
+                <ProxyMonitorPanel chip={chip} />
 
-                {/* QR Code */}
                 {activeQrChipId === chip.id && chip.qr_code && chip.status !== "connected" && (
                   <div className="flex flex-col items-center gap-2 py-2">
                     <p className="text-xs text-amber-400">Escaneie com o WhatsApp</p>
