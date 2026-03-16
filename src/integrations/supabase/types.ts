@@ -605,22 +605,52 @@ export type Database = {
         Row: {
           chip_id: string
           created_at: string
+          exit_ip: string | null
           id: string
+          last_error: string | null
+          last_http_status: number | null
+          last_response_ms: number | null
+          last_success_at: string | null
+          last_tested_at: string | null
+          metadata: Json
           proxy_url: string | null
+          source: string
+          status: string
+          target_url: string | null
           updated_at: string
         }
         Insert: {
           chip_id: string
           created_at?: string
+          exit_ip?: string | null
           id?: string
+          last_error?: string | null
+          last_http_status?: number | null
+          last_response_ms?: number | null
+          last_success_at?: string | null
+          last_tested_at?: string | null
+          metadata?: Json
           proxy_url?: string | null
+          source?: string
+          status?: string
+          target_url?: string | null
           updated_at?: string
         }
         Update: {
           chip_id?: string
           created_at?: string
+          exit_ip?: string | null
           id?: string
+          last_error?: string | null
+          last_http_status?: number | null
+          last_response_ms?: number | null
+          last_success_at?: string | null
+          last_tested_at?: string | null
+          metadata?: Json
           proxy_url?: string | null
+          source?: string
+          status?: string
+          target_url?: string | null
           updated_at?: string
         }
         Relationships: [

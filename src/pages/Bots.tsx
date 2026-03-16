@@ -16,7 +16,7 @@ import { supabase } from "@/lib/supabase";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Plus, Search, Bot, Pencil, Power, QrCode, Eye, EyeOff, Loader2, Key, Trash2, Smartphone, RefreshCw, BookOpen, MessageCircle, Users, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Search, Bot, Pencil, Power, QrCode, Eye, EyeOff, Loader2, Key, Trash2, Smartphone, RefreshCw, BookOpen, MessageCircle, Users, ChevronDown, ChevronUp, Activity, ShieldCheck, TriangleAlert, Timer, Network } from "lucide-react";
 
 // ── Types ──
 
@@ -96,6 +96,47 @@ function maskKey(key: string) {
 }
 
 // ── Proxy Editor (inline por chip) ──
+interface ProxyMonitor {
+  chip_id: string;
+  proxy_url: string | null;
+  source: "manual" | "chip" | "iproyal" | "none";
+  status: "unknown" | "healthy" | "degraded" | "error";
+  last_tested_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  last_http_status: number | null;
+  last_response_ms: number | null;
+  exit_ip: string | null;
+  target_url: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+interface DisposableChip {
+  id: string;
+  collaborator_id: string;
+  chip_index: number;
+  instance_name: string | null;
+  instance_token: string | null;
+  status: string;
+  qr_code: string | null;
+  phone: string | null;
+  uazapi_server_url: string;
+  uazapi_admin_token: string;
+  proxy_url?: string | null;
+  proxy_monitor?: ProxyMonitor | null;
+}
+
+function maskProxyUrl(url: string) {
+  return url.replace(/:([^@]+)@/, ":••••@");
+}
+
+function formatProxySource(source?: string | null) {
+  if (source === "iproyal") return "IPRoyal fallback";
+  if (source === "chip") return "Proxy do chip";
+  if (source === "manual") return "Proxy manual";
+  return "Sem proxy";
+}
+
 function ProxyEditor({
   chip,
   callEdge,
@@ -108,6 +149,10 @@ function ProxyEditor({
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(chip.proxy_url || "");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setValue(chip.proxy_url || "");
+  }, [chip.proxy_url]);
 
   const save = async () => {
     setSaving(true);
@@ -123,11 +168,11 @@ function ProxyEditor({
     return (
       <div className="flex items-center gap-2 text-xs">
         {chip.proxy_url ? (
-          <span className="text-green-400/80 font-mono truncate max-w-[220px]" title={chip.proxy_url}>
-            🔒 {chip.proxy_url.replace(/:([^@]+)@/, ":••••@")}
+          <span className="font-mono truncate max-w-[220px]" title={chip.proxy_url}>
+            🔒 {maskProxyUrl(chip.proxy_url)}
           </span>
         ) : (
-          <span className="text-muted-foreground/50">Sem proxy</span>
+          <span className="text-muted-foreground/70">Sem proxy manual salvo</span>
         )}
         <button
           onClick={() => { setValue(chip.proxy_url || ""); setEditing(true); }}
@@ -157,21 +202,63 @@ function ProxyEditor({
   );
 }
 
-// ── Disposable Chips Section ──
+function ProxyMonitorPanel({ chip }: { chip: DisposableChip }) {
+  const monitor = chip.proxy_monitor;
 
-interface DisposableChip {
-  id: string;
-  collaborator_id: string;
-  chip_index: number;
-  instance_name: string | null;
-  instance_token: string | null;
-  status: string;
-  qr_code: string | null;
-  phone: string | null;
-  uazapi_server_url: string;
-  uazapi_admin_token: string;
-  proxy_url?: string | null;
+  const statusTone = monitor?.status === "healthy"
+    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+    : monitor?.status === "degraded"
+      ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+      : monitor?.status === "error"
+        ? "border-destructive/30 bg-destructive/10 text-destructive"
+        : "border-border bg-muted/30 text-muted-foreground";
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge className={statusTone}>
+          {monitor?.status === "healthy" ? <ShieldCheck className="h-3 w-3 mr-1" /> : monitor?.status === "error" ? <TriangleAlert className="h-3 w-3 mr-1" /> : <Activity className="h-3 w-3 mr-1" />}
+          {monitor?.status === "healthy" ? "Monitorado e operacional" : monitor?.status === "degraded" ? "Monitorado com ressalvas" : monitor?.status === "error" ? "Falha real detectada" : "Sem teste recente"}
+        </Badge>
+        <Badge variant="outline">{formatProxySource(monitor?.source)}</Badge>
+        {monitor?.last_http_status && <Badge variant="outline">HTTP {monitor.last_http_status}</Badge>}
+      </div>
+
+      <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-md border border-border px-3 py-2">
+          <p className="text-muted-foreground flex items-center gap-1"><Timer className="h-3 w-3" /> Latência</p>
+          <p className="font-medium">{monitor?.last_response_ms ? `${monitor.last_response_ms} ms` : "—"}</p>
+        </div>
+        <div className="rounded-md border border-border px-3 py-2">
+          <p className="text-muted-foreground flex items-center gap-1"><Network className="h-3 w-3" /> IP de saída</p>
+          <p className="font-medium break-all">{monitor?.exit_ip || "—"}</p>
+        </div>
+        <div className="rounded-md border border-border px-3 py-2">
+          <p className="text-muted-foreground">Último teste</p>
+          <p className="font-medium">{monitor?.last_tested_at ? new Date(monitor.last_tested_at).toLocaleString("pt-BR") : "Nunca"}</p>
+        </div>
+        <div className="rounded-md border border-border px-3 py-2">
+          <p className="text-muted-foreground">Último sucesso</p>
+          <p className="font-medium">{monitor?.last_success_at ? new Date(monitor.last_success_at).toLocaleString("pt-BR") : "—"}</p>
+        </div>
+      </div>
+
+      {chip.proxy_url && (
+        <div className="text-xs font-mono break-all rounded-md border border-border px-3 py-2">
+          {maskProxyUrl(chip.proxy_url)}
+        </div>
+      )}
+
+      {monitor?.last_error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {monitor.last_error}
+        </div>
+      )}
+    </div>
+  );
 }
+
+// ── Disposable Chips Section ──
 
 const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
 
@@ -181,6 +268,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   const [adding, setAdding] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [testingProxy, setTestingProxy] = useState<string | null>(null);
   const [activeQrChipId, setActiveQrChipId] = useState<string | null>(null);
   const pollingRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
@@ -188,17 +276,29 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProxyUrl, setNewProxyUrl] = useState("");
 
+  const mapChipRow = useCallback((row: any): DisposableChip => {
+    const monitor = Array.isArray(row.disposable_chipset_proxy)
+      ? row.disposable_chipset_proxy[0] || null
+      : row.disposable_chipset_proxy || null;
+
+    return {
+      ...row,
+      proxy_url: monitor?.proxy_url || null,
+      proxy_monitor: monitor,
+    };
+  }, []);
+
   const fetchChips = useCallback(async () => {
     if (!collaboratorId) { setChips([]); setLoading(false); return; }
     setLoading(true);
     const { data } = await supabase
       .from("disposable_chips")
-      .select("*")
+      .select("*, disposable_chipset_proxy(*)")
       .eq("collaborator_id", collaboratorId)
       .order("chip_index");
-    setChips((data as DisposableChip[]) || []);
+    setChips(((data as any[]) || []).map(mapChipRow));
     setLoading(false);
-  }, [collaboratorId]);
+  }, [collaboratorId, mapChipRow]);
 
   useEffect(() => { fetchChips(); return () => { Object.values(pollingRefs.current).forEach(clearInterval); }; }, [fetchChips]);
 
@@ -210,16 +310,19 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
       body: JSON.stringify(body),
     });
-    if (!resp.ok) {
-      // Try to parse error response, fallback to status text
-      try {
-        const errorData = await resp.json();
-        return { error: errorData?.error || `HTTP ${resp.status}: ${resp.statusText}` };
-      } catch {
-        return { error: `HTTP ${resp.status}: ${resp.statusText}` };
-      }
+
+    let payload: any = null;
+    try {
+      payload = await resp.json();
+    } catch {
+      payload = null;
     }
-    return resp.json();
+
+    if (!resp.ok) {
+      return { ...(payload || {}), error: payload?.error || `HTTP ${resp.status}: ${resp.statusText}` };
+    }
+
+    return payload;
   };
 
   const startStatusPolling = useCallback((chipId: string) => {
@@ -233,19 +336,19 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         setConnecting(null);
         setActiveQrChipId(prev => prev === chipId ? null : prev);
         toast.success("✅ Chip conectado com sucesso!");
+        fetchChips();
       } else if (result?.status === "connecting" && result?.qr_code) {
-        // QR refreshed on UAZAPI side — update display so user always sees fresh QR
         setChips(prev => prev.map(c => c.id === chipId ? { ...c, qr_code: result.qr_code, status: "connecting" } : c));
       } else if (result?.status === "disconnected" || result?.qr_expired) {
-        // QR timed out — auto-request a new one via connect action
         const newQr = await callEdge({ action: "connect", chip_id: chipId });
         if (newQr?.qr_code) {
           setChips(prev => prev.map(c => c.id === chipId ? { ...c, qr_code: newQr.qr_code, status: "connecting" } : c));
           toast.info("QR atualizado — escaneie agora");
+          fetchChips();
         }
       }
-    }, 8000); // poll every 8s — UAZAPI QR lasts ~20s, enough time to refresh
-  }, [callEdge]);
+    }, 8000);
+  }, [callEdge, fetchChips]);
 
   const addChip = async () => {
     if (!collaboratorId) { toast.error("Colaborador não encontrado"); return; }
@@ -273,7 +376,6 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
     try {
       const result = await callEdge({ action: "connect", chip_id: chip.id });
       if (result?.error) {
-        // If error but within retries, wait 2s and try once more (instance may have just been created)
         if (retryCount < 2) {
           toast.info("Criando instância, aguarde...");
           await new Promise(r => setTimeout(r, 2500));
@@ -281,6 +383,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         }
         toast.error("Erro ao conectar: " + result.error);
         setConnecting(null);
+        fetchChips();
         return;
       }
       const qrCode = result?.qr_code;
@@ -289,10 +392,10 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         : c
       ));
       if (qrCode) {
-        toast.info("QR pronto — escaneie agora no WhatsApp");
+        toast.success(`Proxy ${result?.proxy_status === "healthy" ? "validado" : "aplicado"} antes do QR`);
         startStatusPolling(chip.id);
+        fetchChips();
       } else if (retryCount < 2) {
-        // No QR yet — instance just created, retry immediately
         await new Promise(r => setTimeout(r, 2000));
         return handleConnect(chip, retryCount + 1);
       } else {
@@ -306,7 +409,25 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
       }
       toast.error("Falha ao conectar chip. Tente novamente.");
       setConnecting(null);
+      fetchChips();
     }
+  };
+
+  const handleTestProxy = async (chip: DisposableChip) => {
+    setTestingProxy(chip.id);
+    const result = await callEdge({ action: "monitor_proxy", chip_id: chip.id, include_qr_probe: true });
+    setTestingProxy(null);
+
+    if (result?.error) {
+      toast.error(result.error);
+      fetchChips();
+      return;
+    }
+
+    toast.success(result?.proxy_status === "healthy"
+      ? "Proxy validado com sucesso"
+      : "Teste concluído com observações");
+    fetchChips();
   };
 
   const handleDelete = async (chip: DisposableChip) => {
@@ -370,7 +491,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
             <p className="text-sm font-medium text-amber-400">Novo Chip Descartável</p>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">
-                Proxy URL <span className="text-muted-foreground/50">(opcional — recomendado para evitar ban)</span>
+                Proxy URL <span className="text-muted-foreground/50">(opcional — se vazio, usa o fallback IPRoyal automaticamente)</span>
               </label>
               <input
                 type="text"
@@ -380,6 +501,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                 onChange={e => setNewProxyUrl(e.target.value)}
               />
             </div>
+            <p className="text-xs text-muted-foreground">Depois de criar, use <strong>Testar proxy</strong> para validar de verdade a aplicação do proxy antes de abrir o QR.</p>
             <div className="flex gap-2 justify-end">
               <Button size="sm" variant="outline" onClick={() => { setShowAddForm(false); setNewProxyUrl(""); }}>Cancelar</Button>
               <Button size="sm" onClick={addChip} disabled={adding} className="gap-2">
@@ -402,14 +524,23 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
           <div className="space-y-3">
             {chips.map((chip, displayIdx) => (
               <div key={chip.id} className="border border-border rounded-lg p-4 space-y-3">
-                {/* Header do chip */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-sm font-semibold">Chip #{displayIdx + 1}</span>
                     {statusBadge(chip.status)}
                     {chip.phone && <span className="text-xs text-muted-foreground">{chip.phone}</span>}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1 text-xs"
+                      onClick={() => handleTestProxy(chip)}
+                      disabled={testingProxy === chip.id || connecting === chip.id}
+                    >
+                      {testingProxy === chip.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
+                      {testingProxy === chip.id ? "Testando..." : "Testar proxy"}
+                    </Button>
                     {chip.status !== "connected" && (
                       <Badge
                         onClick={() => { if (!connecting) { handleConnect(chip); setActiveQrChipId(chip.id); } }}
@@ -433,10 +564,9 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                   </div>
                 </div>
 
-                {/* Proxy info / edição inline */}
                 <ProxyEditor chip={chip} callEdge={callEdge} onUpdate={fetchChips} />
+                <ProxyMonitorPanel chip={chip} />
 
-                {/* QR Code */}
                 {activeQrChipId === chip.id && chip.qr_code && chip.status !== "connected" && (
                   <div className="flex flex-col items-center gap-2 py-2">
                     <p className="text-xs text-amber-400">Escaneie com o WhatsApp</p>
