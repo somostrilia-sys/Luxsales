@@ -601,6 +601,38 @@ export type Database = {
         }
         Relationships: []
       }
+      disposable_chipset_proxy: {
+        Row: {
+          chip_id: string
+          created_at: string
+          id: string
+          proxy_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          chip_id: string
+          created_at?: string
+          id?: string
+          proxy_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          chip_id?: string
+          created_at?: string
+          id?: string
+          proxy_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disposable_chipset_proxy_chip_id_fkey"
+            columns: ["chip_id"]
+            isOneToOne: true
+            referencedRelation: "disposable_chips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invite_links: {
         Row: {
           active: boolean | null
