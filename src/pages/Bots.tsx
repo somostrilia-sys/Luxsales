@@ -479,38 +479,12 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">Chips adicionais para prospecção e disparo em massa. Seu WhatsApp pessoal já tem bot ativo após conectar abaixo.</p>
         </div>
-        <Button size="sm" onClick={() => setShowAddForm(v => !v)} disabled={!collaboratorId || chips.length >= 5} className="gap-2">
+        <Button size="sm" onClick={async () => { if (!collaboratorId) { toast.error("Colaborador não encontrado"); return; } setAdding(true); const result = await callEdge({ action: "create", collaborator_id: collaboratorId }); setAdding(false); if (result?.error) { toast.error("Erro: " + result.error); return; } toast.success("Chip #" + (result.chip?.chip_index || "") + " criado!"); fetchChips(); }} disabled={!collaboratorId || chips.length >= 5} className="gap-2">
           <Plus className="h-4 w-4" />
           + Novo Chip
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Formulário de novo chip */}
-        {showAddForm && (
-          <div className="border border-amber-500/30 rounded-lg p-4 space-y-3 bg-amber-500/5">
-            <p className="text-sm font-medium text-amber-400">Novo Chip Descartável</p>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">
-                Proxy URL <span className="text-muted-foreground/50">(opcional — se vazio, usa o fallback IPRoyal automaticamente)</span>
-              </label>
-              <input
-                type="text"
-                className="w-full text-xs bg-background border border-border rounded px-2 py-1.5 font-mono placeholder:text-muted-foreground/40"
-                placeholder="http://user:senha@host:porta  ou  socks5://user:senha@host:porta"
-                value={newProxyUrl}
-                onChange={e => setNewProxyUrl(e.target.value)}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">Depois de criar, use <strong>Testar proxy</strong> para validar de verdade a aplicação do proxy antes de abrir o QR.</p>
-            <div className="flex gap-2 justify-end">
-              <Button size="sm" variant="outline" onClick={() => { setShowAddForm(false); setNewProxyUrl(""); }}>Cancelar</Button>
-              <Button size="sm" onClick={addChip} disabled={adding} className="gap-2">
-                {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                {adding ? "Criando..." : "Criar Chip"}
-              </Button>
-            </div>
-          </div>
-        )}
 
         {loading ? (
           <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
