@@ -1393,34 +1393,26 @@ export default function Bots() {
                   {waPhone && <span className="text-muted-foreground text-sm ml-2">{waPhone}</span>}
                 </div>
                 <Button size="sm" variant="outline" className="text-destructive hover:text-destructive gap-2" onClick={async () => {
+                  if (!window.confirm("Desconectar WhatsApp principal?")) return;
                   try {
-                    const { data: inst } = await supabase
+                    const { data: instances } = await supabase
                       .from("bot_instances")
-                      .select("*")
+                      .select("id, uazapi_token")
                       .eq("collaborator_id", collaborator?.id)
                       .eq("bot_type", "whatsapp")
-                      .single();
-                    if (inst?.uazapi_token && inst?.uazapi_instance_id) {
-                      await fetch("https://walkholding.uazapi.com/instance/disconnect", {
-                        method: "POST",
-                        headers: {
-                          "Content-Type": "application/json",
-                          token: inst.uazapi_token,
-                        },
-                      });
-                    }
-                    await supabase
-                      .from("bot_instances")
-                      .update({
+                      .limit(1);
+                    const inst = instances?.[0];
+                    if (inst) {
+                      await supabase.from("bot_instances").update({
                         whatsapp_status: "disconnected",
                         uazapi_instance_id: null,
                         uazapi_token: null,
-                        whatsapp_number: null,
-                      })
-                      .eq("id", inst.id);
+                        whatsapp_number: null
+                      }).eq("id", inst.id);
+                    }
                     toast.success("WhatsApp desconectado");
                     window.location.reload();
-                  } catch (e) {
+                  } catch(e) {
                     toast.error("Erro ao desconectar");
                   }
                 }}>
