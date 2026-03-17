@@ -44,7 +44,7 @@ function resolveCompanyId(selectedCompanyId: string, fallback?: string | null, i
 
 
 // ── Countdown component for next send ──────────────────────────
-function NextSendCountdown({ nextSendAt, status }: { nextSendAt?: string | null; status?: string }) {
+function NextSendCountdown({ nextSendAt, status, statusReason, statusMessage }: { nextSendAt?: string | null; status?: string; statusReason?: string; statusMessage?: string }) {
   const [seconds, setSeconds] = useState<number | null>(null);
 
   useEffect(() => {
@@ -58,10 +58,19 @@ function NextSendCountdown({ nextSendAt, status }: { nextSendAt?: string | null;
     return () => clearInterval(iv);
   }, [nextSendAt, status]);
 
-  if (status !== "running") return <p className="text-xl font-bold text-yellow-400">⏸</p>;
+  if (status !== "running") {
+    if (statusReason === "daily_limit_reached") return <p className="text-sm font-bold text-orange-400">Limite diário</p>;
+    if (statusReason === "outside_schedule") return <p className="text-sm font-bold text-yellow-400">Fora do horário</p>;
+    return <p className="text-xl font-bold text-yellow-400">⏸</p>;
+  }
+  if (statusReason === "daily_limit_reached") return <p className="text-sm font-bold text-orange-400">Limite diário atingido</p>;
+  if (statusReason === "outside_schedule") return <p className="text-sm font-bold text-yellow-400">Retoma 08:00</p>;
   if (seconds === null || seconds <= 0) return <p className="text-xl font-bold text-green-400 animate-pulse">Enviando...</p>;
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
+  if (statusReason === "offline_cycle") {
+    return <p className="text-xl font-bold text-orange-400 tabular-nums">⏳ {m > 0 ? `${m}m ${s.toString().padStart(2, "0")}s` : `${s}s`}</p>;
+  }
   return <p className="text-xl font-bold text-primary tabular-nums">{m > 0 ? `${m}m ${s.toString().padStart(2, "0")}s` : `${s}s`}</p>;
 }
 
@@ -1067,32 +1076,44 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
           const data = await callBlast({ action: "send_batch", job_id: jobId, batch_size: 1 });
           consecutiveErrorsRef.current = 0;
 
-          // Update counters from send_batch response (bug fix: send_batch returns ok/sent/remaining, NOT .job)
+          // Update counters from send_batch response
+          const nextDelay = data?.next_delay_ms ?? 30000;
+          const nextSendTime = new Date(Date.now() + nextDelay).toISOString();
           setJob((prev: any) => {
             if (!prev) return prev;
             return {
               ...prev,
-              sent_count: (prev.sent_count || 0) + (data?.sent || 0),
-              sent_today: (prev.sent_today || 0) + (data?.sent || 0),
+              sent_count: data?.job?.sent_count ?? ((prev.sent_count || 0) + (data?.sent || 0)),
+              sent_today: data?.sent_today ?? ((prev.sent_today || 0) + (data?.sent || 0)),
               pending_leads: data?.remaining ?? prev.pending_leads,
+              next_send_at: nextSendTime,
             };
           });
 
           // Stop conditions
-          if (data?.remaining === 0) {
-            toast.info("Disparo finalizado! Todos os leads foram enviados.");
+          if (data?.remaining === 0 || data?.reason === "total_reached") {
+            toast.info(data?.message || "Disparo finalizado! Todos os leads foram enviados.");
             timeoutRef.current = null;
             fetchJob();
             return;
           }
           if (data?.ok === false && data?.reason === "daily_limit_reached") {
+            setJob((prev: any) => prev ? { ...prev, next_send_at: null, status_reason: "daily_limit_reached", status_message: data?.message } : prev);
             toast.warning(data?.message || "Limite diário atingido. Disparo continuará amanhã.");
             timeoutRef.current = null;
             return;
           }
+          if (data?.ok === false && data?.reason === "offline_cycle") {
+            setJob((prev: any) => prev ? { ...prev, next_send_at: nextSendTime, status_reason: "offline_cycle", status_message: data?.message } : prev);
+          }
+          if (data?.ok === false && data?.reason === "outside_schedule") {
+            setJob((prev: any) => prev ? { ...prev, next_send_at: null, status_reason: "outside_schedule", status_message: data?.message } : prev);
+            toast.warning(data?.message || "Fora do horário de disparo (08:00–20:00)");
+            timeoutRef.current = null;
+            return;
+          }
 
-          // Schedule next send using blast-engine recommended delay (30s/90s alternating)
-          const nextDelay = data?.next_delay_ms ?? 30000;
+          // Schedule next send using blast-engine recommended delay
           scheduleSend(nextDelay);
 
         } catch (e: any) {
@@ -1201,7 +1222,7 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
         return {
           ...prev,
           sent_count: (prev.sent_count || 0) + (data?.sent || 0),
-          sent_today: (prev.sent_today || 0) + (data?.sent || 0),
+          sent_today: data?.sent_today ?? ((prev.sent_today || 0) + (data?.sent || 0)),
           pending_leads: data?.remaining ?? prev.pending_leads,
         };
       });
@@ -1291,7 +1312,7 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
             </div>
             <div className="text-center p-3 rounded-lg bg-muted/50">
               <p className="text-xs text-muted-foreground">Próx. Envio</p>
-              <NextSendCountdown nextSendAt={job.next_send_at} status={job.status} />
+              <NextSendCountdown nextSendAt={job.next_send_at} status={job.status} statusReason={job.status_reason} statusMessage={job.status_message} />
             </div>
           </div>
           {job.status === "running" && (
