@@ -260,7 +260,7 @@ function ProxyMonitorPanel({ chip }: { chip: DisposableChip }) {
 
 // ── Disposable Chips Section ──
 
-const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
 
 function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | null }) {
   const [chips, setChips] = useState<DisposableChip[]>([]);
@@ -1418,7 +1418,38 @@ export default function Bots() {
                   {waProfileName && <span className="text-foreground font-medium">{waProfileName}</span>}
                   {waPhone && <span className="text-muted-foreground text-sm ml-2">{waPhone}</span>}
                 </div>
-                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive gap-2" onClick={() => toast.info("Desconectar em breve")}>
+                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive gap-2" onClick={async () => {
+                  try {
+                    const { data: inst } = await supabase
+                      .from("bot_instances")
+                      .select("*")
+                      .eq("collaborator_id", collaborator?.id)
+                      .eq("bot_type", "whatsapp")
+                      .single();
+                    if (inst?.uazapi_token && inst?.uazapi_instance_id) {
+                      await fetch("https://walkholding.uazapi.com/instance/disconnect", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          token: inst.uazapi_token,
+                        },
+                      });
+                    }
+                    await supabase
+                      .from("bot_instances")
+                      .update({
+                        whatsapp_status: "disconnected",
+                        uazapi_instance_id: null,
+                        uazapi_token: null,
+                        whatsapp_number: null,
+                      })
+                      .eq("id", inst.id);
+                    toast.success("WhatsApp desconectado");
+                    window.location.reload();
+                  } catch (e) {
+                    toast.error("Erro ao desconectar");
+                  }
+                }}>
                   <Power className="h-4 w-4" /> Desconectar
                 </Button>
               </div>
