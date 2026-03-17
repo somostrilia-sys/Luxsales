@@ -1050,6 +1050,17 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
     try {
       const data = await callBlast({ action: "my_job", collaborator_id: collaborator.id });
       setJob(data?.job || null);
+      // Load template into editable state when job is paused
+      if (data?.job?.status === "paused" && data?.job?.message_template) {
+        setMessageTemplates(prev => {
+          if (prev[0] === "" || prev[0] === undefined) {
+            const templates = [...prev];
+            templates[0] = data.job.message_template;
+            return templates;
+          }
+          return prev;
+        });
+      }
     } catch {
       setJob(null);
     } finally {
@@ -1321,8 +1332,39 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
               <span>Anti-ban ativo: envios alternados 30s/90s • pausa 3-5min a cada 30 msgs • rotação de chips • horário 08:00-20:00</span>
             </div>
           )}
+          {job.status === "paused" && (
+            <div className="space-y-3 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+              <p className="text-sm font-medium text-yellow-400">✏️ Editar mensagem de disparo</p>
+              <Textarea
+                placeholder="Olá {nome}! Apresento uma solução..."
+                value={messageTemplates[0] || job.message_template || ""}
+                onChange={e => {
+                  const updated = [...messageTemplates];
+                  updated[0] = e.target.value;
+                  setMessageTemplates(updated);
+                }}
+                rows={3}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={async () => {
+                  const activeTemplates = messageTemplates.filter(t => t.trim().length > 0);
+                  if (activeTemplates.length === 0) { toast.error("Preencha a mensagem"); return; }
+                  try {
+                    await callBlast({ action: "update_job", job_id: job.id, message_template: activeTemplates[0], message_templates: activeTemplates });
+                    toast.success("Mensagem atualizada!");
+                    fetchJob();
+                  } catch { toast.error("Erro ao atualizar"); }
+                }}
+              >
+                Salvar mensagem
+              </Button>
+            </div>
+          )}
           <div className="flex gap-2">
-            <Button onClick={handleManualBatch} disabled={sending} className="gap-1.5" variant="outline">
+            <Button onClick={handleManualBatch} disabled={sending || job.status === "paused"} className="gap-1.5" variant="outline">
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Enviar Lote
             </Button>
@@ -1332,7 +1374,7 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
               {pausing ? <Loader2 className="h-4 w-4 animate-spin" /> : job?.status === "paused" ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
               {job?.status === "paused" ? "Retomar" : "Pausar"}
             </Button>
-            <Button onClick={async () => { setResetting(true); try { await callBlast({ action: "reset_job", job_id: job.id }); toast.success("Disparo resetado"); fetchJob(); } catch { toast.error("Erro ao resetar"); } finally { setResetting(false); } }} disabled={resetting} variant="outline" className="gap-1.5 border-orange-500/50 text-orange-400 hover:bg-orange-500/10"><RefreshCw className={`h-4 w-4 ${resetting ? "animate-spin" : ""}`} />Resetar</Button>
+            <Button onClick={async () => { setResetting(true); try { if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; } await callBlast({ action: "reset_job", job_id: job.id }); toast.success("Disparo resetado e pausado. Edite as mensagens e clique Retomar."); setJob((prev: any) => prev ? { ...prev, status: "paused", error_count: 0, next_send_at: null } : prev); fetchJob(); } catch { toast.error("Erro ao resetar"); } finally { setResetting(false); } }} disabled={resetting} variant="outline" className="gap-1.5 border-orange-500/50 text-orange-400 hover:bg-orange-500/10"><RefreshCw className={`h-4 w-4 ${resetting ? "animate-spin" : ""}`} />Resetar</Button>
             <Button onClick={fetchJob} variant="ghost" size="icon">
               <RefreshCw className="h-4 w-4" />
             </Button>
