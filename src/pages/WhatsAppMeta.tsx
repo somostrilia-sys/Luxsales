@@ -150,7 +150,7 @@ export default function WhatsAppMeta() {
     const { error } = await supabase.from("whatsapp_messages").insert({
       company_id: collaborator?.company_id,
       direction: "outbound",
-      from_number: collaborator?.whatsapp_comercial ?? "",
+      from_number: (collaborator as any)?.whatsapp_comercial ?? "",
       to_number: selectedConv,
       message_type: "text",
       content: messageInput,
