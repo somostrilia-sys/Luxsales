@@ -752,49 +752,78 @@ Deno.serve(async (req) => {
         .single();
       if (!chip) return json({ error: "Chip não encontrado" }, 404);
 
-      const { data: storedProxy } = await supabase
-        .from("disposable_chipset_proxy")
-        .select("proxy_url, source")
-        .eq("chip_id", chip_id)
-        .maybeSingle();
-
       try {
-        const monitor = await runProxyMonitor(supabase, chip, {
-          storedProxy,
-          includeQrProbe: true,
-          action: "connect",
-        });
+        // Ensure instance exists
+        const { instanceToken } = await ensureInstanceToken(supabase, chip);
+        const serverUrl = String(chip.uazapi_server_url || "").trim();
 
-        if (!monitor.qr_code) {
-          return json({
-            error: monitor.last_error || "Proxy aplicado, mas o QR não foi disponibilizado pela instância",
-            proxy_status: monitor.status,
-            proxy_url: monitor.proxy_url,
-          }, 500);
+        // Check if proxy is configured
+        const { data: storedProxy } = await supabase
+          .from("disposable_chipset_proxy")
+          .select("proxy_url, source")
+          .eq("chip_id", chip_id)
+          .maybeSingle();
+        const target = resolveProxyTarget(chip, chip_id, storedProxy);
+        const hasProxy = Boolean(target.proxy_url);
+
+        // If proxy exists, apply it (non-blocking — don't fail if proxy apply fails)
+        if (hasProxy) {
+          try {
+            await fetchWithTimeout(`${serverUrl}/instance/proxy`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ enabled: true, proxy: target.proxy_url, token: instanceToken }),
+            }, 10000);
+          } catch (proxyErr) {
+            console.error("Proxy apply warning (non-blocking):", proxyErr);
+          }
+        }
+
+        // Get QR code via connect endpoint (works with or without proxy)
+        let qrCode: string | null = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const qrRes = await fetchWithTimeout(`${serverUrl}/instance/connect?token=${instanceToken}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            }, 15000);
+            const qrData = await parseResponseBody(qrRes);
+            const qrRecord = typeof qrData === "object" && qrData !== null ? qrData as Record<string, unknown> : null;
+            const nestedInst = typeof qrRecord?.instance === "object" && qrRecord.instance !== null ? qrRecord.instance as Record<string, unknown> : null;
+            qrCode = nestedInst?.qrcode as string
+              || qrRecord?.qrcode as string
+              || qrRecord?.qr_code as string
+              || qrRecord?.base64 as string
+              || null;
+            if (qrCode) break;
+          } catch (qrErr) {
+            console.error(`QR attempt ${attempt} error:`, qrErr);
+          }
+          if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 2000));
+        }
+
+        if (!qrCode) {
+          return json({ error: "Não foi possível gerar QR code. Tente novamente em alguns segundos.", connected: false }, 500);
         }
 
         await supabase.from("disposable_chips").update({
-          qr_code: monitor.qr_code,
+          qr_code: qrCode,
           status: "connecting",
           updated_at: new Date().toISOString(),
         }).eq("id", chip_id);
 
         return json({
           ok: true,
-          qr_code: monitor.qr_code,
-          instance_token: monitor.instance_token,
+          qr_code: qrCode,
+          instance_token: instanceToken,
           status: "connecting",
-          proxy_enabled: Boolean(monitor.proxy_url),
-          proxy_url: monitor.proxy_url,
-          proxy_status: monitor.status,
-          proxy_source: monitor.source,
-          proxy_last_tested_at: monitor.last_tested_at,
-          proxy_response_ms: monitor.last_response_ms,
-          proxy_exit_ip: monitor.exit_ip,
+          proxy_enabled: hasProxy,
+          proxy_url: target.proxy_url,
+          proxy_source: target.source,
         });
       } catch (e) {
-        console.error("UAZAPI QR error:", e);
-        return json({ error: (e as Error).message || "Falha ao obter QR code" }, 500);
+        console.error("Connect error:", e);
+        return json({ error: (e as Error).message || "Falha ao conectar chip" }, 500);
       }
     }
 
