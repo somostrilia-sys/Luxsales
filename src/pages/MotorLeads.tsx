@@ -1244,12 +1244,14 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
         return;
       }
 
-      // Update job counters from response (bug fix: use data.sent, not data?.job?.sent_count)
+      // Update job counters — same strategy as startAutoSend: prioritize backend sent_count
       setJob((prev: any) => {
         if (!prev) return prev;
+        const backendSent = data?.job?.sent_count;
+        const localSent = (prev.sent_count || 0) + (data?.sent || 0);
         return {
           ...prev,
-          sent_count: (prev.sent_count || 0) + (data?.sent || 0),
+          sent_count: backendSent != null ? backendSent : localSent,
           sent_today: data?.sent_today ?? ((prev.sent_today || 0) + (data?.sent || 0)),
           pending_leads: data?.remaining ?? prev.pending_leads,
         };
