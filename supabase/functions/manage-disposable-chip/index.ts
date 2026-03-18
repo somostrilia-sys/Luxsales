@@ -440,9 +440,9 @@ async function runProxyMonitor(
   const geo = extractGeo(geoBody);
   const { instanceToken } = await ensureInstanceToken(supabase, chip);
   const startedAt = Date.now();
-  const proxyRes = await fetchWithTimeout(`${serverUrl}/instance/proxy`, {
+  const proxyRes = await fetchWithTimeout(`${serverUrl}/instance/proxy?token=${instanceToken}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "InstanceToken": instanceToken },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled: true, proxy: target.proxy_url }),
   });
   const proxyBody = await parseResponseBody(proxyRes);
