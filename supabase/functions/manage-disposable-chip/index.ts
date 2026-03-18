@@ -212,7 +212,7 @@ function extractGeo(value: unknown) {
   };
 }
 
-async function saveProxyMonitor(supabase: ReturnType<typeof createClient>, monitor: ProxyMonitorRecord) {
+async function saveProxyMonitor(supabase: any, monitor: ProxyMonitorRecord) {
   const payload = {
     chip_id: monitor.chip_id,
     proxy_url: monitor.proxy_url,
