@@ -646,11 +646,12 @@ Deno.serve(async (req) => {
 
       const { data: existing } = await supabase
         .from("disposable_chips")
-        .select("id")
+        .select("id, chip_index")
         .eq("collaborator_id", collaborator_id);
       if ((existing || []).length >= 5) return json({ error: "Limite de 5 chips atingido" }, 400);
 
-      const chipIndex = (existing || []).length + 1;
+      const maxIndex = (existing || []).reduce((max: number, c: any) => Math.max(max, c.chip_index || 0), 0);
+      const chipIndex = maxIndex + 1;
       const uazapiAccount = chipIndex <= 3 ? "account_b" : "account_c";
 
       let serverUrl = body.uazapi_server_url || "";
