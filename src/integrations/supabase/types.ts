@@ -2429,6 +2429,7 @@ export type Database = {
           delivery_status: string | null
           direction: string | null
           id: string
+          media_mimetype: string | null
           media_type: string | null
           media_url: string | null
           message_id: string | null
@@ -2443,6 +2444,7 @@ export type Database = {
           delivery_status?: string | null
           direction?: string | null
           id?: string
+          media_mimetype?: string | null
           media_type?: string | null
           media_url?: string | null
           message_id?: string | null
@@ -2457,6 +2459,7 @@ export type Database = {
           delivery_status?: string | null
           direction?: string | null
           id?: string
+          media_mimetype?: string | null
           media_type?: string | null
           media_url?: string | null
           message_id?: string | null
