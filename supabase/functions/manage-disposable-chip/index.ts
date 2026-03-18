@@ -212,7 +212,7 @@ function extractGeo(value: unknown) {
   };
 }
 
-async function saveProxyMonitor(supabase: ReturnType<typeof createClient>, monitor: ProxyMonitorRecord) {
+async function saveProxyMonitor(supabase: any, monitor: ProxyMonitorRecord) {
   const payload = {
     chip_id: monitor.chip_id,
     proxy_url: monitor.proxy_url,
@@ -239,7 +239,7 @@ async function saveProxyMonitor(supabase: ReturnType<typeof createClient>, monit
 }
 
 async function saveProxyLog(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   log: {
     chip_id: string;
     action: ProxyLogAction;
@@ -329,7 +329,7 @@ async function createUazapiInstance(
 }
 
 async function ensureInstanceToken(
-  supabase: SupabaseClientLike,
+  supabase: any,
   chip: Record<string, unknown>,
 ) {
   let instanceToken = String(chip.instance_token || "").trim();
@@ -362,7 +362,7 @@ async function ensureInstanceToken(
 }
 
 async function runProxyMonitor(
-  supabase: SupabaseClientLike,
+  supabase: any,
   chip: Record<string, unknown>,
   options?: {
     includeQrProbe?: boolean;
