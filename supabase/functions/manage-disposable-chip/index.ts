@@ -411,63 +411,30 @@ async function runProxyMonitor(
     geoResponseMs = geoResult.responseMs;
 
       if (!geoResult.ok) {
-      const geoErrorMonitor: ProxyMonitorRecord = {
-        chip_id: chipId,
-        proxy_url: target.proxy_url,
-        source: target.source,
-        status: "error",
-        last_tested_at: now,
-        last_error: typeof geoBody === "string"
-          ? geoBody
-          : (geoBody as Record<string, unknown> | null)?.reason as string || "Falha ao validar IP externo via proxy",
-        last_http_status: geoStatus,
-        last_response_ms: geoResponseMs,
-        exit_ip: extractExitIp(geoBody),
-        target_url: "https://ipapi.co/json/",
-        updated_at: now,
-        metadata: { stage: "external_test", action, geo_response: geoBody },
-      };
-      await saveProxyMonitor(supabase, geoErrorMonitor);
-      const geo = extractGeo(geoBody);
+      // IP test failed (possibly rate limited) — log but CONTINUE with proxy apply + QR
+      console.warn("IP metadata test failed (status " + geoStatus + "), continuing with proxy apply...");
       await saveProxyLog(supabase, {
         chip_id: chipId,
         action,
         proxy_url: target.proxy_url,
         success: false,
-        status: "external_test_error",
-        ip: geoErrorMonitor.exit_ip ?? null,
-        city: geo.city,
-        region: geo.region,
-        country: geo.country,
-        error_message: geoErrorMonitor.last_error,
+        status: "external_test_skipped",
+        error_message: "IP test failed (" + geoStatus + ") - continued anyway",
         response_time_ms: geoResponseMs,
       });
-      return { ok: false, ...geoErrorMonitor, ...geo, qr_code: null, instance_token: null, connected: false, phone: null };
     }
   } catch (error) {
-    const failedMonitor: ProxyMonitorRecord = {
-      chip_id: chipId,
-      proxy_url: target.proxy_url,
-      source: target.source,
-      status: "error",
-      last_tested_at: now,
-      last_error: (error as Error).message || "Falha ao executar teste HTTP real via proxy",
-      last_response_ms: geoResponseMs,
-      target_url: "https://ipapi.co/json/",
-      updated_at: now,
-      metadata: { stage: "external_test", action },
-    };
-    await saveProxyMonitor(supabase, failedMonitor);
+    // IP test threw exception (network/timeout) — log but CONTINUE
+    console.warn("IP metadata test exception:", (error as Error).message);
     await saveProxyLog(supabase, {
       chip_id: chipId,
       action,
       proxy_url: target.proxy_url,
       success: false,
       status: "external_test_exception",
-      error_message: failedMonitor.last_error,
+      error_message: (error as Error).message || "IP test exception - continued anyway",
       response_time_ms: geoResponseMs,
     });
-    return { ok: false, ...failedMonitor, city: null, region: null, country: null, qr_code: null, instance_token: null, connected: false, phone: null };
   }
 
   const geo = extractGeo(geoBody);
@@ -752,78 +719,49 @@ Deno.serve(async (req) => {
         .single();
       if (!chip) return json({ error: "Chip não encontrado" }, 404);
 
+      const { data: storedProxy } = await supabase
+        .from("disposable_chipset_proxy")
+        .select("proxy_url, source")
+        .eq("chip_id", chip_id)
+        .maybeSingle();
+
       try {
-        // Ensure instance exists
-        const { instanceToken } = await ensureInstanceToken(supabase, chip);
-        const serverUrl = String(chip.uazapi_server_url || "").trim();
+        const monitor = await runProxyMonitor(supabase, chip, {
+          storedProxy,
+          includeQrProbe: true,
+          action: "connect",
+        });
 
-        // Check if proxy is configured
-        const { data: storedProxy } = await supabase
-          .from("disposable_chipset_proxy")
-          .select("proxy_url, source")
-          .eq("chip_id", chip_id)
-          .maybeSingle();
-        const target = resolveProxyTarget(chip, chip_id, storedProxy);
-        const hasProxy = Boolean(target.proxy_url);
-
-        // If proxy exists, apply it (non-blocking — don't fail if proxy apply fails)
-        if (hasProxy) {
-          try {
-            await fetchWithTimeout(`${serverUrl}/instance/proxy`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ enabled: true, proxy: target.proxy_url, token: instanceToken }),
-            }, 10000);
-          } catch (proxyErr) {
-            console.error("Proxy apply warning (non-blocking):", proxyErr);
-          }
-        }
-
-        // Get QR code via connect endpoint (works with or without proxy)
-        let qrCode: string | null = null;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          try {
-            const qrRes = await fetchWithTimeout(`${serverUrl}/instance/connect?token=${instanceToken}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-            }, 15000);
-            const qrData = await parseResponseBody(qrRes);
-            const qrRecord = typeof qrData === "object" && qrData !== null ? qrData as Record<string, unknown> : null;
-            const nestedInst = typeof qrRecord?.instance === "object" && qrRecord.instance !== null ? qrRecord.instance as Record<string, unknown> : null;
-            qrCode = nestedInst?.qrcode as string
-              || qrRecord?.qrcode as string
-              || qrRecord?.qr_code as string
-              || qrRecord?.base64 as string
-              || null;
-            if (qrCode) break;
-          } catch (qrErr) {
-            console.error(`QR attempt ${attempt} error:`, qrErr);
-          }
-          if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 2000));
-        }
-
-        if (!qrCode) {
-          return json({ error: "Não foi possível gerar QR code. Tente novamente em alguns segundos.", connected: false }, 500);
+        if (!monitor.qr_code) {
+          return json({
+            error: monitor.last_error || "Proxy aplicado, mas o QR não foi disponibilizado pela instância",
+            proxy_status: monitor.status,
+            proxy_url: monitor.proxy_url,
+          }, 500);
         }
 
         await supabase.from("disposable_chips").update({
-          qr_code: qrCode,
+          qr_code: monitor.qr_code,
           status: "connecting",
           updated_at: new Date().toISOString(),
         }).eq("id", chip_id);
 
         return json({
           ok: true,
-          qr_code: qrCode,
-          instance_token: instanceToken,
+          qr_code: monitor.qr_code,
+          instance_token: monitor.instance_token,
           status: "connecting",
-          proxy_enabled: hasProxy,
-          proxy_url: target.proxy_url,
-          proxy_source: target.source,
+          proxy_enabled: Boolean(monitor.proxy_url),
+          proxy_url: monitor.proxy_url,
+          proxy_status: monitor.status,
+          proxy_source: monitor.source,
+          proxy_last_tested_at: monitor.last_tested_at,
+          proxy_response_ms: monitor.last_response_ms,
+          proxy_exit_ip: monitor.exit_ip,
         });
       } catch (e) {
-        console.error("Connect error:", e);
-        return json({ error: (e as Error).message || "Falha ao conectar chip" }, 500);
+        console.error("UAZAPI QR error:", e);
+        return json({ error: (e as Error).message || "Falha ao obter QR code" }, 500);
       }
     }
 
