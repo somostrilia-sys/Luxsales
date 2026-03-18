@@ -362,7 +362,7 @@ async function ensureInstanceToken(
 }
 
 async function runProxyMonitor(
-  supabase: SupabaseClientLike,
+  supabase: any,
   chip: Record<string, unknown>,
   options?: {
     includeQrProbe?: boolean;
