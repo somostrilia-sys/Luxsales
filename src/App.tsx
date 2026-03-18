@@ -24,6 +24,12 @@ const MotorLeads = lazy(() => import("./pages/MotorLeads"));
 const AtendimentoLeads = lazy(() => import("./pages/AtendimentoLeads"));
 const VoiceAI = lazy(() => import("./pages/VoiceAI"));
 const CallCampaigns = lazy(() => import("./pages/CallCampaigns"));
+const Discador = lazy(() => import("./pages/Discador"));
+const LeadsDiscador = lazy(() => import("./pages/LeadsDiscador"));
+const WhatsAppMeta = lazy(() => import("./pages/WhatsAppMeta"));
+const RelatoriosVoz = lazy(() => import("./pages/RelatoriosVoz"));
+const ComplianceVoz = lazy(() => import("./pages/ComplianceVoz"));
+const ConfiguracoesVoz = lazy(() => import("./pages/ConfiguracoesVoz"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const Registro = lazy(() => import("./pages/Registro"));
@@ -70,6 +76,13 @@ const App = () => (
           <Route path="/voice-ai" element={<ProtectedRoute minLevel={1}><VoiceAI /></ProtectedRoute>} />
           <Route path="/call-campaigns" element={<ProtectedRoute minLevel={1}><CallCampaigns /></ProtectedRoute>} />
           <Route path="/atendimento" element={<ProtectedRoute><AtendimentoLeads /></ProtectedRoute>} />
+
+          <Route path="/discador" element={<ProtectedRoute minLevel={2}><Discador /></ProtectedRoute>} />
+          <Route path="/leads-discador" element={<ProtectedRoute minLevel={1}><LeadsDiscador /></ProtectedRoute>} />
+          <Route path="/whatsapp-meta" element={<ProtectedRoute minLevel={1}><WhatsAppMeta /></ProtectedRoute>} />
+          <Route path="/relatorios-voz" element={<ProtectedRoute minLevel={1}><RelatoriosVoz /></ProtectedRoute>} />
+          <Route path="/compliance-voz" element={<ProtectedRoute minLevel={0}><ComplianceVoz /></ProtectedRoute>} />
+          <Route path="/configuracoes-voz" element={<ProtectedRoute minLevel={0}><ConfiguracoesVoz /></ProtectedRoute>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

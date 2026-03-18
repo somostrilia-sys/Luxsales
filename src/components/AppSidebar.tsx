@@ -1,6 +1,7 @@
 import {
   LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone, Mic, PhoneCall, Network
+  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone, Mic, PhoneCall, Network,
+  Headphones, Contact, MessageCircle, FileBarChart, ShieldCheck, Wrench
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -44,6 +45,12 @@ const consultantItems: MenuItem[] = [
 const voiceItems: MenuItem[] = [
   { title: "Ligações IA", url: "/voice-ai", icon: PhoneCall, levels: [0, 1] },
   { title: "Campanhas IA", url: "/call-campaigns", icon: Mic, levels: [0, 1] },
+  { title: "Discador", url: "/discador", icon: Headphones, levels: [0, 1, 2] },
+  { title: "Leads Discador", url: "/leads-discador", icon: Contact, levels: [0, 1] },
+  { title: "WhatsApp Meta", url: "/whatsapp-meta", icon: MessageCircle, levels: [0, 1] },
+  { title: "Relatórios Voz", url: "/relatorios-voz", icon: FileBarChart, levels: [0, 1] },
+  { title: "Compliance Voz", url: "/compliance-voz", icon: ShieldCheck, levels: [0] },
+  { title: "Config. Voz", url: "/configuracoes-voz", icon: Wrench, levels: [0] },
 ];
 
 export function AppSidebar() {
