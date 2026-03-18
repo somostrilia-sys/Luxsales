@@ -13,6 +13,119 @@ function json(data: Record<string, unknown>, status = 200) {
   });
 }
 
+async function getAccountAConfig(supabase: any) {
+  let accountAUrl = Deno.env.get("UAZAPI_ACCOUNT_A_URL") || "";
+  let accountAToken = Deno.env.get("UAZAPI_ACCOUNT_A_TOKEN") || "";
+
+  if (!accountAUrl || !accountAToken) {
+    const { data: account } = await supabase
+      .from("uazapi_accounts")
+      .select("api_url, admin_token")
+      .eq("account_key", "account_a")
+      .maybeSingle();
+    if (account) {
+      if (!accountAUrl) accountAUrl = account.api_url;
+      if (!accountAToken) accountAToken = account.admin_token;
+    }
+  }
+
+  if (!accountAUrl) accountAUrl = "https://walkholding.uazapi.com";
+
+  if (!accountAToken) {
+    const { data: cfg } = await supabase
+      .from("system_configs")
+      .select("value")
+      .eq("key", "uazapi_admin_token")
+      .maybeSingle();
+    accountAToken = cfg?.value || "";
+  }
+
+  return { accountAUrl, accountAToken };
+}
+
+async function createInstanceOnUazapi(accountAUrl: string, accountAToken: string, instanceName: string): Promise<string> {
+  const createRes = await fetch(`${accountAUrl}/instance/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "AdminToken": accountAToken },
+    body: JSON.stringify({ name: instanceName }),
+  });
+  const createData = await createRes.json();
+  return createData?.token || createData?.instance?.token || "";
+}
+
+async function fetchQrCode(accountAUrl: string, instanceToken: string): Promise<string | null> {
+  try {
+    const qrRes = await fetch(`${accountAUrl}/instance/qrcode`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "InstanceToken": instanceToken },
+    });
+    const qrData = await qrRes.json();
+    return qrData?.qrcode || qrData?.qr_code || qrData?.base64 || null;
+  } catch (e) {
+    console.error("fetchQrCode error:", e);
+    return null;
+  }
+}
+
+async function recreateAndGetQr(
+  supabase: any,
+  accountAUrl: string,
+  accountAToken: string,
+  collaborator_id: string,
+  existingInstanceId?: string,
+): Promise<Response> {
+  if (!accountAToken) {
+    return json({ error: "Token admin UAZAPI não configurado" }, 500);
+  }
+
+  const instanceName = `wa_${collaborator_id.slice(0, 8)}_fixo`;
+  let instanceToken = "";
+
+  try {
+    instanceToken = await createInstanceOnUazapi(accountAUrl, accountAToken, instanceName);
+  } catch (e) {
+    console.error("UAZAPI create instance error:", e);
+    return json({ error: "Falha ao criar instância UAZAPI" }, 500);
+  }
+
+  if (!instanceToken) {
+    return json({ error: "UAZAPI não retornou token da instância" }, 500);
+  }
+
+  const updateData = {
+    instance_name: instanceName,
+    instance_token: instanceToken,
+    status: "disconnected",
+    updated_at: new Date().toISOString(),
+  };
+
+  if (existingInstanceId) {
+    await supabase.from("whatsapp_instances").update(updateData).eq("id", existingInstanceId);
+  } else {
+    await supabase.from("whatsapp_instances").insert({
+      collaborator_id,
+      instance_name: instanceName,
+      instance_token: instanceToken,
+      chip_type: "fixo",
+      status: "disconnected",
+    });
+  }
+
+  // Wait for UAZAPI to initialize the instance
+  await new Promise(r => setTimeout(r, 3000));
+
+  const qrCode = await fetchQrCode(accountAUrl, instanceToken);
+
+  if (qrCode) {
+    await supabase.from("whatsapp_instances")
+      .update({ qr_code: qrCode, status: "connecting", updated_at: new Date().toISOString() })
+      .eq("collaborator_id", collaborator_id)
+      .eq("chip_type", "fixo");
+  }
+
+  return json({ qr_code: qrCode, connected: false });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -26,34 +139,7 @@ Deno.serve(async (req) => {
 
     if (!collaborator_id) return json({ error: "collaborator_id required" }, 400);
 
-    // Get UaZapi Account A config (chips fixos)
-    let accountAUrl = Deno.env.get("UAZAPI_ACCOUNT_A_URL") || "";
-    let accountAToken = Deno.env.get("UAZAPI_ACCOUNT_A_TOKEN") || "";
-
-    // Fallback: buscar na tabela uazapi_accounts
-    if (!accountAUrl || !accountAToken) {
-      const { data: account } = await supabase
-        .from("uazapi_accounts")
-        .select("api_url, admin_token")
-        .eq("account_key", "account_a")
-        .maybeSingle();
-      if (account) {
-        if (!accountAUrl) accountAUrl = account.api_url;
-        if (!accountAToken) accountAToken = account.admin_token;
-      }
-    }
-
-    if (!accountAUrl) accountAUrl = "https://walkholding.uazapi.com";
-
-    // Last resort: system_configs
-    if (!accountAToken) {
-      const { data: cfg } = await supabase
-        .from("system_configs")
-        .select("value")
-        .eq("key", "uazapi_admin_token")
-        .maybeSingle();
-      accountAToken = cfg?.value || "";
-    }
+    const { accountAUrl, accountAToken } = await getAccountAConfig(supabase);
 
     // Check if collaborator has a whatsapp_instances record (chip fixo)
     const { data: instance } = await supabase
@@ -84,7 +170,6 @@ Deno.serve(async (req) => {
         const phone = statusData?.phone || statusData?.number || instance.phone_number || null;
         const profileName = statusData?.profile_name || statusData?.pushname || null;
 
-        // Update DB
         const updateData: Record<string, unknown> = {
           status: connected ? "connected" : "disconnected",
           updated_at: new Date().toISOString(),
@@ -118,30 +203,25 @@ Deno.serve(async (req) => {
       }
 
       if (!instance.instance_token) {
-        return json({ error: "Token da instância não disponível." }, 400);
+        // No token — auto-recreate the instance
+        console.log("qrcode: no instance_token, auto-recreating...");
+        return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id, instance.id);
       }
 
-      try {
-        const qrRes = await fetch(`${accountAUrl}/instance/qrcode`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "InstanceToken": instance.instance_token },
-        });
-        const qrData = await qrRes.json();
-        const qrCode = qrData?.qrcode || qrData?.qr_code || qrData?.base64 || null;
+      const qrCode = await fetchQrCode(accountAUrl, instance.instance_token);
 
-        if (qrCode) {
-          await supabase.from("whatsapp_instances").update({
-            qr_code: qrCode,
-            status: "connecting",
-            updated_at: new Date().toISOString(),
-          }).eq("id", instance.id);
-        }
-
+      if (qrCode) {
+        await supabase.from("whatsapp_instances").update({
+          qr_code: qrCode,
+          status: "connecting",
+          updated_at: new Date().toISOString(),
+        }).eq("id", instance.id);
         return json({ qr_code: qrCode });
-      } catch (e) {
-        console.error("UAZAPI QR error:", e);
-        return json({ error: "Falha ao obter QR code" }, 500);
       }
+
+      // QR failed — token may be invalid, auto-recreate
+      console.log("qrcode: QR fetch failed, auto-recreating instance...");
+      return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id, instance.id);
     }
 
     // ── CREATE (default action — create instance if not exists, return QR) ──
@@ -165,96 +245,32 @@ Deno.serve(async (req) => {
         } catch {}
       }
 
-      // Not connected — get QR
-      if (instance.instance_token) {
-        try {
-          const qrRes = await fetch(`${accountAUrl}/instance/qrcode`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "InstanceToken": instance.instance_token },
-          });
-          const qrData = await qrRes.json();
-          const qrCode = qrData?.qrcode || qrData?.qr_code || qrData?.base64 || null;
-
-          if (qrCode) {
-            await supabase.from("whatsapp_instances").update({
-              qr_code: qrCode,
-              status: "connecting",
-              updated_at: new Date().toISOString(),
-            }).eq("id", instance.id);
-          }
-
-          return json({ qr_code: qrCode, connected: false });
-        } catch (e) {
-          console.error("UAZAPI QR error:", e);
-          return json({ error: "Falha ao obter QR code" }, 500);
-        }
+      // Instance exists but no token — recreate
+      if (!instance.instance_token) {
+        console.log("create: instance exists but no token, recreating...");
+        return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id, instance.id);
       }
-    }
 
-    // No instance yet — create one on UaZapi Account A
-    if (!accountAToken) {
-      return json({ error: "Token admin UAZAPI não configurado" }, 500);
-    }
-
-    const instanceName = `wa_${collaborator_id.slice(0, 8)}_fixo`;
-    let instanceToken = "";
-
-    try {
-      const createRes = await fetch(`${accountAUrl}/instance/create`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "AdminToken": accountAToken },
-        body: JSON.stringify({ name: instanceName }),
-      });
-      const createData = await createRes.json();
-      instanceToken = createData?.token || createData?.instance?.token || "";
-    } catch (e) {
-      console.error("UAZAPI create instance error:", e);
-      return json({ error: "Falha ao criar instância UAZAPI" }, 500);
-    }
-
-    if (!instanceToken) {
-      return json({ error: "UAZAPI não retornou token da instância" }, 500);
-    }
-
-    // Insert or upsert whatsapp_instances record
-    if (instance) {
-      await supabase.from("whatsapp_instances").update({
-        instance_name: instanceName,
-        instance_token: instanceToken,
-        status: "disconnected",
-        updated_at: new Date().toISOString(),
-      }).eq("id", instance.id);
-    } else {
-      await supabase.from("whatsapp_instances").insert({
-        collaborator_id,
-        instance_name: instanceName,
-        instance_token: instanceToken,
-        chip_type: "fixo",
-        status: "disconnected",
-      });
-    }
-
-    // Get QR code
-    try {
-      const qrRes = await fetch(`${accountAUrl}/instance/qrcode`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "InstanceToken": instanceToken },
-      });
-      const qrData = await qrRes.json();
-      const qrCode = qrData?.qrcode || qrData?.qr_code || qrData?.base64 || null;
+      // Not connected — get QR
+      const qrCode = await fetchQrCode(accountAUrl, instance.instance_token);
 
       if (qrCode) {
-        await supabase.from("whatsapp_instances")
-          .update({ qr_code: qrCode, status: "connecting", updated_at: new Date().toISOString() })
-          .eq("collaborator_id", collaborator_id)
-          .eq("chip_type", "fixo");
+        await supabase.from("whatsapp_instances").update({
+          qr_code: qrCode,
+          status: "connecting",
+          updated_at: new Date().toISOString(),
+        }).eq("id", instance.id);
+        return json({ qr_code: qrCode, connected: false });
       }
 
-      return json({ qr_code: qrCode, connected: false });
-    } catch (e) {
-      console.error("UAZAPI QR error:", e);
-      return json({ error: "Instância criada, mas falha ao obter QR. Tente novamente." }, 500);
+      // QR failed — token likely invalid, recreate
+      console.log("create: QR fetch failed for existing instance, recreating...");
+      return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id, instance.id);
     }
+
+    // No instance yet — create one
+    return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id);
+
   } catch (e) {
     console.error("Edge function error:", e);
     return json({ error: (e as Error).message || "Erro interno" }, 500);
