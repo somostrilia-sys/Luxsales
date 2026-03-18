@@ -29,7 +29,7 @@ async function getAccountAConfig(supabase: any) {
     }
   }
 
-  if (!accountAUrl) accountAUrl = "https://walkholding.uazapi.com";
+  if (!accountAUrl) accountAUrl = "https://walk2.uazapi.com";
 
   if (!accountAToken) {
     const { data: cfg } = await supabase
@@ -43,26 +43,58 @@ async function getAccountAConfig(supabase: any) {
   return { accountAUrl, accountAToken };
 }
 
+// uazapiGO: POST /instance/create with AdminToken header
 async function createInstanceOnUazapi(accountAUrl: string, accountAToken: string, instanceName: string): Promise<string> {
+  console.log("createInstance:", accountAUrl, "name:", instanceName);
   const createRes = await fetch(`${accountAUrl}/instance/create`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "AdminToken": accountAToken },
     body: JSON.stringify({ name: instanceName }),
   });
   const createData = await createRes.json();
+  console.log("createInstance status:", createRes.status, "token:", createData?.token ? "yes" : "no");
   return createData?.token || createData?.instance?.token || "";
 }
 
-async function fetchQrCode(accountAUrl: string, instanceToken: string): Promise<string | null> {
+// uazapiGO: POST /instance/connect?token= → returns qrcode in instance.qrcode
+async function connectAndGetQr(accountAUrl: string, instanceToken: string): Promise<string | null> {
   try {
-    const qrRes = await fetch(`${accountAUrl}/instance/qrcode`, {
+    console.log("connectAndGetQr:", accountAUrl + "/instance/connect");
+    const res = await fetch(`${accountAUrl}/instance/connect?token=${instanceToken}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "InstanceToken": instanceToken },
+      headers: { "Content-Type": "application/json" },
     });
-    const qrData = await qrRes.json();
-    return qrData?.qrcode || qrData?.qr_code || qrData?.base64 || null;
+    const data = await res.json();
+    console.log("connectAndGetQr status:", res.status, "has qrcode:", Boolean(data?.instance?.qrcode || data?.qrcode));
+    const qr = data?.instance?.qrcode || data?.qrcode || data?.qr_code || data?.base64 || null;
+    return qr || null;
   } catch (e) {
-    console.error("fetchQrCode error:", e);
+    console.error("connectAndGetQr error:", e);
+    return null;
+  }
+}
+
+async function connectAndGetQrWithRetry(accountAUrl: string, instanceToken: string, maxAttempts = 3): Promise<string | null> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`connectAndGetQr attempt ${attempt}/${maxAttempts}`);
+    const qr = await connectAndGetQr(accountAUrl, instanceToken);
+    if (qr) return qr;
+    if (attempt < maxAttempts) {
+      const delay = attempt * 2000;
+      console.log(`QR not ready, waiting ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  return null;
+}
+
+// uazapiGO: GET /instance/status?token=
+async function getInstanceStatus(accountAUrl: string, instanceToken: string): Promise<any> {
+  try {
+    const res = await fetch(`${accountAUrl}/instance/status?token=${instanceToken}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
     return null;
   }
 }
@@ -95,6 +127,7 @@ async function recreateAndGetQr(
   const updateData = {
     instance_name: instanceName,
     instance_token: instanceToken,
+    uazapi_server_url: accountAUrl,
     status: "disconnected",
     updated_at: new Date().toISOString(),
   };
@@ -106,24 +139,29 @@ async function recreateAndGetQr(
       collaborator_id,
       instance_name: instanceName,
       instance_token: instanceToken,
+      uazapi_server_url: accountAUrl,
       chip_type: "fixo",
       status: "disconnected",
     });
   }
 
   // Wait for UAZAPI to initialize the instance
-  await new Promise(r => setTimeout(r, 3000));
+  console.log("Waiting 2s for UAZAPI to initialize:", instanceName);
+  await new Promise(r => setTimeout(r, 2000));
 
-  const qrCode = await fetchQrCode(accountAUrl, instanceToken);
+  // Connect and get QR via POST /instance/connect?token=
+  const qrCode = await connectAndGetQrWithRetry(accountAUrl, instanceToken, 3);
 
   if (qrCode) {
     await supabase.from("whatsapp_instances")
       .update({ qr_code: qrCode, status: "connecting", updated_at: new Date().toISOString() })
       .eq("collaborator_id", collaborator_id)
       .eq("chip_type", "fixo");
+    return json({ qr_code: qrCode, connected: false });
   }
 
-  return json({ qr_code: qrCode, connected: false });
+  console.error("Failed to get QR after retries for:", collaborator_id);
+  return json({ error: "Instância criada, mas QR não disponível. Tente novamente.", qr_code: null, connected: false }, 500);
 }
 
 Deno.serve(async (req) => {
@@ -149,6 +187,9 @@ Deno.serve(async (req) => {
       .eq("chip_type", "fixo")
       .maybeSingle();
 
+    // Resolve the server URL for this instance (may differ from accountAUrl for old instances)
+    const serverUrl = instance?.uazapi_server_url || accountAUrl;
+
     // ── STATUS ──
     if (action === "status") {
       if (!instance) {
@@ -160,24 +201,26 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const statusRes = await fetch(`${accountAUrl}/instance/status`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "InstanceToken": instance.instance_token },
-        });
-        const statusData = await statusRes.json();
+        const statusData = await getInstanceStatus(serverUrl, instance.instance_token);
 
-        const connected = statusData?.status === "connected" || statusData?.connected === true;
-        const phone = statusData?.phone || statusData?.number || instance.phone_number || null;
-        const profileName = statusData?.profile_name || statusData?.pushname || null;
+        if (!statusData) {
+          return json({ has_instance: true, connected: false, phone: instance.phone_number });
+        }
 
-        const updateData: Record<string, unknown> = {
+        const connected = statusData?.status?.connected === true
+          || statusData?.instance?.status === "connected"
+          || statusData?.connected === true;
+        const phone = statusData?.instance?.owner || statusData?.phone || statusData?.number || instance.phone_number || null;
+        const profileName = statusData?.instance?.profileName || statusData?.profile_name || statusData?.pushname || null;
+
+        const updatePayload: Record<string, unknown> = {
           status: connected ? "connected" : "disconnected",
           updated_at: new Date().toISOString(),
         };
-        if (phone) updateData.phone_number = phone;
-        if (connected) updateData.qr_code = null;
+        if (phone) updatePayload.phone_number = phone;
+        if (connected) updatePayload.qr_code = null;
 
-        await supabase.from("whatsapp_instances").update(updateData).eq("id", instance.id);
+        await supabase.from("whatsapp_instances").update(updatePayload).eq("id", instance.id);
 
         return json({
           has_instance: true,
@@ -203,12 +246,11 @@ Deno.serve(async (req) => {
       }
 
       if (!instance.instance_token) {
-        // No token — auto-recreate the instance
         console.log("qrcode: no instance_token, auto-recreating...");
         return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id, instance.id);
       }
 
-      const qrCode = await fetchQrCode(accountAUrl, instance.instance_token);
+      const qrCode = await connectAndGetQrWithRetry(serverUrl, instance.instance_token, 2);
 
       if (qrCode) {
         await supabase.from("whatsapp_instances").update({
@@ -220,51 +262,40 @@ Deno.serve(async (req) => {
       }
 
       // QR failed — token may be invalid, auto-recreate
-      console.log("qrcode: QR fetch failed, auto-recreating instance...");
+      console.log("qrcode: connect failed, auto-recreating...");
       return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id, instance.id);
     }
 
     // ── CREATE (default action — create instance if not exists, return QR) ──
     if (instance) {
-      // Already has instance — check if connected
-      if (instance.status === "connected" && instance.instance_token) {
-        try {
-          const statusRes = await fetch(`${accountAUrl}/instance/status`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "InstanceToken": instance.instance_token },
+      // Check if connected
+      if (instance.instance_token) {
+        const statusData = await getInstanceStatus(serverUrl, instance.instance_token);
+        const connected = statusData?.status?.connected === true || statusData?.instance?.status === "connected";
+
+        if (connected) {
+          return json({
+            connected: true,
+            phone: statusData?.instance?.owner || instance.phone_number,
+            profile_name: statusData?.instance?.profileName || null,
           });
-          const statusData = await statusRes.json();
-          const connected = statusData?.status === "connected" || statusData?.connected === true;
-          if (connected) {
-            return json({
-              connected: true,
-              phone: statusData?.phone || instance.phone_number,
-              profile_name: statusData?.profile_name || statusData?.pushname || null,
-            });
-          }
-        } catch {}
+        }
+
+        // Not connected — try to connect and get QR
+        const qrCode = await connectAndGetQrWithRetry(serverUrl, instance.instance_token, 2);
+
+        if (qrCode) {
+          await supabase.from("whatsapp_instances").update({
+            qr_code: qrCode,
+            status: "connecting",
+            updated_at: new Date().toISOString(),
+          }).eq("id", instance.id);
+          return json({ qr_code: qrCode, connected: false });
+        }
       }
 
-      // Instance exists but no token — recreate
-      if (!instance.instance_token) {
-        console.log("create: instance exists but no token, recreating...");
-        return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id, instance.id);
-      }
-
-      // Not connected — get QR
-      const qrCode = await fetchQrCode(accountAUrl, instance.instance_token);
-
-      if (qrCode) {
-        await supabase.from("whatsapp_instances").update({
-          qr_code: qrCode,
-          status: "connecting",
-          updated_at: new Date().toISOString(),
-        }).eq("id", instance.id);
-        return json({ qr_code: qrCode, connected: false });
-      }
-
-      // QR failed — token likely invalid, recreate
-      console.log("create: QR fetch failed for existing instance, recreating...");
+      // Token invalid or no QR — recreate
+      console.log("create: existing instance failed, recreating...");
       return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id, instance.id);
     }
 
