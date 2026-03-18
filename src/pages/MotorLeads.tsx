@@ -1049,7 +1049,22 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
     setLoadingJob(true);
     try {
       const data = await callBlast({ action: "my_job", collaborator_id: collaborator.id });
-      setJob(data?.job || null);
+      // Merge server data without overwriting locally-tracked counters during active sending
+      setJob((prev: any) => {
+        const serverJob = data?.job || null;
+        if (!serverJob) return null;
+        if (!prev || prev.id !== serverJob.id) return serverJob;
+        // If autoSend is active (timeoutRef exists), preserve local counters that may be ahead of DB
+        if (timeoutRef.current) {
+          return {
+            ...serverJob,
+            sent_count: Math.max(serverJob.sent_count || 0, prev.sent_count || 0),
+            sent_today: Math.max(serverJob.sent_today || 0, prev.sent_today || 0),
+            pending_leads: prev.pending_leads ?? serverJob.pending_leads,
+          };
+        }
+        return serverJob;
+      });
       // Load template into editable state when job is paused
       if (data?.job?.status === "paused" && data?.job?.message_template) {
         setMessageTemplates(prev => {
