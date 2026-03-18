@@ -515,9 +515,9 @@ async function runProxyMonitor(
     return { ok: false, ...failedMonitor, ...geo, qr_code: null, instance_token: instanceToken, connected: false, phone: null };
   }
 
-  const statusRes = await fetchWithTimeout(`${serverUrl}/instance/status`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "InstanceToken": instanceToken },
+  const statusRes = await fetchWithTimeout(`${serverUrl}/instance/status?token=${instanceToken}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
   });
   const statusBody = await parseResponseBody(statusRes);
 
@@ -526,22 +526,30 @@ async function runProxyMonitor(
   let qrBody: unknown = null;
 
   if (options?.includeQrProbe) {
-    const qrRes = await fetchWithTimeout(`${serverUrl}/instance/qrcode`, {
+    const qrRes = await fetchWithTimeout(`${serverUrl}/instance/connect?token=${instanceToken}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "InstanceToken": instanceToken },
+      headers: { "Content-Type": "application/json" },
     });
     qrBody = await parseResponseBody(qrRes);
-    qrCode = (qrBody as Record<string, unknown> | null)?.qrcode as string
-      || (qrBody as Record<string, unknown> | null)?.qr_code as string
-      || (qrBody as Record<string, unknown> | null)?.base64 as string
+    const qrBodyRecord = typeof qrBody === "object" && qrBody !== null ? qrBody as Record<string, unknown> : null;
+    const nestedInstance = typeof qrBodyRecord?.instance === "object" && qrBodyRecord.instance !== null ? qrBodyRecord.instance as Record<string, unknown> : null;
+    qrCode = nestedInstance?.qrcode as string
+      || qrBodyRecord?.qrcode as string
+      || qrBodyRecord?.qr_code as string
+      || qrBodyRecord?.base64 as string
       || null;
     qrProbeOk = qrRes.ok && Boolean(qrCode);
   }
 
-  const connected = (statusBody as Record<string, unknown> | null)?.status === "connected"
-    || (statusBody as Record<string, unknown> | null)?.connected === true;
-  const phone = (statusBody as Record<string, unknown> | null)?.phone
-    || (statusBody as Record<string, unknown> | null)?.number
+  const statusBodyRecord = typeof statusBody === "object" && statusBody !== null ? statusBody as Record<string, unknown> : null;
+  const statusNested = typeof statusBodyRecord?.status === "object" && statusBodyRecord.status !== null ? statusBodyRecord.status as Record<string, unknown> : null;
+  const instanceNested = typeof statusBodyRecord?.instance === "object" && statusBodyRecord.instance !== null ? statusBodyRecord.instance as Record<string, unknown> : null;
+  const connected = statusNested?.connected === true
+    || instanceNested?.status === "connected"
+    || statusBodyRecord?.connected === true;
+  const phone = instanceNested?.owner as string
+    || statusBodyRecord?.phone as string
+    || statusBodyRecord?.number as string
     || null;
   const exitIp = extractExitIp(geoBody, proxyBody, statusBody, qrBody);
   const healthy = proxyRes.ok && statusRes.ok && (connected || !options?.includeQrProbe || qrProbeOk);
@@ -664,7 +672,7 @@ Deno.serve(async (req) => {
       if (!serverUrl) {
         serverUrl = uazapiAccount === "account_b"
           ? (Deno.env.get("UAZAPI_ACCOUNT_B_URL") || "https://walk2.uazapi.com")
-          : (Deno.env.get("UAZAPI_ACCOUNT_C_URL") || "https://walkholding.uazapi.com");
+          : (Deno.env.get("UAZAPI_ACCOUNT_C_URL") || "https://walk2.uazapi.com");
       }
       if (!finalAdminToken) {
         finalAdminToken = uazapiAccount === "account_b"
@@ -850,15 +858,15 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const statusRes = await fetch(`${chip.uazapi_server_url}/instance/status`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "InstanceToken": chip.instance_token },
+        const statusRes = await fetch(`${chip.uazapi_server_url}/instance/status?token=${chip.instance_token}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
         });
         const statusData = await statusRes.json();
 
-        const connected = statusData?.status === "connected" || statusData?.connected === true;
-        const phone = statusData?.phone || statusData?.number || null;
-        const qrCode = statusData?.qrcode || statusData?.qr_code || null;
+        const connected = statusData?.status?.connected === true || statusData?.instance?.status === "connected" || statusData?.connected === true;
+        const phone = statusData?.instance?.owner || statusData?.phone || statusData?.number || null;
+        const qrCode = statusData?.instance?.qrcode || statusData?.qrcode || statusData?.qr_code || null;
         const qrExpired = statusData?.qr_expired === true;
         const newStatus = connected ? "connected" : (qrCode ? "connecting" : "disconnected");
 
