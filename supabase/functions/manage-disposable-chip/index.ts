@@ -329,7 +329,7 @@ async function createUazapiInstance(
 }
 
 async function ensureInstanceToken(
-  supabase: SupabaseClientLike,
+  supabase: any,
   chip: Record<string, unknown>,
 ) {
   let instanceToken = String(chip.instance_token || "").trim();
