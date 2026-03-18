@@ -239,7 +239,7 @@ async function saveProxyMonitor(supabase: any, monitor: ProxyMonitorRecord) {
 }
 
 async function saveProxyLog(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   log: {
     chip_id: string;
     action: ProxyLogAction;
