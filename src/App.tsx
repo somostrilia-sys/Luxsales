@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 
 // Lazy-loaded pages
 const Index = lazy(() => import("./pages/Index"));
+const DashboardVoip = lazy(() => import("./pages/DashboardVoip"));
 const Colaboradores = lazy(() => import("./pages/Colaboradores"));
 const Cadastro = lazy(() => import("./pages/Cadastro"));
 const Extracao = lazy(() => import("./pages/Extracao"));
