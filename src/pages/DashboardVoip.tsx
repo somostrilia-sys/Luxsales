@@ -83,10 +83,10 @@ export default function DashboardVoip() {
     } as any);
     if (metricsData) setMetrics(metricsData);
 
-    // Recent calls
+    // Recent calls (with new fields from migration)
     const { data: calls } = await supabase
       .from("calls")
-      .select("id, destination_number, status, duration_seconds, talk_time_seconds, ai_qualification, ai_summary, started_at, ai_handled")
+      .select("id, destination_number, status, duration_seconds, talk_time_seconds, talk_duration_sec, ai_qualification, ai_summary, started_at, ai_handled, cost_brl, quality_mos, hangup_source, transfer_count, codec")
       .eq("company_id", companyId)
       .order("started_at", { ascending: false })
       .limit(15);
@@ -221,19 +221,23 @@ export default function DashboardVoip() {
                       <TableHead>Qualificação</TableHead>
                       <TableHead>Duração</TableHead>
                       <TableHead>IA</TableHead>
+                      <TableHead>MOS</TableHead>
+                      <TableHead>Custo</TableHead>
                       <TableHead>Horário</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {recentCalls.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhuma ligação registrada hoje</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Nenhuma ligação registrada hoje</TableCell></TableRow>
                     ) : recentCalls.map((c) => (
                       <TableRow key={c.id}>
                         <TableCell className="font-medium text-foreground font-mono text-sm">{c.destination_number}</TableCell>
                         <TableCell>{statusBadge(c.status)}</TableCell>
                         <TableCell>{qualBadge(c.ai_qualification)}</TableCell>
-                        <TableCell className="text-muted-foreground">{formatDuration(c.duration_seconds ?? 0)}</TableCell>
+                        <TableCell className="text-muted-foreground">{formatDuration(c.talk_duration_sec ?? c.duration_seconds ?? 0)}</TableCell>
                         <TableCell>{c.ai_handled ? <Badge className="bg-violet-500/20 text-violet-400 border-violet-500/30 text-xs">IA</Badge> : "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">{c.quality_mos ? <span className={c.quality_mos >= 3.5 ? "text-emerald-400" : c.quality_mos >= 2.5 ? "text-yellow-400" : "text-red-400"}>{Number(c.quality_mos).toFixed(1)}</span> : "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">{c.cost_brl ? `R$${Number(c.cost_brl).toFixed(2)}` : "—"}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">{c.started_at ? new Date(c.started_at).toLocaleTimeString("pt-BR") : "—"}</TableCell>
                       </TableRow>
                     ))}
