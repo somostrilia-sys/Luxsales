@@ -682,7 +682,7 @@ function DistributeTab() {
               )}
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
-              <Button onClick={handleDistributeAll} disabled={distributingAll || availableCount === 0 || commercialCollabs.length === 0} variant="outline" className="gap-2 flex-1">
+              <Button onClick={handleDistributeAll} disabled={distributingAll || commercialCollabs.length === 0} variant="default" className="gap-2 flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
                 {distributingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
                 Distribuir para Todos ({commercialCollabs.length} Consultores da {selectedCompanyName}) — {quantity} cada
               </Button>
