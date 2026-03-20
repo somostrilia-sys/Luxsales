@@ -91,6 +91,10 @@ Deno.serve(async (req) => {
         const leadPhone = normalizePhone(String(chat.phone || chatId));
         if (!leadPhone || leadPhone.length < 10) continue;
 
+        // Extrair nome e foto do perfil do lead
+        const leadName = String(chat.wa_name || chat.wa_contactName || chat.name || chat.pushname || "").trim();
+        const leadProfilePic = String(chat.image || chat.profilePicUrl || chat.imgUrl || "").trim();
+
         // ── 4. FILTRAR: só leads que receberam disparo ──
         if (!blastedPhones.has(leadPhone)) continue;
 
@@ -175,12 +179,16 @@ Deno.serve(async (req) => {
             last_message_at: now,
             unread_count: (Number(existingConv.unread_count) || 0) + unreadCount,
             status: "active",
+            ...(leadName ? { lead_name: leadName } : {}),
+            ...(leadProfilePic ? { lead_profile_pic: leadProfilePic } : {}),
           }).eq("id", convId);
         } else {
           const { data: newConv, error: convErr } = await supabase
             .from("conversations")
             .insert({
               lead_phone: leadPhone,
+              lead_name: leadName || null,
+              lead_profile_pic: leadProfilePic || null,
               consultant_id: blastCollaboratorId,
               collaborator_id: blastCollaboratorId,
               chip_instance_token: token,
@@ -209,6 +217,8 @@ Deno.serve(async (req) => {
                 last_message: messageText,
                 last_message_at: now,
                 unread_count: unreadCount,
+                ...(leadName ? { lead_name: leadName } : {}),
+                ...(leadProfilePic ? { lead_profile_pic: leadProfilePic } : {}),
               }).eq("id", convId);
             } else {
               errors.push(`Conv error ${leadPhone}: ${convErr.message}`);

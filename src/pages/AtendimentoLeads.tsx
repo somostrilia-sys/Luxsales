@@ -22,6 +22,8 @@ interface Conversation {
   id: string;
   consultant_id: string | null;
   lead_phone: string;
+  lead_name: string | null;
+  lead_profile_pic: string | null;
   lead_id: string | null;
   chip_id: string | null;
   chip_instance_token: string | null;
@@ -408,16 +410,23 @@ export default function AtendimentoLeads() {
             <Button variant="ghost" size="sm" onClick={() => setSelectedConv(null)}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
-              <Phone className="h-5 w-5 text-emerald-500" />
-            </div>
+            {selectedConv.lead_profile_pic ? (
+              <img src={selectedConv.lead_profile_pic} alt="" className="w-10 h-10 rounded-full object-cover" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                <Phone className="h-5 w-5 text-emerald-500" />
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <h2 className="font-semibold text-sm truncate">
-                  {formatPhone(selectedConv.lead_phone)}
+                  {selectedConv.lead_name || formatPhone(selectedConv.lead_phone)}
                 </h2>
                 {statusBadge(selectedConv.status)}
               </div>
+              {selectedConv.lead_name && (
+                <p className="text-xs text-muted-foreground">{formatPhone(selectedConv.lead_phone)}</p>
+              )}
               {chipInfo && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <Smartphone className="h-3 w-3" />
@@ -592,9 +601,13 @@ export default function AtendimentoLeads() {
               >
                 {/* Avatar */}
                 <div className="relative shrink-0">
-                  <div className="w-11 h-11 rounded-full bg-muted flex items-center justify-center">
-                    <User className="h-5 w-5 text-muted-foreground" />
-                  </div>
+                  {conv.lead_profile_pic ? (
+                    <img src={conv.lead_profile_pic} alt="" className="w-11 h-11 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-11 h-11 rounded-full bg-muted flex items-center justify-center">
+                      <User className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  )}
                   {conv.unread_count && conv.unread_count > 0 && (
                     <div className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
                       <span className="text-[10px] font-bold text-white">{conv.unread_count}</span>
@@ -606,7 +619,7 @@ export default function AtendimentoLeads() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-sm truncate">
-                      {formatPhone(conv.lead_phone)}
+                      {conv.lead_name || formatPhone(conv.lead_phone)}
                     </span>
                     <span className="text-xs text-muted-foreground shrink-0 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
