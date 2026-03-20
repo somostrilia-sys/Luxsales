@@ -276,7 +276,7 @@ Deno.serve(async (req: Request) => {
 
     // 11. Atualizar stats do template (increment via SQL)
     if (templateId) {
-      await supabase.rpc("exec_sql" as any, {}).catch(() => null); // ignore if rpc doesn't exist
+      try { await supabase.rpc("exec_sql" as any, {}); } catch (_) { /* ignore if rpc doesn't exist */ }
       await supabase
         .from("whatsapp_meta_templates")
         .update({

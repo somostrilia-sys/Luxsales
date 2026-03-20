@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
-  Shield, ShieldCheck, Ban, Clock, FileText,
+  Shield, ShieldCheck, Ban, Clock, FileText, RefreshCw,
   Check, X, Eye, Lock, Download, Loader2, Plus, Trash2,
 } from "lucide-react";
 
