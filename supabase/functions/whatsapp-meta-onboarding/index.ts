@@ -101,12 +101,12 @@ Deno.serve(async (req: Request) => {
           .eq("company_id", company_id)
           .single();
 
-        await supabase.from("whatsapp_meta_rate_limits").insert({
+        await supabase.from("whatsapp_meta_rate_limits").upsert({
           company_id,
           limit_type: "messaging",
           max_per_second: 80,
           max_per_day: 250,
-        }).onConflict("id").ignore();
+        } as any, { onConflict: "id" });
 
         // Audit
         await supabase.from("audit_logs").insert({

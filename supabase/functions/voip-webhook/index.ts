@@ -186,7 +186,7 @@ serve(async (req) => {
 
   } catch (err) {
     console.error('Error:', err)
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
@@ -229,13 +229,12 @@ function checkBusinessHours(businessHours: Record<string, unknown> | null): bool
 }
 
 async function updateDailyAnalytics(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   call: Record<string, unknown>
 ) {
   const today = new Date().toISOString().split('T')[0]
   const companyId = call.company_id as string
 
-  // Upsert analytics do dia
   const { data: existing } = await supabase
     .from('ai_call_analytics')
     .select('*')
@@ -249,12 +248,12 @@ async function updateDailyAnalytics(
     await supabase
       .from('ai_call_analytics')
       .update({
-        total_calls: (existing.total_calls || 0) + 1,
-        completed_calls: call.status === 'completed' ? (existing.completed_calls || 0) + 1 : existing.completed_calls,
-        total_duration_seconds: (existing.total_duration_seconds || 0) + ((call.billable_duration_sec as number) || 0),
-        total_cost_brl: (existing.total_cost_brl || 0) + ((call.cost_brl as number) || 0),
-      })
-      .eq('id', existing.id)
+        total_calls: ((existing as any).total_calls || 0) + 1,
+        completed_calls: call.status === 'completed' ? ((existing as any).completed_calls || 0) + 1 : (existing as any).completed_calls,
+        total_duration_seconds: ((existing as any).total_duration_seconds || 0) + ((call.billable_duration_sec as number) || 0),
+        total_cost_brl: ((existing as any).total_cost_brl || 0) + ((call.cost_brl as number) || 0),
+      } as any)
+      .eq('id', (existing as any).id)
   } else {
     await supabase.from('ai_call_analytics').insert({
       company_id: companyId,
@@ -263,6 +262,6 @@ async function updateDailyAnalytics(
       completed_calls: call.status === 'completed' ? 1 : 0,
       total_duration_seconds: (call.billable_duration_sec as number) || 0,
       total_cost_brl: (call.cost_brl as number) || 0,
-    })
+    } as any)
   }
 }
