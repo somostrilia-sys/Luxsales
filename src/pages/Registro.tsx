@@ -57,7 +57,8 @@ export default function Registro() {
     if (!nome || !email || !companyId) { toast.error("Preencha os campos obrigatórios"); return; }
     setLoading(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL || "https://ecaduzwautlpzpvjognr.supabase.co"}/functions/v1/register-collaborator`, {
+      const { EDGE_BASE: EB } = await import("@/lib/constants");
+      const res = await fetch(`${EB}/register-collaborator`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Public-Register": "true" },
         body: JSON.stringify({

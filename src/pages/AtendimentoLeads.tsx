@@ -14,7 +14,7 @@ import {
   Smartphone, Clock, User, ChevronRight, RefreshCw
 } from "lucide-react";
 
-const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
+import { EDGE_BASE } from "@/lib/constants";
 
 // ── Types ──
 
@@ -329,7 +329,7 @@ export default function AtendimentoLeads() {
       const token = session?.access_token;
       if (!token) throw new Error("Sessão expirada");
 
-      await fetch("https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/send-whatsapp-message", {
+      await fetch(`${EDGE_BASE}/send-whatsapp-message`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({

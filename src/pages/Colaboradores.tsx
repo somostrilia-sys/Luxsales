@@ -199,8 +199,9 @@ export default function Colaboradores() {
   const manageCollaborator = async (action: string, collaboratorId: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      const { EDGE_BASE } = await import("@/lib/constants");
       const res = await fetch(
-        `https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/manage-collaborator`,
+        `${EDGE_BASE}/manage-collaborator`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },

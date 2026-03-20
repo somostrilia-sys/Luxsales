@@ -75,7 +75,8 @@ export default function Extracao() {
       const { data: { session } } = await supabase.auth.getSession();
       setProgress(30);
 
-      const res = await fetch(`https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/unified-extract`, {
+      const { EDGE_BASE } = await import("@/lib/constants");
+      const res = await fetch(`${EDGE_BASE}/unified-extract`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

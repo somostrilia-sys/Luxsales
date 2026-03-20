@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 
 import { toast } from "sonner";
 import { Mail, Loader2, ArrowLeft } from "lucide-react";
+import { LOGO_URL } from "@/lib/constants";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -34,7 +35,7 @@ export default function ForgotPassword() {
     <div className="min-h-screen flex items-center justify-center p-4 login-bg">
       <div className="w-full max-w-md space-y-8">
         <div className="flex justify-center">
-          <img src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/painel-agente/logos/logo-walk-holding-transparent.png" alt="Walk Holding" className="h-28 object-contain drop-shadow-[0_0_30px_hsl(217,91%,53%,0.15)]" />
+          <img src={LOGO_URL} alt="Walk Holding" className="h-28 object-contain drop-shadow-[0_0_30px_hsl(217,91%,53%,0.15)]" />
         </div>
 
       <Card variant="gradient" className="card-accent-top">

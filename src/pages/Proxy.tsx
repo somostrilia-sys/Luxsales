@@ -10,8 +10,7 @@ import { Loader2, Network, ShieldCheck, TriangleAlert, Activity } from "lucide-r
 import { supabase } from "@/lib/supabase";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { toast } from "sonner";
-
-const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
+import { EDGE_BASE } from "@/lib/constants";
 
 type ProxyLog = {
   id: string;

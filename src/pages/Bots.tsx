@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/lib/supabase";
+import { EDGE_BASE } from "@/lib/constants";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -260,7 +261,7 @@ function ProxyMonitorPanel({ chip }: { chip: DisposableChip }) {
 
 // ── Disposable Chips Section ──
 
-const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
+// EDGE_BASE imported at top of file
 
 function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | null }) {
   const [chips, setChips] = useState<DisposableChip[]>([]);

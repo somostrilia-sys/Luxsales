@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Mail, Lock, Loader2, ArrowRight } from "lucide-react";
+import { LOGO_URL } from "@/lib/constants";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -33,7 +34,7 @@ export default function Login() {
       <div className="w-full max-w-md space-y-8">
         {/* Logo area */}
         <div className="flex justify-center">
-          <img src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/painel-agente/logos/logo-walk-holding-transparent.png" alt="Walk Holding" className="h-32 object-contain drop-shadow-[0_0_30px_hsl(217,91%,53%,0.15)]" />
+          <img src={LOGO_URL} alt="Walk Holding" className="h-32 object-contain drop-shadow-[0_0_30px_hsl(217,91%,53%,0.15)]" />
         </div>
 
         <Card variant="gradient" className="card-accent-top">

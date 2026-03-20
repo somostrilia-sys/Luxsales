@@ -3,6 +3,7 @@
 // Suporta: text, template, image, video, document, audio, location, interactive
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { retryWithBackoff, fetchWithTimeout } from "../_shared/retry.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -189,8 +190,8 @@ Deno.serve(async (req: Request) => {
     if (type === "reaction") metaPayload.reaction = body.reaction;
     if (body.context) metaPayload.context = body.context;
 
-    // 8. Enviar para Meta API
-    const metaResponse = await fetch(
+    // 8. Enviar para Meta API (com retry e timeout de 15s)
+    const metaResponse = await retryWithBackoff(() => fetchWithTimeout(
       `${META_API_BASE}/${apiVersion}/${phoneNumberId}/messages`,
       {
         method: "POST",
@@ -200,7 +201,8 @@ Deno.serve(async (req: Request) => {
         },
         body: JSON.stringify(metaPayload),
       },
-    );
+      15000,
+    ));
 
     const metaResult = await metaResponse.json();
 

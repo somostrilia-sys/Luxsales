@@ -121,8 +121,9 @@ export default function Cadastro() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const password = form.password || getDefaultPassword(form.name);
+      const { EDGE_BASE } = await import("@/lib/constants");
       const res = await fetch(
-        `https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/register-collaborator`,
+        `${EDGE_BASE}/register-collaborator`,
         {
           method: "POST",
           headers: {
@@ -174,8 +175,9 @@ export default function Cadastro() {
       for (const row of rows) {
         try {
           const password = row.password || getDefaultPassword(row.name || row.nome || "User");
+          const { EDGE_BASE: EB } = await import("@/lib/constants");
           const res = await fetch(
-            `https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/register-collaborator`,
+            `${EB}/register-collaborator`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },

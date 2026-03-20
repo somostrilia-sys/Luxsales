@@ -11,6 +11,7 @@ import {
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { LOGO_URL } from "@/lib/constants";
 
 interface MenuItem {
   title: string;
@@ -101,7 +102,7 @@ export function AppSidebar() {
             />
           ) : (
             <img
-              src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/assets/logos/logo-walk-holding-transparent.png"
+              src={LOGO_URL}
               alt="Walk Holding"
               className="h-16 w-auto object-contain max-w-[180px] shrink-0 drop-shadow-[0_0_16px_hsl(217,91%,53%,0.08)]"
             />

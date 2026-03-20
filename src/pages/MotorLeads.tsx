@@ -528,7 +528,8 @@ function DistributeTab() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
-      const res = await fetch("https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/blast-engine", {
+      const { EDGE_BASE: EB } = await import("@/lib/constants");
+      const res = await fetch(`${EB}/blast-engine`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ action: "force_refill", refill_count: 500 }),
@@ -1003,7 +1004,7 @@ function HistoryTab() {
 // ═══════════════════════════════════════════
 // BLAST SECTION — Motor de Disparo (Consultor)
 // ═══════════════════════════════════════════
-const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
+import { EDGE_BASE } from "@/lib/constants";
 
 // Bug #006 fix: accept selectedLeadIds from ConsultorView
 function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) {

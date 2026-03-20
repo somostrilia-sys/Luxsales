@@ -3,6 +3,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { supabase } from "@/lib/supabase";
+import { SUPABASE_URL } from "@/lib/constants";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -100,8 +101,7 @@ type CampaignFormState = {
   scheduleEnd: string;
 };
 
-// Usar o cliente Supabase existente ao invés de credenciais hardcoded
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://ecaduzwautlpzpvjognr.supabase.co";
+// SUPABASE_URL imported at top of file
 const DEFAULT_SAMPLE_TEXT = "Boa tarde, tudo bem? Meu nome é Lucas, da proteção veicular Objetivo.";
 
 const initialObjections = (): ObjectionItem[] => [
@@ -495,7 +495,7 @@ export default function VoiceAI() {
       <div className="space-y-6">
         <PageHeader
           title="Ligações IA"
-          subtitle={`Treinamento, vozes e campanhas com dados do projeto ecaduzwautlpzpvjognr${collaborator?.company?.name ? ` · ${collaborator.company.name}` : ""}`}
+          subtitle={`Treinamento, vozes e campanhas${collaborator?.company?.name ? ` · ${collaborator.company.name}` : ""}`}
         />
 
         <Tabs defaultValue="treinamento" className="space-y-6">

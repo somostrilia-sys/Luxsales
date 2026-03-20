@@ -8,6 +8,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { fetchWithTimeout } from '../_shared/retry.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -183,11 +184,11 @@ async function callESL(endpoint: string, data: Record<string, unknown>) {
     headers['Authorization'] = `Bearer ${ESL_API_TOKEN}`
   }
 
-  const response = await fetch(`${ESL_API_URL}${endpoint}`, {
+  const response = await fetchWithTimeout(`${ESL_API_URL}${endpoint}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(data),
-  })
+  }, 15000)
 
   if (!response.ok) {
     throw new Error(`ESL API error: ${response.status} ${await response.text()}`)

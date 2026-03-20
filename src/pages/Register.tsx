@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { LOGO_URL } from "@/lib/constants";
 import { Loader2, Copy, CheckCircle2, AlertTriangle, Link2, ArrowRight, ShieldAlert } from "lucide-react";
 
 interface InviteData {
@@ -218,8 +219,9 @@ function InviteRegistration({ token }: { token: string }) {
     }
     setLoading(true);
     try {
+      const { EDGE_BASE } = await import("@/lib/constants");
       const res = await fetch(
-        `https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/register-collaborator`,
+        `${EDGE_BASE}/register-collaborator`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Public-Register": "true" },
@@ -333,7 +335,7 @@ function InviteRegistration({ token }: { token: string }) {
       <div className="w-full max-w-lg space-y-6">
         <div className="text-center space-y-4">
           <div className="flex justify-center">
-            <img src="https://ecaduzwautlpzpvjognr.supabase.co/storage/v1/object/public/painel-agente/logos/logo-walk-holding-transparent.png" alt="Walk Holding" className="h-28 object-contain drop-shadow-[0_0_30px_hsl(217,91%,53%,0.15)]" />
+            <img src={LOGO_URL} alt="Walk Holding" className="h-28 object-contain drop-shadow-[0_0_30px_hsl(217,91%,53%,0.15)]" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Cadastro de Colaborador</h1>
           {(displayCompanyName || displayRoleName) && (

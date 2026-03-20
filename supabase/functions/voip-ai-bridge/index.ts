@@ -9,6 +9,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { retryWithBackoff, fetchWithTimeout } from '../_shared/retry.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -96,9 +97,9 @@ serve(async (req) => {
           .update({ transcription_status: 'processing' })
           .eq('id', recording_id)
 
-        // Chamar Deepgram para transcrição
+        // Chamar Deepgram para transcrição (com retry e timeout)
         const deepgramKey = Deno.env.get('DEEPGRAM_API_KEY')
-        const dgResponse = await fetch('https://api.deepgram.com/v1/listen?' + new URLSearchParams({
+        const dgResponse = await retryWithBackoff(() => fetchWithTimeout('https://api.deepgram.com/v1/listen?' + new URLSearchParams({
           model: 'nova-2',
           language: 'pt-BR',
           punctuate: 'true',
@@ -112,7 +113,7 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ url: recording.recording_url }),
-        })
+        }, 30000))
 
         if (!dgResponse.ok) {
           await supabase
@@ -169,7 +170,7 @@ ${calls.map((c, i) => `Chamada ${i + 1}: ${c.ai_summary || 'sem resumo'} | Lead:
 
 Retorne JSON com: { "summary": "resumo geral", "top_objections": ["..."], "recommendations": ["..."], "best_time_to_call": "...", "script_improvements": ["..."] }`
 
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
+        const response = await retryWithBackoff(() => fetchWithTimeout('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
             'x-api-key': ANTHROPIC_API_KEY!,
@@ -181,7 +182,7 @@ Retorne JSON com: { "summary": "resumo geral", "top_objections": ["..."], "recom
             max_tokens: 1000,
             messages: [{ role: 'user', content: insightsPrompt }],
           }),
-        })
+        }))
 
         const result = await response.json()
         const insights = JSON.parse(result.content[0].text)
@@ -228,7 +229,7 @@ Retorne exatamente este JSON:
   "summary": "resumo em 2-3 frases"
 }`
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await retryWithBackoff(() => fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'x-api-key': ANTHROPIC_API_KEY!,
@@ -240,7 +241,7 @@ Retorne exatamente este JSON:
       max_tokens: 800,
       messages: [{ role: 'user', content: prompt }],
     }),
-  })
+  }))
 
   const result = await response.json()
   return JSON.parse(result.content[0].text)
