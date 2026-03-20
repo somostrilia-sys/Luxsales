@@ -1009,14 +1009,34 @@ import { EDGE_BASE } from "@/lib/constants";
 // Bug #006 fix: accept selectedLeadIds from ConsultorView
 function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) {
   const { collaborator } = useCollaborator();
-  const [messageTemplates, setMessageTemplates] = useState([
-    "Olá {nome}! Vi que você atua nessa área e quero apresentar uma solução que pode proteger seus veículos com muito mais segurança e custo acessível. Posso te mostrar em 5 minutos?",
-    "",
-    "",
-    "",
-    "",
-  ]);
-  const [dailyLimit, setDailyLimit] = useState(100);
+
+  // Persistir templates no localStorage para não perder ao trocar de página
+  const defaultTemplate = "Olá {nome}! Vi que você atua nessa área e quero apresentar uma solução que pode proteger seus veículos com muito mais segurança e custo acessível. Posso te mostrar em 5 minutos?";
+  const [messageTemplates, setMessageTemplates] = useState(() => {
+    try {
+      const saved = localStorage.getItem("blast_templates");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 5) return parsed;
+      }
+    } catch { /* ignore */ }
+    return [defaultTemplate, "", "", "", ""];
+  });
+  const [dailyLimit, setDailyLimit] = useState(() => {
+    try {
+      const saved = localStorage.getItem("blast_daily_limit");
+      if (saved) return Number(saved) || 100;
+    } catch { /* ignore */ }
+    return 100;
+  });
+  // Salvar templates e limite no localStorage ao alterar
+  useEffect(() => {
+    try { localStorage.setItem("blast_templates", JSON.stringify(messageTemplates)); } catch { /* */ }
+  }, [messageTemplates]);
+  useEffect(() => {
+    try { localStorage.setItem("blast_daily_limit", String(dailyLimit)); } catch { /* */ }
+  }, [dailyLimit]);
+
   const [creating, setCreating] = useState(false);
   const [sending, setSending] = useState(false);
   const [pausing, setPausing] = useState(false);
@@ -1066,15 +1086,19 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
         }
         return serverJob;
       });
-      // Load template into editable state when job is paused
-      if (data?.job?.status === "paused" && data?.job?.message_template) {
+      // Load templates from job into editable state
+      if (data?.job?.message_template) {
+        const jobTemplates = Array.isArray(data.job.message_templates) ? data.job.message_templates : [];
         setMessageTemplates(prev => {
-          if (prev[0] === "" || prev[0] === undefined) {
-            const templates = [...prev];
-            templates[0] = data.job.message_template;
-            return templates;
+          // Se já tem templates salvos no localStorage que diferem do default, manter
+          const hasUserEdited = prev.some((t: string, i: number) => i > 0 && t && t.trim().length > 0);
+          if (hasUserEdited) return prev;
+          // Carregar do job
+          const templates = [data.job.message_template, "", "", "", ""];
+          for (let i = 0; i < jobTemplates.length && i < 5; i++) {
+            if (jobTemplates[i]) templates[i] = jobTemplates[i];
           }
-          return prev;
+          return templates;
         });
       }
     } catch {
