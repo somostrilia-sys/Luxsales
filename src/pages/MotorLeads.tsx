@@ -1304,6 +1304,11 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
     setPausing(true);
     try {
       if (job.status === "paused") {
+        // Enviar templates atualizados ao retomar
+        const activeTemplates = messageTemplates.filter(t => t.trim().length > 0);
+        if (activeTemplates.length > 0) {
+          await callBlast({ action: "update_job", job_id: job.id, message_template: activeTemplates[0], message_templates: activeTemplates, daily_limit: dailyLimit });
+        }
         await callBlast({ action: "resume", job_id: job.id });
         toast.success("Disparo retomado");
         setJob((prev: any) => prev ? { ...prev, status: "running" } : prev);
