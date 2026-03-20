@@ -50,7 +50,7 @@ export default function Index() {
   const { collaborator, isCEO, roleLevel } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
   const [period, setPeriod] = useState("30");
-  const [stats, setStats] = useState({ leads: 0, agents: 0, messagestoday: 0, companies: 0 });
+  const [stats, setStats] = useState({ leads: 0, agents: 0, messagestoday: 0, companies: 0, whatsappMeta: 0, calls: 0, billingTotal: 0 });
   const [dailyData, setDailyData] = useState<any[]>([]);
   const [usageLimits, setUsageLimits] = useState<any>(null);
   const [usageCounts, setUsageCounts] = useState({ leads: 0, extractions: 0 });
@@ -86,10 +86,25 @@ export default function Index() {
       .gte("created_at", today);
     if (isConsultor && consultantId) msgsQ = msgsQ.eq("consultant_id", consultantId);
 
-    const [agentsRes, msgsRes, companiesRes] = await Promise.all([
+    // Additional queries for new modules
+    const companyId = collaborator?.company_id;
+    const waMetaQ = companyId
+      ? supabase.from("whatsapp_meta_messages").select("id", { count: "exact", head: true }).eq("company_id", companyId).gte("created_at", today)
+      : Promise.resolve({ count: 0 });
+    const callsQ = companyId
+      ? supabase.from("calls").select("id", { count: "exact", head: true }).eq("company_id", companyId).gte("created_at", today)
+      : Promise.resolve({ count: 0 });
+    const billingQ = companyId
+      ? supabase.from("billing_usage").select("total_cost_brl").eq("company_id", companyId)
+      : Promise.resolve({ data: [] });
+
+    const [agentsRes, msgsRes, companiesRes, waMetaRes, callsRes, billingRes] = await Promise.all([
       agentsQ,
       msgsQ,
       isCEO ? supabase.from("companies").select("id") : Promise.resolve({ data: [] }),
+      waMetaQ,
+      callsQ,
+      billingQ,
     ]);
 
     let dailyQuery = isConsultor && consultantId
@@ -116,11 +131,16 @@ export default function Index() {
     });
     setDailyData(Object.entries(dayCounts).map(([day, count]) => ({ day, leads: count })));
 
+    const billingTotal = ((billingRes as any).data || []).reduce((s: number, b: any) => s + Number(b.total_cost_brl || 0), 0);
+
     setStats({
       leads: leadsCount,
       agents: agentsRes.count || 0,
       messagestoday: msgsRes.count || 0,
       companies: (companiesRes.data || []).length,
+      whatsappMeta: (waMetaRes as any).count || 0,
+      calls: (callsRes as any).count || 0,
+      billingTotal,
     });
 
     if (roleData?.usage_limits) {

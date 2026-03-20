@@ -55,9 +55,26 @@ export default function RelatoriosVoz() {
   const loadReport = async () => {
     setLoading(true);
 
-    // Load call_logs data
-    const { data: logs } = await supabase.from("call_logs").select("*").order("created_at", { ascending: false }).limit(1000);
+    const companyId = collaborator?.company_id;
+
+    // Load call_logs data (with new fields from migration)
+    const { data: logs } = await supabase.from("call_logs")
+      .select("*, sentiment_overall, lead_temperature, compliance_flags, cost_brl, tokens_used")
+      .order("created_at", { ascending: false }).limit(1000);
     const callData = logs ?? [];
+
+    // Load AI analytics from new table
+    const { data: aiAnalytics } = await supabase.from("ai_call_analytics")
+      .select("*")
+      .eq("company_id", companyId)
+      .order("analytics_date", { ascending: false })
+      .limit(30);
+
+    // Load billing data
+    const { data: billingData } = await supabase.from("billing_usage")
+      .select("channel, total_cost_brl, created_at")
+      .eq("company_id", companyId)
+      .in("channel", ["voip", "ai_call"]);
 
     const total = callData.length;
     const answered = callData.filter((c: any) => ["answered", "completed", "connected"].includes((c.status ?? "").toLowerCase())).length;
@@ -65,12 +82,11 @@ export default function RelatoriosVoz() {
     const qualified = callData.filter((c: any) => ["qualificado", "qualified", "hot"].includes((c.result ?? "").toLowerCase())).length;
     const aiCalls = callData.filter((c: any) => c.ai_handled === true).length;
 
-    // Cost calculations
-    const aiCostPerMinute = 0.12; // R$/min for AI calls (STT + LLM + TTS)
-    const sipCostPerMinute = 0.03; // R$/min for SIP trunk
-    const totalAiCost = (totalDuration / 60) * aiCostPerMinute;
-    const totalSipCost = (totalDuration / 60) * sipCostPerMinute;
-    const totalCost = totalAiCost + totalSipCost;
+    // Cost from real billing data
+    const totalAiCost = (billingData ?? []).filter((b: any) => b.channel === "ai_call").reduce((s: number, b: any) => s + Number(b.total_cost_brl || 0), 0);
+    const totalSipCost = (billingData ?? []).filter((b: any) => b.channel === "voip").reduce((s: number, b: any) => s + Number(b.total_cost_brl || 0), 0);
+    // Fallback to estimated costs if no billing data
+    const totalCost = (totalAiCost + totalSipCost) || ((totalDuration / 60) * 0.15);
     const avgCostPerCall = total > 0 ? totalCost / total : 0;
     const costPerQualified = qualified > 0 ? totalCost / qualified : 0;
 

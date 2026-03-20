@@ -286,15 +286,19 @@ export default function VoiceAI() {
   const loadData = async () => {
     setLoadingData(true);
     try {
-      const [voicesRaw, campaignsRaw, logsRaw] = await Promise.all([
+      const [voicesRaw, campaignsRaw, logsRaw, scriptsRaw, analyticsRaw] = await Promise.all([
         fetchRestTable("voice_profiles", "*"),
         fetchRestTable("call_campaigns", "*"),
         fetchRestTable("call_logs", "*"),
+        fetchRestTable("ai_call_scripts", "*"),
+        fetchRestTable("ai_call_analytics", "*"),
       ]);
 
       const normalizedVoices = (voicesRaw ?? []).map(normalizeVoice).filter((item: VoiceProfile) => item.voice_key);
       const normalizedCampaigns = (campaignsRaw ?? []).map(normalizeCampaign);
       const normalizedLogs = (logsRaw ?? []).map(normalizeLog);
+      // AI call scripts and analytics are available from the new tables
+      console.log(`Loaded: ${(scriptsRaw ?? []).length} AI scripts, ${(analyticsRaw ?? []).length} analytics records`);
 
       setVoiceProfiles(normalizedVoices);
       setCampaigns(normalizedCampaigns);
@@ -893,6 +897,7 @@ export default function VoiceAI() {
                       <TableHead>Status</TableHead>
                       <TableHead>Duração</TableHead>
                       <TableHead>Resultado</TableHead>
+                      <TableHead>Sentimento</TableHead>
                       <TableHead>Data</TableHead>
                       <TableHead>Gravação</TableHead>
                     </TableRow>
@@ -900,15 +905,32 @@ export default function VoiceAI() {
                   <TableBody>
                     {callLogs.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground">Nenhum registro de ligação encontrado.</TableCell>
+                        <TableCell colSpan={8} className="text-center text-muted-foreground">Nenhum registro de ligação encontrado.</TableCell>
                       </TableRow>
-                    ) : callLogs.map((log) => (
+                    ) : callLogs.map((log: any) => (
                       <TableRow key={log.id}>
                         <TableCell>{log.lead_phone || "—"}</TableCell>
                         <TableCell>{log.voice_key || "—"}</TableCell>
                         <TableCell><Badge variant="outline">{log.status || "—"}</Badge></TableCell>
                         <TableCell>{log.duration_sec ? `${log.duration_sec}s` : "—"}</TableCell>
-                        <TableCell>{log.result || "—"}</TableCell>
+                        <TableCell>
+                          {log.lead_temperature ? (
+                            <Badge variant="outline" className={
+                              log.lead_temperature === "hot" ? "bg-red-500/20 text-red-400" :
+                              log.lead_temperature === "warm" ? "bg-yellow-500/20 text-yellow-400" :
+                              "bg-blue-500/20 text-blue-400"
+                            }>{log.lead_temperature?.toUpperCase()}</Badge>
+                          ) : (log.result || "—")}
+                        </TableCell>
+                        <TableCell>
+                          {log.sentiment_overall ? (
+                            <Badge variant="outline" className={
+                              log.sentiment_overall === "positive" ? "bg-emerald-500/20 text-emerald-400" :
+                              log.sentiment_overall === "negative" ? "bg-red-500/20 text-red-400" :
+                              "bg-muted text-muted-foreground"
+                            }>{log.sentiment_overall}</Badge>
+                          ) : "—"}
+                        </TableCell>
                         <TableCell>{formatDate(log.created_at)}</TableCell>
                         <TableCell>
                           {log.recording_url ? <audio controls className="max-w-[220px]" src={log.recording_url} /> : "—"}

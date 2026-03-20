@@ -29,11 +29,16 @@ export default function ConfiguracoesVoz() {
   // Company
   const [company, setCompany] = useState({ name: "", cnpj: "", logo_url: "" });
 
-  // SIP
-  const [sip, setSip] = useState({ host: "", port: "5060", username: "", password: "", maxChannels: "10" });
+  // SIP (agora via sip_trunks)
+  const [sip, setSip] = useState({ id: "", host: "", port: "5060", username: "", password: "", maxChannels: "10", provider: "custom", transport: "UDP" });
+  const [sipTrunks, setSipTrunks] = useState<any[]>([]);
 
-  // WhatsApp
-  const [wa, setWa] = useState({ instance_id: "", api_key: "", number: "" });
+  // WhatsApp Meta (via whatsapp_meta_credentials)
+  const [wa, setWa] = useState({ instance_id: "", api_key: "", number: "", meta_waba_id: "", meta_access_token: "", meta_phone_number_id: "" });
+  const [metaCreds, setMetaCreds] = useState<any>(null);
+
+  // PBX Config
+  const [pbx, setPbx] = useState<any>(null);
 
   // Voice AI
   const [ai, setAi] = useState({
@@ -49,17 +54,47 @@ export default function ConfiguracoesVoz() {
   useEffect(() => {
     loadCompany();
     loadAgents();
+    loadSipTrunks();
+    loadMetaCreds();
+    loadPbxConfig();
   }, [collaborator]);
 
   const loadCompany = async () => {
     const companyId = collaborator?.company_id;
     if (!companyId) return;
-    const { data } = await supabase.from("companies").select("name, cnpj, logo_url, sip_host, sip_port, sip_username, sip_password, sip_max_channels, whatsapp_instance_id, whatsapp_api_key, whatsapp_number").eq("id", companyId).single();
+    const { data } = await supabase.from("companies").select("name, cnpj, logo_url, whatsapp_instance_id, whatsapp_api_key, whatsapp_number, meta_business_id, lgpd_dpo_email, lgpd_dpo_name").eq("id", companyId).single();
     if (data) {
       setCompany({ name: data.name ?? "", cnpj: data.cnpj ?? "", logo_url: data.logo_url ?? "" });
-      setSip({ host: data.sip_host ?? "", port: String(data.sip_port ?? 5060), username: data.sip_username ?? "", password: data.sip_password ?? "", maxChannels: String(data.sip_max_channels ?? 10) });
-      setWa({ instance_id: data.whatsapp_instance_id ?? "", api_key: data.whatsapp_api_key ?? "", number: data.whatsapp_number ?? "" });
+      setWa({ instance_id: data.whatsapp_instance_id ?? "", api_key: data.whatsapp_api_key ?? "", number: data.whatsapp_number ?? "", meta_waba_id: "", meta_access_token: "", meta_phone_number_id: "" });
     }
+  };
+
+  const loadSipTrunks = async () => {
+    const companyId = collaborator?.company_id;
+    if (!companyId) return;
+    const { data } = await supabase.from("sip_trunks").select("*").eq("company_id", companyId).order("created_at");
+    setSipTrunks(data ?? []);
+    if (data && data.length > 0) {
+      const t = data[0];
+      setSip({ id: t.id, host: t.sip_host ?? "", port: String(t.sip_port ?? 5060), username: t.auth_username ?? "", password: "", maxChannels: String(t.max_channels ?? 10), provider: t.provider ?? "custom", transport: t.sip_transport ?? "UDP" });
+    }
+  };
+
+  const loadMetaCreds = async () => {
+    const companyId = collaborator?.company_id;
+    if (!companyId) return;
+    const { data } = await supabase.from("whatsapp_meta_credentials").select("*").eq("company_id", companyId).single();
+    if (data) {
+      setMetaCreds(data);
+      setWa(prev => ({ ...prev, meta_waba_id: data.meta_waba_id ?? "", meta_access_token: data.meta_access_token ?? "", meta_phone_number_id: data.meta_phone_number_id ?? "" }));
+    }
+  };
+
+  const loadPbxConfig = async () => {
+    const companyId = collaborator?.company_id;
+    if (!companyId) return;
+    const { data } = await supabase.from("pbx_config").select("*").eq("company_id", companyId).single();
+    setPbx(data);
   };
 
   const loadAgents = async () => {
@@ -78,20 +113,56 @@ export default function ConfiguracoesVoz() {
 
   const saveSip = async () => {
     setSaving(true);
-    const { error } = await supabase.from("companies").update({
-      sip_host: sip.host, sip_port: Number(sip.port), sip_username: sip.username,
-      sip_password: sip.password, sip_max_channels: Number(sip.maxChannels),
-    }).eq("id", collaborator?.company_id);
-    if (error) toast.error("Erro ao salvar."); else toast.success("SIP Trunk salvo!");
+    const companyId = collaborator?.company_id;
+    if (!companyId) { setSaving(false); return; }
+
+    const trunkData = {
+      company_id: companyId,
+      name: company.name + " - SIP Trunk",
+      provider: sip.provider,
+      sip_host: sip.host,
+      sip_port: Number(sip.port),
+      sip_transport: sip.transport,
+      auth_username: sip.username,
+      max_channels: Number(sip.maxChannels),
+    };
+
+    let error;
+    if (sip.id) {
+      ({ error } = await supabase.from("sip_trunks").update(trunkData).eq("id", sip.id));
+    } else {
+      ({ error } = await supabase.from("sip_trunks").insert(trunkData));
+    }
+    if (error) toast.error("Erro ao salvar: " + error.message); else { toast.success("SIP Trunk salvo na tabela sip_trunks!"); loadSipTrunks(); }
     setSaving(false);
   };
 
   const saveWa = async () => {
     setSaving(true);
-    const { error } = await supabase.from("companies").update({
+    const companyId = collaborator?.company_id;
+    if (!companyId) { setSaving(false); return; }
+
+    // Save legacy fields
+    await supabase.from("companies").update({
       whatsapp_instance_id: wa.instance_id, whatsapp_api_key: wa.api_key, whatsapp_number: wa.number,
-    }).eq("id", collaborator?.company_id);
-    if (error) toast.error("Erro ao salvar."); else toast.success("WhatsApp salvo!");
+    }).eq("id", companyId);
+
+    // Save Meta credentials if provided
+    if (wa.meta_waba_id || wa.meta_access_token) {
+      const { data, error } = await supabase.functions.invoke("whatsapp-meta-onboarding", {
+        body: {
+          company_id: companyId,
+          action: "setup_credentials",
+          meta_access_token: wa.meta_access_token,
+          meta_waba_id: wa.meta_waba_id,
+          meta_phone_number_id: wa.meta_phone_number_id,
+        },
+      });
+      if (error || data?.error) toast.error(data?.error || "Erro ao salvar Meta credentials");
+      else toast.success("WhatsApp Meta configurado! Webhook: " + (data?.webhook_url || ""));
+    } else {
+      toast.success("WhatsApp salvo!");
+    }
     setSaving(false);
   };
 
