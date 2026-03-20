@@ -45,7 +45,7 @@ const consultantItems: MenuItem[] = [
 
 const voiceItems: MenuItem[] = [
   { title: "Dashboard VoIP", url: "/dashboard-voip", icon: BarChart3, levels: [0, 1] },
-  { title: "Discador", url: "/discador", icon: Phone, levels: [0, 1, 2] },
+  { title: "Discador", url: "/discador", icon: Phone, levels: [0] },
   { title: "Campanhas", url: "/call-campaigns", icon: Megaphone, levels: [0, 1] },
   { title: "Leads", url: "/leads-discador", icon: Users, levels: [0, 1] },
   { title: "Ligações IA", url: "/voice-ai", icon: PhoneCall, levels: [0, 1] },
