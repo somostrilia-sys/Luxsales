@@ -1,969 +1,516 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+/**
+ * manage-disposable-chip
+ *
+ * Actions:
+ *   create  → cria instância UAZAPI + salva no DB
+ *   connect → busca QR code da instância UAZAPI
+ *   status  → verifica status da instância UAZAPI
+ *   delete  → remove instância UAZAPI + deleta do DB
+ *   reconnect_all → reconecta todos os chips desconectados de um colaborador
+ */
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-type SupabaseClientLike = ReturnType<typeof createClient>;
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-type ProxyConfig = {
-  host: string;
-  port: number | null;
-  username: string;
-  password: string;
-  protocol: string;
-  enabled: boolean;
-  last_tested_at: string | null;
-};
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, serviceKey);
 
-type ProxyMonitorStatus = "unknown" | "healthy" | "degraded" | "error";
-type ProxySource = "manual" | "chip" | "iproyal" | "none";
-type ProxyLogAction = "create" | "connect" | "test";
+  try {
+    const body = await req.json();
+    const { action, chip_id, collaborator_id, uazapi_server_url, uazapi_admin_token, proxy_url } = body;
 
-type ProxyMonitorRecord = {
-  chip_id: string;
-  proxy_url: string | null;
-  source: ProxySource;
-  status: ProxyMonitorStatus;
-  last_tested_at: string;
-  last_success_at?: string | null;
-  last_error?: string | null;
-  last_http_status?: number | null;
-  last_response_ms?: number | null;
-  exit_ip?: string | null;
-  target_url?: string | null;
-  metadata?: Record<string, unknown>;
-  updated_at: string;
-};
+    if (action === "create") {
+      if (!collaborator_id) return json({ error: "collaborator_id obrigatório" }, 400);
 
-type ProxyMonitorResult = ProxyMonitorRecord & {
-  ok: boolean;
-  city: string | null;
-  region: string | null;
-  country: string | null;
-  qr_code: string | null;
-  instance_token: string | null;
-  connected: boolean;
-  phone: string | null;
-};
+      // ── FIX: Contar chips REAIS existentes (COUNT), não baseado em chip_index ──
+      const { count, error: countErr } = await supabase
+        .from("disposable_chips")
+        .select("id", { count: "exact", head: true })
+        .eq("collaborator_id", collaborator_id);
 
-function json(data: Record<string, unknown>, status = 200) {
+      const realCount = count ?? 0;
+      if (realCount >= 5) return json({ error: "Máximo de 5 chips por consultor" }, 400);
+
+      // ── FIX: Calcular próximo chip_index disponível (preencher gaps) ──
+      const { data: existing } = await supabase
+        .from("disposable_chips")
+        .select("chip_index")
+        .eq("collaborator_id", collaborator_id)
+        .order("chip_index", { ascending: true });
+
+      const usedIndices = new Set((existing || []).map(e => e.chip_index));
+      let nextIndex = 1;
+      while (usedIndices.has(nextIndex) && nextIndex <= 5) nextIndex++;
+      if (nextIndex > 5) return json({ error: "Máximo de 5 chips por consultor" }, 400);
+
+      // Buscar nome do colaborador para nomear instância
+      const { data: collab } = await supabase
+        .from("collaborators")
+        .select("name")
+        .eq("id", collaborator_id)
+        .single();
+
+      // Buscar server padrão do system_configs
+      const { data: cfgServer } = await supabase
+        .from("system_configs").select("value").eq("key", "uazapi_disposable_server_url").single();
+      const { data: cfgToken } = await supabase
+        .from("system_configs").select("value").eq("key", "uazapi_disposable_admin_token").single();
+
+      const defaultServer = cfgServer?.value || "https://walkholding.uazapi.com";
+      const defaultToken = cfgToken?.value || "";
+
+      const serverUrl = uazapi_server_url || defaultServer;
+      const adminToken = uazapi_admin_token || defaultToken;
+
+      if (!adminToken) return json({ error: "Admin Token do UAZAPI não configurado. Configure em system_configs." }, 400);
+
+      // Gerar nome da instância: primeironome + chip_index + timestamp curto (evita colisão)
+      const firstName = (collab?.name || "usuario").split(" ")[0];
+      const safeName = firstName
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "")
+        .slice(0, 20);
+      const shortTs = Date.now().toString(36).slice(-4);
+      const instanceName = `${safeName}${nextIndex}_${shortTs}`;
+
+      // Criar instância no UAZAPI
+      const uazResp = await fetch(`${serverUrl}/instance/init`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "admintoken": adminToken,
+        },
+        body: JSON.stringify({ name: instanceName, instanceName }),
+      });
+
+      if (!uazResp.ok) {
+        const txt = await uazResp.text();
+        return json({ error: `UAZAPI erro: ${uazResp.status} ${txt}` }, 502);
+      }
+
+      const uazData = await uazResp.json();
+      const instanceToken = uazData?.token || uazData?.instance?.token || uazData?.data?.token;
+
+      if (!instanceToken) return json({ error: "UAZAPI não retornou token", uazData }, 502);
+
+      // Salvar no Supabase
+      const { data: chip, error: dbErr } = await supabase
+        .from("disposable_chips")
+        .insert({
+          collaborator_id,
+          chip_index: nextIndex,
+          instance_name: instanceName,
+          instance_token: instanceToken,
+          uazapi_server_url: serverUrl,
+          uazapi_admin_token: adminToken,
+          status: "disconnected",
+        })
+        .select()
+        .single();
+
+      if (dbErr) return json({ error: dbErr.message }, 500);
+
+      // Configurar proxy se fornecido
+      if (proxy_url) {
+        await applyProxy(serverUrl, instanceToken, proxy_url);
+        await supabase.from("disposable_chips")
+          .update({ proxy_url })
+          .eq("id", chip.id);
+        chip.proxy_url = proxy_url;
+      }
+
+      return json({ ok: true, chip });
+    }
+
+    if (action === "set_proxy") {
+      if (!chip_id) return json({ error: "chip_id obrigatório" }, 400);
+
+      const { data: chip } = await supabase
+        .from("disposable_chips").select("*").eq("id", chip_id).single();
+      if (!chip) return json({ error: "Chip não encontrado" }, 404);
+
+      const newProxy: string | null = proxy_url ?? null;
+
+      await supabase.from("disposable_chips")
+        .update({ proxy_url: newProxy, updated_at: new Date().toISOString() })
+        .eq("id", chip_id);
+
+      if (chip.instance_token && newProxy) {
+        const proxyResult = await applyProxy(chip.uazapi_server_url, chip.instance_token, newProxy);
+        return json({ ok: true, proxy_applied: proxyResult });
+      }
+      return json({ ok: true, proxy_applied: false, note: "Proxy salvo — será aplicado na próxima conexão" });
+    }
+
+    if (action === "connect") {
+      if (!chip_id) return json({ error: "chip_id obrigatório" }, 400);
+
+      const { data: chip } = await supabase
+        .from("disposable_chips")
+        .select("*")
+        .eq("id", chip_id)
+        .single();
+
+      if (!chip) return json({ error: "Chip não encontrado" }, 404);
+
+      // Se ainda não tem instância, criar primeiro
+      if (!chip.instance_token || chip.instance_token.trim() === "") {
+        const cfgServer = await supabase.from("system_configs").select("value").eq("key", "uazapi_disposable_server_url").single();
+        const cfgToken = await supabase.from("system_configs").select("value").eq("key", "uazapi_disposable_admin_token").single();
+        const autoServer = chip.uazapi_server_url || cfgServer.data?.value || "https://walkholding.uazapi.com";
+        const autoToken = chip.uazapi_admin_token || cfgToken.data?.value || "";
+        if (!autoToken) return json({ error: "Admin Token não configurado" }, 400);
+
+        const { data: collabInfo } = await supabase.from("collaborators").select("name").eq("id", chip.collaborator_id).single();
+        const collabFirstName = (collabInfo?.name || "usuario").split(" ")[0];
+        const collabSafe = collabFirstName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+        const shortTs = Date.now().toString(36).slice(-4);
+        const autoName = `${collabSafe}_chip${chip.chip_index}_${shortTs}`;
+
+        try {
+          const createResp = await fetch(`${autoServer}/instance/init`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "admintoken": autoToken },
+            body: JSON.stringify({ name: autoName }),
+          });
+          if (!createResp.ok) {
+            const errText = await createResp.text();
+            return json({ error: `UAZAPI create erro ${createResp.status}: ${errText.slice(0,200)}` }, 502);
+          }
+          const createData = await createResp.json();
+          const newToken = createData?.token || createData?.instance?.token;
+          if (!newToken) return json({ error: "UAZAPI não retornou token", detail: createData }, 502);
+
+          await supabase.from("disposable_chips").update({
+            instance_name: autoName,
+            instance_token: newToken,
+            uazapi_server_url: autoServer,
+            uazapi_admin_token: autoToken,
+            status: "disconnected",
+          }).eq("id", chip_id);
+
+          chip.instance_token = newToken;
+          chip.uazapi_server_url = autoServer;
+          chip.instance_name = autoName;
+          await new Promise(r => setTimeout(r, 1500));
+        } catch (createErr: any) {
+          return json({ error: `Erro ao criar instância: ${createErr.message}` }, 502);
+        }
+      }
+
+      // Aplicar proxy se configurado
+      if (chip.proxy_url && chip.instance_token) {
+        await applyProxy(chip.uazapi_server_url, chip.instance_token, chip.proxy_url);
+      }
+
+      // Solicitar QR code ao UAZAPI com timeout de 25s
+      const connectAbort = new AbortController();
+      const connectTimeout = setTimeout(() => connectAbort.abort(), 25000);
+      let qrResp: Response;
+      try {
+        qrResp = await fetch(`${chip.uazapi_server_url}/instance/connect`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "token": chip.instance_token },
+          body: JSON.stringify({}),
+          signal: connectAbort.signal,
+        });
+      } catch (fetchErr: any) {
+        clearTimeout(connectTimeout);
+        await supabase.from("disposable_chips")
+          .update({ status: "connecting", qr_code: null, updated_at: new Date().toISOString() })
+          .eq("id", chip_id);
+        return json({ ok: true, qr_code: null, status: "connecting", pending: true });
+      }
+      clearTimeout(connectTimeout);
+
+      // Se token inválido (401/404), limpar e recriar instância automaticamente
+      if (qrResp.status === 401 || qrResp.status === 404) {
+        const cfgServer = await supabase.from("system_configs").select("value").eq("key", "uazapi_disposable_server_url").single();
+        const cfgToken2 = await supabase.from("system_configs").select("value").eq("key", "uazapi_disposable_admin_token").single();
+        const autoServer2 = chip.uazapi_server_url || cfgServer.data?.value || "https://walkholding.uazapi.com";
+        const autoToken2 = chip.uazapi_admin_token || cfgToken2.data?.value || "";
+
+        const { data: collabInfo2 } = await supabase.from("collaborators").select("name").eq("id", chip.collaborator_id).single();
+        const collabFirstName2 = (collabInfo2?.name || "usuario").split(" ")[0];
+        const collabSafe2 = collabFirstName2.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+        const shortTs2 = Date.now().toString(36).slice(-4);
+        const autoName2 = `${collabSafe2}_chip${chip.chip_index}_${shortTs2}`;
+
+        const createResp2 = await fetch(`${autoServer2}/instance/init`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "admintoken": autoToken2 },
+          body: JSON.stringify({ name: autoName2 }),
+        });
+        if (!createResp2.ok) {
+          const errTxt = await createResp2.text();
+          return json({ error: `Instância inválida. Recriação falhou: ${createResp2.status} ${errTxt.slice(0,150)}` }, 502);
+        }
+        const createData2 = await createResp2.json();
+        const newToken2 = createData2?.token || createData2?.instance?.token;
+        if (!newToken2) return json({ error: "UAZAPI não retornou token na recriação" }, 502);
+
+        await supabase.from("disposable_chips").update({
+          instance_name: autoName2,
+          instance_token: newToken2,
+          uazapi_server_url: autoServer2,
+          uazapi_admin_token: autoToken2,
+          status: "disconnected",
+        }).eq("id", chip_id);
+
+        chip.instance_token = newToken2;
+        chip.uazapi_server_url = autoServer2;
+        chip.instance_name = autoName2;
+
+        await new Promise(r => setTimeout(r, 1500));
+
+        qrResp = await fetch(`${chip.uazapi_server_url}/instance/connect`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "token": chip.instance_token },
+          body: JSON.stringify({}),
+        });
+      }
+
+      if (!qrResp.ok) {
+        const txt = await qrResp.text();
+        return json({ error: `UAZAPI connect erro: ${qrResp.status} ${txt}` }, 502);
+      }
+
+      const qrData = await qrResp.json();
+      const qrCode = qrData?.instance?.qrcode || qrData?.qrcode || qrData?.qr || qrData?.data?.qrcode;
+
+      await supabase
+        .from("disposable_chips")
+        .update({ status: "connecting", qr_code: qrCode || null, updated_at: new Date().toISOString() })
+        .eq("id", chip_id);
+
+      return json({ ok: true, qr_code: qrCode, status: "connecting" });
+    }
+
+    if (action === "status") {
+      if (!chip_id) return json({ error: "chip_id obrigatório" }, 400);
+
+      const { data: chip } = await supabase
+        .from("disposable_chips")
+        .select("*")
+        .eq("id", chip_id)
+        .single();
+
+      if (!chip) return json({ error: "Chip não encontrado" }, 404);
+      if (!chip.instance_token) return json({ status: "no_instance" });
+
+      const stAbort = new AbortController();
+      const stTimeout = setTimeout(() => stAbort.abort(), 15000);
+      let stResp: Response;
+      try {
+        stResp = await fetch(`${chip.uazapi_server_url}/instance/status`, {
+          headers: { "token": chip.instance_token },
+          signal: stAbort.signal,
+        });
+      } catch (_) {
+        clearTimeout(stTimeout);
+        return json({ ok: true, status: chip.status, qr_code: chip.qr_code, timeout: true });
+      }
+      clearTimeout(stTimeout);
+
+      if (!stResp.ok) return json({ error: `UAZAPI status erro: ${stResp.status}` }, 502);
+
+      const stData = await stResp.json();
+      const inst = stData?.instance || stData;
+      const connected = stData?.status?.connected === true || inst?.status === "open" || stData?.connected === true;
+      const phone = stData?.status?.jid || inst?.owner || stData?.phone || null;
+      const freshQr = inst?.qrcode || stData?.qrcode || null;
+      const disconnectReason = inst?.lastDisconnectReason || "";
+      const isQrExpired = disconnectReason.toLowerCase().includes("qr") && disconnectReason.toLowerCase().includes("timeout");
+
+      let newStatus: string;
+      if (connected) {
+        newStatus = "connected";
+      } else if (freshQr && freshQr.length > 10) {
+        newStatus = "connecting";
+      } else {
+        newStatus = "disconnected";
+      }
+
+      const updateData: Record<string, unknown> = { status: newStatus, updated_at: new Date().toISOString() };
+      if (connected) {
+        updateData.qr_code = null;
+        if (phone) updateData.phone = phone;
+      } else if (freshQr && freshQr.length > 10) {
+        updateData.qr_code = freshQr;
+      }
+
+      await supabase.from("disposable_chips").update(updateData).eq("id", chip_id);
+
+      // Auto-configure webhook when connected
+      if (connected && chip.instance_token && chip.uazapi_server_url) {
+        try {
+          await fetch(`${chip.uazapi_server_url}/webhook`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "token": chip.instance_token,
+            },
+            body: JSON.stringify({
+              webhookUrl: `${supabaseUrl}/functions/v1/whatsapp-webhook`,
+              webhookEnabled: true,
+            }),
+          });
+          console.log(`Webhook auto-configured for chip ${chip_id}`);
+        } catch (e) {
+          console.error("Failed to configure webhook:", e);
+        }
+      }
+
+      return json({ ok: true, status: newStatus, phone, qr_code: freshQr, qr_expired: isQrExpired });
+    }
+
+    if (action === "delete") {
+      if (!chip_id) return json({ error: "chip_id obrigatório" }, 400);
+
+      const { data: chip } = await supabase
+        .from("disposable_chips")
+        .select("*")
+        .eq("id", chip_id)
+        .single();
+
+      if (!chip) return json({ error: "Chip não encontrado" }, 404);
+
+      // Deletar instância no UAZAPI (best effort)
+      if (chip.instance_token && chip.uazapi_admin_token) {
+        try {
+          await fetch(`${chip.uazapi_server_url}/instance/delete`, {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+              "admintoken": chip.uazapi_admin_token,
+              "token": chip.instance_token,
+            },
+          });
+        } catch (_) { /* ignora erro UAZAPI */ }
+      }
+
+      // ── FIX: Deletar do DB sem verificação extra ──
+      const { error: delErr } = await supabase.from("disposable_chips").delete().eq("id", chip_id);
+      if (delErr) return json({ error: `Erro ao deletar: ${delErr.message}` }, 500);
+
+      return json({ ok: true });
+    }
+
+    if (action === "reconnect_all") {
+      // Reconecta todos os chips desconectados de um colaborador
+      if (!collaborator_id) return json({ error: "collaborator_id obrigatório" }, 400);
+
+      const { data: disconnected } = await supabase
+        .from("disposable_chips")
+        .select("*")
+        .eq("collaborator_id", collaborator_id)
+        .eq("status", "disconnected");
+
+      if (!disconnected || disconnected.length === 0) {
+        return json({ ok: true, message: "Nenhum chip desconectado", reconnected: 0 });
+      }
+
+      const results: { chip_id: string; chip_index: number; status: string; error?: string }[] = [];
+
+      for (const chip of disconnected) {
+        try {
+          // Tentar reconectar via connect
+          if (!chip.instance_token) {
+            results.push({ chip_id: chip.id, chip_index: chip.chip_index, status: "skipped", error: "Sem token" });
+            continue;
+          }
+
+          const qrResp = await fetch(`${chip.uazapi_server_url}/instance/connect`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "token": chip.instance_token },
+            body: JSON.stringify({}),
+          });
+
+          if (qrResp.status === 401 || qrResp.status === 404) {
+            // Token inválido, precisa recriar
+            results.push({ chip_id: chip.id, chip_index: chip.chip_index, status: "needs_recreate", error: "Token expirado" });
+            continue;
+          }
+
+          if (qrResp.ok) {
+            const qrData = await qrResp.json();
+            const qrCode = qrData?.instance?.qrcode || qrData?.qrcode || qrData?.qr || null;
+            await supabase.from("disposable_chips")
+              .update({ status: "connecting", qr_code: qrCode, updated_at: new Date().toISOString() })
+              .eq("id", chip.id);
+            results.push({ chip_id: chip.id, chip_index: chip.chip_index, status: "connecting" });
+          } else {
+            results.push({ chip_id: chip.id, chip_index: chip.chip_index, status: "error", error: `HTTP ${qrResp.status}` });
+          }
+        } catch (e: any) {
+          results.push({ chip_id: chip.id, chip_index: chip.chip_index, status: "error", error: e.message });
+        }
+      }
+
+      return json({ ok: true, reconnected: results.filter(r => r.status === "connecting").length, results });
+    }
+
+    return json({ error: `Action desconhecida: ${action}` }, 400);
+
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return json({ error: msg }, 500);
+  }
+});
+
+function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
-function normalizeProxyConfig(source: Record<string, unknown>): ProxyConfig {
-  const rawPort = source.proxy_port;
-  const parsedPort = typeof rawPort === "number"
-    ? rawPort
-    : typeof rawPort === "string" && rawPort.trim()
-      ? Number(rawPort)
-      : null;
-
-  return {
-    host: String(source.proxy_host || "").trim(),
-    port: Number.isFinite(parsedPort) ? parsedPort : null,
-    username: String(source.proxy_username || "").trim(),
-    password: String(source.proxy_password || "").trim(),
-    protocol: String(source.proxy_protocol || "http").trim().toLowerCase(),
-    enabled: source.proxy_enabled === true || source.proxy_enabled === "true",
-    last_tested_at: source.proxy_last_tested_at
-      ? String(source.proxy_last_tested_at)
-      : null,
-  };
-}
-
-function parseProxyUrl(proxyUrl: string) {
-  const trimmed = proxyUrl.trim();
-  if (!trimmed) return null;
-
+/**
+ * Configura proxy na instância UAZAPI via POST /instance/proxy
+ */
+async function applyProxy(serverUrl: string, instanceToken: string, proxyUrl: string): Promise<boolean> {
   try {
-    const parsed = new URL(trimmed);
-    const port = parsed.port ? Number(parsed.port) : null;
-    if (!parsed.hostname || !port) return null;
+    const parsed = new URL(proxyUrl);
+    const protocol = parsed.protocol.replace(":", "") || "http";
+    const host = parsed.hostname;
+    const port = parseInt(parsed.port || "8080");
+    const username = parsed.username ? decodeURIComponent(parsed.username) : undefined;
+    const password = parsed.password ? decodeURIComponent(parsed.password) : undefined;
 
-    return {
-      host: parsed.hostname,
-      port,
-      username: decodeURIComponent(parsed.username || ""),
-      password: decodeURIComponent(parsed.password || ""),
-      protocol: parsed.protocol.replace(":", "") || "http",
-      enabled: true,
-      last_tested_at: null,
-    } satisfies ProxyConfig;
-  } catch {
-    return null;
-  }
-}
+    const proxyAbort = new AbortController();
+    const proxyTimeout = setTimeout(() => proxyAbort.abort(), 10000);
 
-function buildUazapiProxyPayload(proxy: ProxyConfig) {
-  if (!proxy.enabled || !proxy.host || !proxy.port) return undefined;
-
-  return {
-    enabled: true,
-    host: proxy.host,
-    port: proxy.port,
-    username: proxy.username || undefined,
-    password: proxy.password || undefined,
-    protocol: proxy.protocol || "http",
-    last_tested_at: proxy.last_tested_at || undefined,
-  };
-}
-
-function buildProxyUrlFromParts(proxy: ProxyConfig) {
-  if (!proxy.host || !proxy.port) return null;
-
-  const protocol = proxy.protocol || "http";
-  const credentials = proxy.username
-    ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password || "")}@`
-    : "";
-
-  return `${protocol}://${credentials}${proxy.host}:${proxy.port}`;
-}
-
-function buildDefaultIprRoyalProxyUrl(chipId: string) {
-  const host = (Deno.env.get("IPROYAL_PROXY_HOST") || "").trim();
-  const port = (Deno.env.get("IPROYAL_PROXY_PORT") || "").trim();
-  const usernameTemplate = (Deno.env.get("IPROYAL_PROXY_USERNAME") || "").trim();
-  const password = (Deno.env.get("IPROYAL_PROXY_PASSWORD") || "").trim();
-
-  if (!host || !port || !usernameTemplate || !password) return null;
-
-  const sessionId = chipId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24) || crypto.randomUUID().replace(/-/g, "");
-  const username = usernameTemplate.replace(/\{\{\s*session_id\s*\}\}/gi, sessionId);
-
-  return `http://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}`;
-}
-
-function resolveProxyTarget(
-  chipLike: Record<string, unknown>,
-  chipId: string,
-  storedProxy?: { proxy_url?: string | null; source?: string | null } | null,
-) {
-  const storedUrl = storedProxy?.proxy_url?.trim();
-  if (storedUrl) {
-    return {
-      proxy_url: storedUrl,
-      source: (storedProxy?.source as ProxySource) || "manual",
-    };
-  }
-
-  const normalized = normalizeProxyConfig(chipLike);
-  const chipUrl = buildProxyUrlFromParts(normalized);
-  if (chipUrl) {
-    return { proxy_url: chipUrl, source: "chip" as ProxySource };
-  }
-
-  const fallback = buildDefaultIprRoyalProxyUrl(chipId);
-  if (fallback) {
-    return { proxy_url: fallback, source: "iproyal" as ProxySource };
-  }
-
-  return { proxy_url: null, source: "none" as ProxySource };
-}
-
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 15000) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-async function parseResponseBody(response: Response) {
-  const text = await response.text();
-  if (!text) return null;
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
-}
-
-function extractExitIp(...values: unknown[]) {
-  for (const value of values) {
-    if (!value || typeof value !== "object") continue;
-    const record = value as Record<string, unknown>;
-    const candidate = record.exit_ip || record.ip || record.proxy_ip || record.outbound_ip;
-    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
-  }
-
-  return null;
-}
-
-function extractGeo(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return { city: null, region: null, country: null };
-  }
-
-  const record = value as Record<string, unknown>;
-  return {
-    city: typeof record.city === "string" ? record.city : null,
-    region: typeof record.region === "string" ? record.region : typeof record.region_code === "string" ? record.region_code : null,
-    country: typeof record.country === "string" ? record.country : typeof record.country_code === "string" ? record.country_code : null,
-  };
-}
-
-async function saveProxyMonitor(supabase: any, monitor: ProxyMonitorRecord) {
-  const payload = {
-    chip_id: monitor.chip_id,
-    proxy_url: monitor.proxy_url,
-    source: monitor.source,
-    status: monitor.status,
-    last_tested_at: monitor.last_tested_at,
-    last_success_at: monitor.last_success_at ?? null,
-    last_error: monitor.last_error ?? null,
-    last_http_status: monitor.last_http_status ?? null,
-    last_response_ms: monitor.last_response_ms ?? null,
-    exit_ip: monitor.exit_ip ?? null,
-    target_url: monitor.target_url ?? null,
-    metadata: monitor.metadata ?? {},
-    updated_at: monitor.updated_at,
-  };
-
-  const { error } = await supabase.from("disposable_chipset_proxy").upsert(payload, { onConflict: "chip_id" });
-  if (error) console.error("Error saving proxy monitor:", error);
-
-  await supabase.from("disposable_chips").update({
-    proxy_last_tested_at: monitor.last_tested_at,
-    updated_at: monitor.updated_at,
-  }).eq("id", monitor.chip_id);
-}
-
-async function saveProxyLog(
-  supabase: any,
-  log: {
-    chip_id: string;
-    action: ProxyLogAction;
-    proxy_url: string | null;
-    success: boolean;
-    status?: string | null;
-    ip?: string | null;
-    city?: string | null;
-    region?: string | null;
-    country?: string | null;
-    error_message?: string | null;
-    response_time_ms?: number | null;
-  },
-) {
-  const { error } = await supabase.from("proxy_logs").insert({
-    chip_id: log.chip_id,
-    action: log.action,
-    proxy_url: log.proxy_url,
-    success: log.success,
-    status: log.status ?? null,
-    ip: log.ip ?? null,
-    city: log.city ?? null,
-    region: log.region ?? null,
-    country: log.country ?? null,
-    error_message: log.error_message ?? null,
-    response_time_ms: log.response_time_ms ?? null,
-  });
-
-  if (error) console.error("Error saving proxy log:", error);
-}
-
-async function fetchIpMetadataThroughProxy(proxyUrl: string) {
-  const client = Deno.createHttpClient({ proxy: { url: proxyUrl } });
-  try {
-    const startedAt = Date.now();
-    const response = await fetchWithTimeout("https://ipapi.co/json/", {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      client,
-    } as RequestInit & { client: Deno.HttpClient }, 15000);
-    const body = await parseResponseBody(response);
-    return {
-      ok: response.ok,
-      status: response.status,
-      body,
-      responseMs: Date.now() - startedAt,
-    };
-  } finally {
-    client.close();
-  }
-}
-
-async function createUazapiInstance(
-  serverUrl: string,
-  adminToken: string,
-  instanceName: string,
-  proxy: ProxyConfig,
-) {
-  const payload = {
-    name: instanceName,
-    ...(buildUazapiProxyPayload(proxy) ? { proxy: buildUazapiProxyPayload(proxy) } : {}),
-  };
-
-  const createRes = await fetchWithTimeout(`${serverUrl}/instance/create`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "AdminToken": adminToken },
-    body: JSON.stringify(payload),
-  });
-
-  const createData = await parseResponseBody(createRes);
-  const createDataRecord = typeof createData === "object" && createData !== null
-    ? createData as Record<string, unknown>
-    : null;
-  const nestedInstance = typeof createDataRecord?.instance === "object" && createDataRecord.instance !== null
-    ? createDataRecord.instance as Record<string, unknown>
-    : null;
-
-  if (!createRes.ok) {
-    throw new Error(
-      typeof createData === "string"
-        ? createData
-        : createDataRecord?.message as string || `Falha ao criar instância (${createRes.status})`,
-    );
-  }
-
-  return String(createDataRecord?.token || nestedInstance?.token || "");
-}
-
-async function ensureInstanceToken(
-  supabase: any,
-  chip: Record<string, unknown>,
-) {
-  let instanceToken = String(chip.instance_token || "").trim();
-  let instanceName = String(chip.instance_name || "").trim();
-  const serverUrl = String(chip.uazapi_server_url || "").trim();
-  const adminToken = String(chip.uazapi_admin_token || "").trim();
-  const chipId = String(chip.id);
-  const collaboratorId = String(chip.collaborator_id || "");
-  const chipIndex = Number(chip.chip_index || 1);
-
-  if (instanceToken) {
-    return { instanceToken, instanceName };
-  }
-
-  if (!serverUrl || !adminToken) {
-    throw new Error("Instância sem configuração UAZAPI válida");
-  }
-
-  instanceName = instanceName || `chip_${collaboratorId.slice(0, 8)}_${chipIndex}`;
-  const instanceProxy = normalizeProxyConfig(chip);
-  instanceToken = await createUazapiInstance(serverUrl, adminToken, instanceName, instanceProxy);
-
-  await supabase.from("disposable_chips").update({
-    instance_name: instanceName,
-    instance_token: instanceToken,
-    updated_at: new Date().toISOString(),
-  }).eq("id", chipId);
-
-  return { instanceToken, instanceName };
-}
-
-async function runProxyMonitor(
-  supabase: any,
-  chip: Record<string, unknown>,
-  options?: {
-    includeQrProbe?: boolean;
-    storedProxy?: { proxy_url?: string | null; source?: string | null } | null;
-    action?: ProxyLogAction;
-  },
-): Promise<ProxyMonitorResult> {
-  const chipId = String(chip.id);
-  const serverUrl = String(chip.uazapi_server_url || "").trim();
-  const now = new Date().toISOString();
-  const action = options?.action || "test";
-  const target = resolveProxyTarget(chip, chipId, options?.storedProxy);
-
-  if (!target.proxy_url) {
-    const failedMonitor: ProxyMonitorRecord = {
-      chip_id: chipId,
-      proxy_url: null,
-      source: "none",
-      status: "error",
-      last_tested_at: now,
-      last_error: "Nenhum proxy resolvido para este chip",
-      target_url: `${serverUrl}/instance/proxy`,
-      updated_at: now,
-      metadata: { stage: "resolve", action },
-    };
-    await saveProxyMonitor(supabase, failedMonitor);
-    await saveProxyLog(supabase, {
-      chip_id: chipId,
-      action,
-      proxy_url: null,
-      success: false,
-      status: "resolve_error",
-      error_message: failedMonitor.last_error,
-    });
-    return { ok: false, ...failedMonitor, city: null, region: null, country: null, qr_code: null, instance_token: null, connected: false, phone: null };
-  }
-
-  let geoStatus = 0;
-  let geoBody: unknown = null;
-  let geoResponseMs: number | null = null;
-
-  try {
-    const geoResult = await fetchIpMetadataThroughProxy(target.proxy_url);
-    geoStatus = geoResult.status;
-    geoBody = geoResult.body;
-    geoResponseMs = geoResult.responseMs;
-
-      if (!geoResult.ok) {
-      // IP test failed (possibly rate limited) — log but CONTINUE with proxy apply + QR
-      console.warn("IP metadata test failed (status " + geoStatus + "), continuing with proxy apply...");
-      await saveProxyLog(supabase, {
-        chip_id: chipId,
-        action,
-        proxy_url: target.proxy_url,
-        success: false,
-        status: "external_test_skipped",
-        error_message: "IP test failed (" + geoStatus + ") - continued anyway",
-        response_time_ms: geoResponseMs,
-      });
-    }
-  } catch (error) {
-    // IP test threw exception (network/timeout) — log but CONTINUE
-    console.warn("IP metadata test exception:", (error as Error).message);
-    await saveProxyLog(supabase, {
-      chip_id: chipId,
-      action,
-      proxy_url: target.proxy_url,
-      success: false,
-      status: "external_test_exception",
-      error_message: (error as Error).message || "IP test exception - continued anyway",
-      response_time_ms: geoResponseMs,
-    });
-  }
-
-  const geo = extractGeo(geoBody);
-  const { instanceToken } = await ensureInstanceToken(supabase, chip);
-  const startedAt = Date.now();
-  const proxyRes = await fetchWithTimeout(`${serverUrl}/instance/proxy?token=${instanceToken}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled: true, proxy: target.proxy_url }),
-  });
-  const proxyBody = await parseResponseBody(proxyRes);
-  const responseMs = Date.now() - startedAt;
-
-  if (!proxyRes.ok) {
-    const failedMonitor: ProxyMonitorRecord = {
-      chip_id: chipId,
-      proxy_url: target.proxy_url,
-      source: target.source,
-      status: "error",
-      last_tested_at: now,
-      last_error: typeof proxyBody === "string"
-        ? proxyBody
-        : (proxyBody as Record<string, unknown> | null)?.message as string || "Falha ao aplicar proxy na UAZAPI",
-      last_http_status: proxyRes.status,
-      last_response_ms: geoResponseMs ?? responseMs,
-      exit_ip: extractExitIp(geoBody),
-      target_url: `${serverUrl}/instance/proxy`,
-      updated_at: now,
-      metadata: { stage: "apply", action, response: proxyBody, geo_response: geoBody, city: geo.city, region: geo.region, country: geo.country },
-    };
-    await saveProxyMonitor(supabase, failedMonitor);
-    await saveProxyLog(supabase, {
-      chip_id: chipId,
-      action,
-      proxy_url: target.proxy_url,
-      success: false,
-      status: "apply_error",
-      ip: failedMonitor.exit_ip ?? null,
-      city: geo.city,
-      region: geo.region,
-      country: geo.country,
-      error_message: failedMonitor.last_error,
-      response_time_ms: failedMonitor.last_response_ms,
-    });
-    return { ok: false, ...failedMonitor, ...geo, qr_code: null, instance_token: instanceToken, connected: false, phone: null };
-  }
-
-  const statusRes = await fetchWithTimeout(`${serverUrl}/instance/status?token=${instanceToken}`, {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-  });
-  const statusBody = await parseResponseBody(statusRes);
-
-  let qrCode: string | null = null;
-  let qrProbeOk = false;
-  let qrBody: unknown = null;
-
-  if (options?.includeQrProbe) {
-    const qrRes = await fetchWithTimeout(`${serverUrl}/instance/connect?token=${instanceToken}`, {
+    const resp = await fetch(`${serverUrl}/instance/proxy`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", token: instanceToken },
+      body: JSON.stringify({
+        proxy: proxyUrl,
+        host,
+        port,
+        protocol,
+        ...(username ? { username, user: username } : {}),
+        ...(password ? { password } : {}),
+      }),
+      signal: proxyAbort.signal,
     });
-    qrBody = await parseResponseBody(qrRes);
-    const qrBodyRecord = typeof qrBody === "object" && qrBody !== null ? qrBody as Record<string, unknown> : null;
-    const nestedInstance = typeof qrBodyRecord?.instance === "object" && qrBodyRecord.instance !== null ? qrBodyRecord.instance as Record<string, unknown> : null;
-    qrCode = nestedInstance?.qrcode as string
-      || qrBodyRecord?.qrcode as string
-      || qrBodyRecord?.qr_code as string
-      || qrBodyRecord?.base64 as string
-      || null;
-    qrProbeOk = qrRes.ok && Boolean(qrCode);
+    clearTimeout(proxyTimeout);
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => "");
+      console.error(`applyProxy failed: ${resp.status} ${txt}`);
+      return false;
+    }
+    console.log(`Proxy ${host}:${port} configurado na instância`);
+    return true;
+  } catch (e: any) {
+    console.error("applyProxy error:", e.message);
+    return false;
   }
-
-  const statusBodyRecord = typeof statusBody === "object" && statusBody !== null ? statusBody as Record<string, unknown> : null;
-  const statusNested = typeof statusBodyRecord?.status === "object" && statusBodyRecord.status !== null ? statusBodyRecord.status as Record<string, unknown> : null;
-  const instanceNested = typeof statusBodyRecord?.instance === "object" && statusBodyRecord.instance !== null ? statusBodyRecord.instance as Record<string, unknown> : null;
-  const connected = statusNested?.connected === true
-    || instanceNested?.status === "connected"
-    || statusBodyRecord?.connected === true;
-  const phone = instanceNested?.owner as string
-    || statusBodyRecord?.phone as string
-    || statusBodyRecord?.number as string
-    || null;
-  const exitIp = extractExitIp(geoBody, proxyBody, statusBody, qrBody);
-  const healthy = proxyRes.ok && statusRes.ok && (connected || !options?.includeQrProbe || qrProbeOk);
-  const monitorStatus: ProxyMonitorStatus = healthy ? "healthy" : (proxyRes.ok && statusRes.ok ? "degraded" : "error");
-  const lastError = healthy
-    ? null
-    : !statusRes.ok
-      ? `Status da instância falhou (${statusRes.status})`
-      : options?.includeQrProbe && !qrProbeOk
-        ? "Proxy aplicado, mas a instância não conseguiu gerar QR com o proxy"
-        : "Proxy aplicado, mas sem confirmação operacional completa";
-
-  const monitor: ProxyMonitorRecord = {
-    chip_id: chipId,
-    proxy_url: target.proxy_url,
-    source: target.source,
-    status: monitorStatus,
-    last_tested_at: now,
-    last_success_at: healthy ? now : null,
-    last_error: lastError,
-    last_http_status: proxyRes.status,
-    last_response_ms: geoResponseMs ?? responseMs,
-    exit_ip: exitIp,
-    target_url: `${serverUrl}/instance/proxy`,
-    updated_at: now,
-    metadata: {
-      connected,
-      phone,
-      city: geo.city,
-      region: geo.region,
-      country: geo.country,
-      include_qr_probe: Boolean(options?.includeQrProbe),
-      qr_probe_ok: qrProbeOk,
-      proxy_response: proxyBody,
-      status_response: statusBody,
-      qr_probe_response: qrBody,
-      geo_response: geoBody,
-      action,
-    },
-  };
-
-  await saveProxyMonitor(supabase, monitor);
-  await saveProxyLog(supabase, {
-    chip_id: chipId,
-    action,
-    proxy_url: target.proxy_url,
-    success: healthy,
-    status: monitor.status,
-    ip: exitIp,
-    city: geo.city,
-    region: geo.region,
-    country: geo.country,
-    error_message: lastError,
-    response_time_ms: monitor.last_response_ms,
-  });
-
-  return {
-    ok: healthy,
-    ...monitor,
-    instance_token: instanceToken,
-    qr_code: qrCode,
-    connected,
-    phone: typeof phone === "string" ? phone : null,
-    city: geo.city,
-    region: geo.region,
-    country: geo.country,
-  };
 }
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceKey);
-
-    const body = await req.json();
-    const { action } = body;
-
-    if (action === "create") {
-      const { collaborator_id } = body;
-      if (!collaborator_id) return json({ error: "collaborator_id required" }, 400);
-
-      const parsedProxy = typeof body.proxy_url === "string" && body.proxy_url.trim()
-        ? parseProxyUrl(body.proxy_url)
-        : null;
-
-      if (typeof body.proxy_url === "string" && body.proxy_url.trim() && !parsedProxy) {
-        return json({ error: "Proxy URL inválida. Use o formato protocolo://usuario:senha@host:porta" }, 400);
-      }
-
-      const proxy = parsedProxy || normalizeProxyConfig(body);
-
-      const { data: existing } = await supabase
-        .from("disposable_chips")
-        .select("id, chip_index")
-        .eq("collaborator_id", collaborator_id);
-      if ((existing || []).length >= 5) return json({ error: "Limite de 5 chips atingido" }, 400);
-
-      const maxIndex = (existing || []).reduce((max: number, c: any) => Math.max(max, c.chip_index || 0), 0);
-      const chipIndex = maxIndex + 1;
-      const uazapiAccount = chipIndex <= 3 ? "account_b" : "account_c";
-
-      let serverUrl = body.uazapi_server_url || "";
-      let finalAdminToken = body.uazapi_admin_token || "";
-
-      if (!serverUrl || !finalAdminToken) {
-        const { data: account } = await supabase
-          .from("uazapi_accounts")
-          .select("api_url, admin_token")
-          .eq("account_key", uazapiAccount)
-          .single();
-
-        if (account) {
-          if (!serverUrl) serverUrl = account.api_url;
-          if (!finalAdminToken) finalAdminToken = account.admin_token;
-        }
-      }
-
-      if (!serverUrl) {
-        serverUrl = uazapiAccount === "account_b"
-          ? (Deno.env.get("UAZAPI_ACCOUNT_B_URL") || "https://walk2.uazapi.com")
-          : (Deno.env.get("UAZAPI_ACCOUNT_C_URL") || "https://walk2.uazapi.com");
-      }
-      if (!finalAdminToken) {
-        finalAdminToken = uazapiAccount === "account_b"
-          ? (Deno.env.get("UAZAPI_ACCOUNT_B_TOKEN") || "")
-          : (Deno.env.get("UAZAPI_ACCOUNT_C_TOKEN") || "");
-      }
-
-      if (!finalAdminToken) {
-        const { data: cfg } = await supabase
-          .from("system_configs")
-          .select("value")
-          .eq("key", "uazapi_admin_token")
-          .maybeSingle();
-        finalAdminToken = cfg?.value || "";
-      }
-
-      const instanceName = `chip_${collaborator_id.slice(0, 8)}_${chipIndex}`;
-      let instanceToken = "";
-
-      if (finalAdminToken) {
-        try {
-          instanceToken = await createUazapiInstance(serverUrl, finalAdminToken, instanceName, proxy);
-        } catch (e) {
-          console.error("UAZAPI create instance error:", e);
-        }
-      }
-
-      const { data: chip, error } = await supabase.from("disposable_chips").insert({
-        collaborator_id,
-        chip_index: chipIndex,
-        uazapi_server_url: serverUrl,
-        uazapi_admin_token: finalAdminToken,
-        uazapi_account: uazapiAccount,
-        instance_name: instanceName,
-        instance_token: instanceToken,
-        status: "disconnected",
-        proxy_host: proxy.host || null,
-        proxy_port: proxy.port,
-        proxy_username: proxy.username || null,
-        proxy_password: proxy.password || null,
-        proxy_protocol: proxy.protocol || "http",
-        proxy_enabled: proxy.enabled,
-        proxy_last_tested_at: proxy.last_tested_at,
-      }).select().single();
-
-      if (error) return json({ error: error.message }, 500);
-
-      const resolvedTarget = resolveProxyTarget(chip, chip.id, parsedProxy ? { proxy_url: body.proxy_url, source: "manual" } : null);
-      const initialMonitor = await runProxyMonitor(supabase, chip, {
-        storedProxy: parsedProxy ? { proxy_url: body.proxy_url, source: "manual" } : null,
-        includeQrProbe: false,
-        action: "create",
-      });
-
-      return json({
-        ok: true,
-        chip,
-        proxy_url: resolvedTarget.proxy_url,
-        proxy_source: resolvedTarget.source,
-        proxy_status: initialMonitor.status,
-        proxy_exit_ip: initialMonitor.exit_ip,
-        city: initialMonitor.city,
-        region: initialMonitor.region,
-        country: initialMonitor.country,
-      });
-    }
-
-    if (action === "connect") {
-      const { chip_id } = body;
-      if (!chip_id) return json({ error: "chip_id required" }, 400);
-
-      const { data: chip } = await supabase
-        .from("disposable_chips")
-        .select("*")
-        .eq("id", chip_id)
-        .single();
-      if (!chip) return json({ error: "Chip não encontrado" }, 404);
-
-      const { data: storedProxy } = await supabase
-        .from("disposable_chipset_proxy")
-        .select("proxy_url, source")
-        .eq("chip_id", chip_id)
-        .maybeSingle();
-
-      try {
-        const monitor = await runProxyMonitor(supabase, chip, {
-          storedProxy,
-          includeQrProbe: true,
-          action: "connect",
-        });
-
-        if (!monitor.qr_code) {
-          return json({
-            error: monitor.last_error || "Proxy aplicado, mas o QR não foi disponibilizado pela instância",
-            proxy_status: monitor.status,
-            proxy_url: monitor.proxy_url,
-          }, 500);
-        }
-
-        await supabase.from("disposable_chips").update({
-          qr_code: monitor.qr_code,
-          status: "connecting",
-          updated_at: new Date().toISOString(),
-        }).eq("id", chip_id);
-
-        return json({
-          ok: true,
-          qr_code: monitor.qr_code,
-          instance_token: monitor.instance_token,
-          status: "connecting",
-          proxy_enabled: Boolean(monitor.proxy_url),
-          proxy_url: monitor.proxy_url,
-          proxy_status: monitor.status,
-          proxy_source: monitor.source,
-          proxy_last_tested_at: monitor.last_tested_at,
-          proxy_response_ms: monitor.last_response_ms,
-          proxy_exit_ip: monitor.exit_ip,
-        });
-      } catch (e) {
-        console.error("UAZAPI QR error:", e);
-        return json({ error: (e as Error).message || "Falha ao obter QR code" }, 500);
-      }
-    }
-
-    if (action === "monitor_proxy" || action === "test_proxy") {
-      const { chip_id, include_qr_probe } = body;
-      if (!chip_id) return json({ error: "chip_id required" }, 400);
-
-      const { data: chip } = await supabase
-        .from("disposable_chips")
-        .select("*")
-        .eq("id", chip_id)
-        .single();
-      if (!chip) return json({ error: "Chip não encontrado" }, 404);
-
-      const { data: storedProxy } = await supabase
-        .from("disposable_chipset_proxy")
-        .select("proxy_url, source")
-        .eq("chip_id", chip_id)
-        .maybeSingle();
-
-      const monitor = await runProxyMonitor(supabase, chip, {
-        storedProxy,
-        includeQrProbe: include_qr_probe === true,
-        action: "test",
-      });
-
-      return json({
-        ok: monitor.ok,
-        success: monitor.ok,
-        ip: monitor.exit_ip,
-        city: monitor.city,
-        region: monitor.region,
-        country: monitor.country,
-        proxy_url: monitor.proxy_url,
-        proxy_source: monitor.source,
-        proxy_status: monitor.status,
-        proxy_last_tested_at: monitor.last_tested_at,
-        proxy_last_success_at: monitor.last_success_at,
-        proxy_response_ms: monitor.last_response_ms,
-        proxy_http_status: monitor.last_http_status,
-        proxy_exit_ip: monitor.exit_ip,
-        proxy_error: monitor.last_error,
-        qr_code: monitor.qr_code,
-        connected: monitor.connected,
-        phone: monitor.phone,
-      }, monitor.ok ? 200 : 500);
-    }
-
-    if (action === "status") {
-      const { chip_id } = body;
-      if (!chip_id) return json({ error: "chip_id required" }, 400);
-
-      const { data: chip } = await supabase
-        .from("disposable_chips")
-        .select("*")
-        .eq("id", chip_id)
-        .single();
-      if (!chip) return json({ error: "Chip não encontrado" }, 404);
-
-      if (!chip.instance_token) {
-        return json({ status: "disconnected", phone: null });
-      }
-
-      try {
-        const statusRes = await fetch(`${chip.uazapi_server_url}/instance/status?token=${chip.instance_token}`, {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        });
-        const statusData = await statusRes.json();
-
-        const connected = statusData?.status?.connected === true || statusData?.instance?.status === "connected" || statusData?.connected === true;
-        const phone = statusData?.instance?.owner || statusData?.phone || statusData?.number || null;
-        const qrCode = statusData?.instance?.qrcode || statusData?.qrcode || statusData?.qr_code || null;
-        const qrExpired = statusData?.qr_expired === true;
-        const newStatus = connected ? "connected" : (qrCode ? "connecting" : "disconnected");
-
-        const updateData: Record<string, unknown> = {
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-        };
-        if (phone) updateData.phone = phone;
-        if (connected) updateData.qr_code = null;
-        else if (qrCode) updateData.qr_code = qrCode;
-
-        await supabase.from("disposable_chips").update(updateData).eq("id", chip_id);
-
-        return json({ status: newStatus, phone, qr_code: qrCode, qr_expired: qrExpired });
-      } catch (e) {
-        console.error("UAZAPI status error:", e);
-        return json({ status: chip.status, phone: chip.phone });
-      }
-    }
-
-    if (action === "set_proxy") {
-      const { chip_id, proxy_url } = body;
-      if (!chip_id) return json({ error: "chip_id required" }, 400);
-
-      let proxySource: ProxySource = "manual";
-      let normalizedProxyUrl: string | null = null;
-
-      if (typeof proxy_url === "string" && proxy_url.trim()) {
-        const parsed = parseProxyUrl(proxy_url);
-        if (!parsed) {
-          return json({ error: "Proxy URL inválida. Use o formato protocolo://usuario:senha@host:porta" }, 400);
-        }
-        normalizedProxyUrl = buildProxyUrlFromParts(parsed);
-      } else {
-        proxySource = "none";
-      }
-
-      const now = new Date().toISOString();
-      const payload = {
-        chip_id,
-        proxy_url: normalizedProxyUrl,
-        source: proxySource,
-        status: "unknown",
-        last_tested_at: now,
-        last_success_at: null,
-        last_error: null,
-        last_http_status: null,
-        last_response_ms: null,
-        exit_ip: null,
-        target_url: null,
-        metadata: {},
-        updated_at: now,
-      };
-
-      const { error } = await supabase
-        .from("disposable_chipset_proxy")
-        .upsert(payload, { onConflict: "chip_id" });
-
-      if (error) return json({ error: error.message }, 500);
-      return json({ ok: true, proxy_url: normalizedProxyUrl, proxy_source: proxySource });
-    }
-
-    if (action === "delete") {
-      const { chip_id } = body;
-      if (!chip_id) return json({ error: "chip_id required" }, 400);
-
-      const { data: chip, error: fetchError } = await supabase
-        .from("disposable_chips")
-        .select("*")
-        .eq("id", chip_id)
-        .single();
-
-      if (fetchError || !chip) {
-        if (fetchError?.code === "PGRST116") return json({ ok: true });
-        return json({ error: "Chip não encontrado" }, 404);
-      }
-
-      if (chip.instance_token && chip.uazapi_admin_token && chip.uazapi_server_url) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000);
-          await fetch(`${chip.uazapi_server_url}/instance/delete`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "AdminToken": chip.uazapi_admin_token },
-            body: JSON.stringify({ name: chip.instance_name }),
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-        } catch (e) {
-          console.error("UAZAPI delete error (non-blocking):", e);
-        }
-      }
-
-      try {
-        await supabase.from("messages").update({ chip_id: null }).eq("chip_id", chip_id);
-      } catch (e) {
-        console.error("Error clearing messages chip_id:", e);
-      }
-      try {
-        await supabase.from("prospection_messages").update({ chip_id: null }).eq("chip_id", chip_id);
-      } catch (e) {
-        console.error("Error clearing prospection_messages chip_id:", e);
-      }
-
-      const { error } = await supabase.from("disposable_chips").delete().eq("id", chip_id);
-      if (error) {
-        console.error("DB delete error:", error);
-        if (error.code === "23503") {
-          console.error("FK violation, attempting cleanup...");
-          try {
-            await supabase.from("messages").update({ chip_id: null }).eq("chip_id", chip_id);
-            await supabase.from("prospection_messages").update({ chip_id: null }).eq("chip_id", chip_id);
-            await supabase.from("conversations").update({ chip_id: null }).eq("chip_id", chip_id);
-          } catch (cleanupErr) {
-            console.error("Cleanup error:", cleanupErr);
-          }
-          const { error: retryError } = await supabase.from("disposable_chips").delete().eq("id", chip_id);
-          if (retryError) return json({ error: "Erro ao remover chip: " + retryError.message }, 500);
-        } else {
-          return json({ error: "Erro ao remover chip: " + error.message }, 500);
-        }
-      }
-
-      return json({ ok: true });
-    }
-
-    return json({ error: "Ação inválida" }, 400);
-  } catch (e) {
-    console.error("Edge function error:", e);
-    return json({ error: (e as Error).message || "Erro interno" }, 500);
-  }
-});

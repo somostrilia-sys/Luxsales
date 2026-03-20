@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { PageHeader } from "@/components/PageHeader";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -159,10 +158,10 @@ export default function IdentidadeVisual() {
   return (
     <DashboardLayout>
       <div className="space-y-6 max-w-3xl">
-        <PageHeader
-          title="Identidade Visual"
-          subtitle="Gerencie a identidade da marca de cada empresa"
-        />
+        <div>
+          <h1 className="text-2xl font-bold">Identidade Visual</h1>
+          <p className="text-muted-foreground text-sm">Gerencie a identidade da marca de cada empresa</p>
+        </div>
 
         <Select value={selectedCompany} onValueChange={setSelectedCompany}>
           <SelectTrigger className="w-full sm:w-[300px]">

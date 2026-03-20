@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -109,10 +108,10 @@ export default function CeoBolt() {
   return (
     <DashboardLayout>
       <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
-        <PageHeader
-          title="CEO / Bolt"
-          badge={<Crown className="h-7 w-7 text-yellow-500" />}
-        />
+        <div className="flex items-center gap-3">
+          <Crown className="h-7 w-7 text-yellow-500" />
+          <h1 className="text-2xl font-bold text-foreground">CEO / Bolt</h1>
+        </div>
 
         {/* Configurações - 3 cards */}
         <ConfigCards />

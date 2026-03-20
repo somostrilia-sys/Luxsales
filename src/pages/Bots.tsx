@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,14 +9,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/lib/supabase";
-import { EDGE_BASE } from "@/lib/constants";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Plus, Search, Bot, Pencil, Power, QrCode, Eye, EyeOff, Loader2, Key, Trash2, Smartphone, RefreshCw, BookOpen, MessageCircle, Users, ChevronDown, ChevronUp, Activity, ShieldCheck, TriangleAlert, Timer, Network } from "lucide-react";
+import { Plus, Search, Bot, Pencil, Power, QrCode, Eye, EyeOff, Loader2, Key, Trash2, Smartphone, RefreshCw } from "lucide-react";
 
 // ── Types ──
 
@@ -96,21 +92,7 @@ function maskKey(key: string) {
   return key.slice(0, 7) + "..." + key.slice(-5);
 }
 
-// ── Proxy Editor (inline por chip) ──
-interface ProxyMonitor {
-  chip_id: string;
-  proxy_url: string | null;
-  source: "manual" | "chip" | "iproyal" | "none";
-  status: "unknown" | "healthy" | "degraded" | "error";
-  last_tested_at: string | null;
-  last_success_at: string | null;
-  last_error: string | null;
-  last_http_status: number | null;
-  last_response_ms: number | null;
-  exit_ip: string | null;
-  target_url: string | null;
-  metadata?: Record<string, unknown> | null;
-}
+// ── Disposable Chips Section ──
 
 interface DisposableChip {
   id: string;
@@ -123,183 +105,34 @@ interface DisposableChip {
   phone: string | null;
   uazapi_server_url: string;
   uazapi_admin_token: string;
-  proxy_url?: string | null;
-  proxy_monitor?: ProxyMonitor | null;
 }
 
-function maskProxyUrl(url: string) {
-  return url.replace(/:([^@]+)@/, ":••••@");
-}
-
-function formatProxySource(source?: string | null) {
-  if (source === "iproyal") return "IPRoyal fallback";
-  if (source === "chip") return "Proxy do chip";
-  if (source === "manual") return "Proxy manual";
-  return "Sem proxy";
-}
-
-function ProxyEditor({
-  chip,
-  callEdge,
-  onUpdate,
-}: {
-  chip: DisposableChip;
-  callEdge: (body: Record<string, unknown>) => Promise<any>;
-  onUpdate: () => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(chip.proxy_url || "");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setValue(chip.proxy_url || "");
-  }, [chip.proxy_url]);
-
-  const save = async () => {
-    setSaving(true);
-    const result = await callEdge({ action: "set_proxy", chip_id: chip.id, proxy_url: value.trim() || null });
-    setSaving(false);
-    if (result?.error) { toast.error("Erro ao salvar proxy: " + result.error); return; }
-    toast.success(value.trim() ? "Proxy configurado!" : "Proxy removido");
-    setEditing(false);
-    onUpdate();
-  };
-
-  if (!editing) {
-    return (
-      <div className="flex items-center gap-2 text-xs">
-        {chip.proxy_url ? (
-          <span className="font-mono truncate max-w-[220px]" title={chip.proxy_url}>
-            🔒 {maskProxyUrl(chip.proxy_url)}
-          </span>
-        ) : (
-          <span className="text-muted-foreground/70">Sem proxy manual salvo</span>
-        )}
-        <button
-          onClick={() => { setValue(chip.proxy_url || ""); setEditing(true); }}
-          className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
-        >
-          {chip.proxy_url ? "Editar" : "+ Proxy"}
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex gap-2 items-center">
-      <input
-        type="text"
-        className="flex-1 text-xs bg-background border border-border rounded px-2 py-1 font-mono placeholder:text-muted-foreground/40"
-        placeholder="http://user:senha@host:porta"
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        autoFocus
-      />
-      <Button size="sm" variant="outline" className="text-xs h-7 px-2" onClick={() => setEditing(false)}>✕</Button>
-      <Button size="sm" className="text-xs h-7 px-2" onClick={save} disabled={saving}>
-        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Salvar"}
-      </Button>
-    </div>
-  );
-}
-
-function ProxyMonitorPanel({ chip }: { chip: DisposableChip }) {
-  const monitor = chip.proxy_monitor;
-
-  const statusTone = monitor?.status === "healthy"
-    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-    : monitor?.status === "degraded"
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-      : monitor?.status === "error"
-        ? "border-destructive/30 bg-destructive/10 text-destructive"
-        : "border-border bg-muted/30 text-muted-foreground";
-
-  return (
-    <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge className={statusTone}>
-          {monitor?.status === "healthy" ? <ShieldCheck className="h-3 w-3 mr-1" /> : monitor?.status === "error" ? <TriangleAlert className="h-3 w-3 mr-1" /> : <Activity className="h-3 w-3 mr-1" />}
-          {monitor?.status === "healthy" ? "Monitorado e operacional" : monitor?.status === "degraded" ? "Monitorado com ressalvas" : monitor?.status === "error" ? "Falha real detectada" : "Sem teste recente"}
-        </Badge>
-        <Badge variant="outline">{formatProxySource(monitor?.source)}</Badge>
-        {monitor?.last_http_status && <Badge variant="outline">HTTP {monitor.last_http_status}</Badge>}
-      </div>
-
-      <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-md border border-border px-3 py-2">
-          <p className="text-muted-foreground flex items-center gap-1"><Timer className="h-3 w-3" /> Latência</p>
-          <p className="font-medium">{monitor?.last_response_ms ? `${monitor.last_response_ms} ms` : "—"}</p>
-        </div>
-        <div className="rounded-md border border-border px-3 py-2">
-          <p className="text-muted-foreground flex items-center gap-1"><Network className="h-3 w-3" /> IP de saída</p>
-          <p className="font-medium break-all">{monitor?.exit_ip || "—"}</p>
-        </div>
-        <div className="rounded-md border border-border px-3 py-2">
-          <p className="text-muted-foreground">Último teste</p>
-          <p className="font-medium">{monitor?.last_tested_at ? new Date(monitor.last_tested_at).toLocaleString("pt-BR") : "Nunca"}</p>
-        </div>
-        <div className="rounded-md border border-border px-3 py-2">
-          <p className="text-muted-foreground">Último sucesso</p>
-          <p className="font-medium">{monitor?.last_success_at ? new Date(monitor.last_success_at).toLocaleString("pt-BR") : "—"}</p>
-        </div>
-      </div>
-
-      {chip.proxy_url && (
-        <div className="text-xs font-mono break-all rounded-md border border-border px-3 py-2">
-          {maskProxyUrl(chip.proxy_url)}
-        </div>
-      )}
-
-      {monitor?.last_error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          {monitor.last_error}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Disposable Chips Section ──
-
-// EDGE_BASE imported at top of file
+const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
 function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | null }) {
   const [chips, setChips] = useState<DisposableChip[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [connecting, setConnecting] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState<string | null>(null); // chip_id being connected
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [testingProxy, setTestingProxy] = useState<string | null>(null);
-  const [activeQrChipId, setActiveQrChipId] = useState<string | null>(null);
   const pollingRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
-  // Form para novo chip
+  // Form para novo chip (servidor + token)
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newProxyUrl, setNewProxyUrl] = useState("");
-
-  const mapChipRow = useCallback((row: any): DisposableChip => {
-    const monitor = Array.isArray(row.disposable_chipset_proxy)
-      ? row.disposable_chipset_proxy[0] || null
-      : row.disposable_chipset_proxy || null;
-
-    return {
-      ...row,
-      proxy_url: monitor?.proxy_url || null,
-      proxy_monitor: monitor,
-    };
-  }, []);
+  const [newServerUrl, setNewServerUrl] = useState("https://walkholding.uazapi.com");
+  const [newAdminToken, setNewAdminToken] = useState("");
 
   const fetchChips = useCallback(async () => {
     if (!collaboratorId) { setChips([]); setLoading(false); return; }
     setLoading(true);
     const { data } = await supabase
       .from("disposable_chips")
-      .select("*, disposable_chipset_proxy(*)")
+      .select("*")
       .eq("collaborator_id", collaboratorId)
       .order("chip_index");
-    setChips(((data as any[]) || []).map(mapChipRow));
+    setChips((data as DisposableChip[]) || []);
     setLoading(false);
-  }, [collaboratorId, mapChipRow]);
+  }, [collaboratorId]);
 
   useEffect(() => { fetchChips(); return () => { Object.values(pollingRefs.current).forEach(clearInterval); }; }, [fetchChips]);
 
@@ -311,19 +144,7 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
       body: JSON.stringify(body),
     });
-
-    let payload: any = null;
-    try {
-      payload = await resp.json();
-    } catch {
-      payload = null;
-    }
-
-    if (!resp.ok) {
-      return { ...(payload || {}), error: payload?.error || `HTTP ${resp.status}: ${resp.statusText}` };
-    }
-
-    return payload;
+    return resp.json();
   };
 
   const startStatusPolling = useCallback((chipId: string) => {
@@ -335,35 +156,25 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         delete pollingRefs.current[chipId];
         setChips(prev => prev.map(c => c.id === chipId ? { ...c, status: "connected", qr_code: null, phone: result.phone || c.phone } : c));
         setConnecting(null);
-        setActiveQrChipId(prev => prev === chipId ? null : prev);
-        toast.success("✅ Chip conectado com sucesso!");
-        fetchChips();
-      } else if (result?.status === "connecting" && result?.qr_code) {
-        setChips(prev => prev.map(c => c.id === chipId ? { ...c, qr_code: result.qr_code, status: "connecting" } : c));
-      } else if (result?.status === "disconnected" || result?.qr_expired) {
-        const newQr = await callEdge({ action: "connect", chip_id: chipId });
-        if (newQr?.qr_code) {
-          setChips(prev => prev.map(c => c.id === chipId ? { ...c, qr_code: newQr.qr_code, status: "connecting" } : c));
-          toast.info("QR atualizado — escaneie agora");
-          fetchChips();
-        }
+        toast.success("Chip conectado com sucesso!");
       }
-    }, 8000);
-  }, [callEdge, fetchChips]);
+    }, 5000);
+  }, []);
 
   const addChip = async () => {
-    if (!collaboratorId) { toast.error("Colaborador não encontrado"); return; }
+    if (!collaboratorId || !newAdminToken.trim()) { toast.error("Admin Token é obrigatório"); return; }
     setAdding(true);
     const result = await callEdge({
       action: "create",
       collaborator_id: collaboratorId,
-      ...(newProxyUrl.trim() ? { proxy_url: newProxyUrl.trim() } : {}),
+      uazapi_server_url: newServerUrl.trim(),
+      uazapi_admin_token: newAdminToken.trim(),
     });
     setAdding(false);
     if (result?.error) { toast.error("Erro: " + result.error); return; }
-    toast.success(`Chip #${result.chip?.chip_index} criado!`);
-    setNewProxyUrl("");
+    toast.success(`Chip #${result.chip?.chip_index} criado no UAZAPI!`);
     setShowAddForm(false);
+    setNewAdminToken("");
     fetchChips();
   };
 
@@ -372,95 +183,25 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
     setChips(prev => prev.map(c => c.id === chipId ? { ...c, [field]: value } : c));
   };
 
-  const handleConnect = async (chip: DisposableChip, retryCount = 0) => {
+  const handleConnect = async (chip: DisposableChip) => {
+    if (!chip.instance_token) { toast.error("Instância não criada no UAZAPI"); return; }
     setConnecting(chip.id);
-    try {
-      const result = await callEdge({ action: "connect", chip_id: chip.id });
-      if (result?.error) {
-        if (retryCount < 2) {
-          toast.info("Criando instância, aguarde...");
-          await new Promise(r => setTimeout(r, 2500));
-          return handleConnect(chip, retryCount + 1);
-        }
-        toast.error("Erro ao conectar: " + result.error);
-        setConnecting(null);
-        fetchChips();
-        return;
-      }
-      const qrCode = result?.qr_code;
-      setChips(prev => prev.map(c => c.id === chip.id
-        ? { ...c, status: "connecting", qr_code: qrCode || c.qr_code, instance_token: result?.instance_token || c.instance_token }
-        : c
-      ));
-      if (qrCode) {
-        toast.success(`Proxy ${result?.proxy_status === "healthy" ? "validado" : "aplicado"} antes do QR`);
-        startStatusPolling(chip.id);
-        fetchChips();
-      } else if (retryCount < 2) {
-        await new Promise(r => setTimeout(r, 2000));
-        return handleConnect(chip, retryCount + 1);
-      } else {
-        toast.warning("QR não retornado. Tente clicar Conectar novamente.");
-        setConnecting(null);
-      }
-    } catch (e) {
-      if (retryCount < 1) {
-        await new Promise(r => setTimeout(r, 2000));
-        return handleConnect(chip, retryCount + 1);
-      }
-      toast.error("Falha ao conectar chip. Tente novamente.");
-      setConnecting(null);
-      fetchChips();
-    }
-  };
-
-  const handleTestProxy = async (chip: DisposableChip) => {
-    setTestingProxy(chip.id);
-    const result = await callEdge({ action: "monitor_proxy", chip_id: chip.id, include_qr_probe: true });
-    setTestingProxy(null);
-
-    if (result?.error) {
-      toast.error(result.error);
-      fetchChips();
-      return;
-    }
-
-    toast.success(result?.proxy_status === "healthy"
-      ? "Proxy validado com sucesso"
-      : "Teste concluído com observações");
-    fetchChips();
+    const result = await callEdge({ action: "connect", chip_id: chip.id });
+    if (result?.error) { toast.error("Erro ao conectar: " + result.error); setConnecting(null); return; }
+    const qrCode = result?.qr_code;
+    setChips(prev => prev.map(c => c.id === chip.id ? { ...c, status: "connecting", qr_code: qrCode || c.qr_code } : c));
+    toast.info("Escaneie o QR code no WhatsApp");
+    startStatusPolling(chip.id);
   };
 
   const handleDelete = async (chip: DisposableChip) => {
-    if (!window.confirm(`Remover Chip #${chip.chip_index}? Esta ação é irreversível.`)) return;
     setDeleting(chip.id);
-    // Stop polling first
-    if (pollingRefs.current[chip.id]) {
-      clearInterval(pollingRefs.current[chip.id]);
-      delete pollingRefs.current[chip.id];
-    }
-    try {
-      const result = await callEdge({ action: "delete", chip_id: chip.id });
-      if (result?.error) {
-        toast.error("Erro ao remover: " + result.error);
-        // Even on error, try to refresh from DB to check current state
-        await fetchChips();
-        setDeleting(null);
-        return;
-      }
-      toast.success("Chip removido com sucesso");
-      // Remove from local state and also refresh from DB for consistency
-      setChips(prev => prev.filter(c => c.id !== chip.id));
-      // Refresh from DB after short delay to ensure consistency
-      setTimeout(() => fetchChips(), 500);
-    } catch (e: any) {
-      console.error("Chip delete error:", e);
-      toast.error("Falha ao remover chip. Tente novamente.");
-      // Refresh state from DB
-      await fetchChips();
-    } finally {
-      setDeleting(null);
-    }
+    const result = await callEdge({ action: "delete", chip_id: chip.id });
+    setDeleting(null);
+    if (result?.error) { toast.error("Erro: " + result.error); return; }
+    toast.success("Chip removido");
+    if (pollingRefs.current[chip.id]) { clearInterval(pollingRefs.current[chip.id]); delete pollingRefs.current[chip.id]; }
+    fetchChips();
   };
 
   const statusBadge = (status: string) => {
@@ -475,17 +216,50 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
         <div>
           <CardTitle className="text-lg flex items-center gap-2">
             <Smartphone className="h-5 w-5 text-amber-500" />
-            📱 Chips de Disparo
+            Chips Descartáveis
             {chips.length > 0 && <span className="text-sm text-muted-foreground font-normal">({chips.length}/5)</span>}
           </CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">Chips adicionais para prospecção e disparo em massa. Seu WhatsApp pessoal já tem bot ativo após conectar abaixo.</p>
+          <p className="text-xs text-muted-foreground mt-1">Números para disparo em massa — antibloco por rodízio</p>
         </div>
-        <Button size="sm" onClick={async () => { if (!collaboratorId) { toast.error("Colaborador não encontrado"); return; } setAdding(true); const result = await callEdge({ action: "create", collaborator_id: collaboratorId }); setAdding(false); if (result?.error) { toast.error("Erro: " + result.error); return; } toast.success("Chip #" + (result.chip?.chip_index || "") + " criado!"); fetchChips(); }} disabled={!collaboratorId || chips.length >= 5} className="gap-2">
+        <Button size="sm" onClick={() => setShowAddForm(v => !v)} disabled={!collaboratorId || chips.length >= 5} className="gap-2">
           <Plus className="h-4 w-4" />
-          + Novo Chip
+          Adicionar Chip
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Formulário de novo chip */}
+        {showAddForm && (
+          <div className="border border-amber-500/30 rounded-lg p-4 space-y-3 bg-amber-500/5">
+            <p className="text-sm font-medium text-amber-400">Novo Chip Descartável</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">URL Servidor UAZAPI</Label>
+                <Input
+                  value={newServerUrl}
+                  onChange={e => setNewServerUrl(e.target.value)}
+                  placeholder="https://meuservidor.uazapi.com"
+                  className="bg-background border-border text-sm mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Admin Token UAZAPI *</Label>
+                <Input
+                  value={newAdminToken}
+                  onChange={e => setNewAdminToken(e.target.value)}
+                  placeholder="Token administrativo..."
+                  className="bg-background border-border text-sm mt-1"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button size="sm" variant="outline" onClick={() => { setShowAddForm(false); setNewAdminToken(""); }}>Cancelar</Button>
+              <Button size="sm" onClick={addChip} disabled={adding} className="gap-2">
+                {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                {adding ? "Criando..." : "Criar Chip"}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
@@ -497,35 +271,29 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
           </div>
         ) : (
           <div className="space-y-3">
-            {chips.map((chip, displayIdx) => (
+            {chips.map(chip => (
               <div key={chip.id} className="border border-border rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-sm font-semibold">Chip #{displayIdx + 1}</span>
+                {/* Header do chip */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold">Chip #{chip.chip_index}</span>
                     {statusBadge(chip.status)}
                     {chip.phone && <span className="text-xs text-muted-foreground">{chip.phone}</span>}
                   </div>
-                  <div className="flex gap-2 flex-wrap justify-end">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1 text-xs"
-                      onClick={() => handleTestProxy(chip)}
-                      disabled={testingProxy === chip.id || connecting === chip.id}
-                    >
-                      {testingProxy === chip.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
-                      {testingProxy === chip.id ? "Testando..." : "Testar proxy"}
-                    </Button>
+                  <div className="flex gap-2">
                     {chip.status !== "connected" && (
-                      <Badge
-                        onClick={() => { if (!connecting) { handleConnect(chip); setActiveQrChipId(chip.id); } }}
-                        className={`cursor-pointer gap-1 text-xs px-3 py-1 ${connecting === chip.id ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20'}`}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleConnect(chip)}
+                        disabled={connecting === chip.id}
+                        className="gap-1 text-xs"
                       >
                         {connecting === chip.id
                           ? <Loader2 className="h-3 w-3 animate-spin" />
                           : <QrCode className="h-3 w-3" />}
-                        {connecting === chip.id ? "Aguardando..." : "QR Code"}
-                      </Badge>
+                        {connecting === chip.id ? "Aguardando..." : "Conectar"}
+                      </Button>
                     )}
                     <Button
                       size="sm"
@@ -539,16 +307,14 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                   </div>
                 </div>
 
-                <ProxyEditor chip={chip} callEdge={callEdge} onUpdate={fetchChips} />
-                <ProxyMonitorPanel chip={chip} />
-
-                {activeQrChipId === chip.id && chip.qr_code && chip.status !== "connected" && (
+                {/* QR Code */}
+                {chip.qr_code && chip.status !== "connected" && (
                   <div className="flex flex-col items-center gap-2 py-2">
                     <p className="text-xs text-amber-400">Escaneie com o WhatsApp</p>
                     <div className="bg-white p-3 rounded-xl shadow border">
                       <img
                         src={chip.qr_code.startsWith("data:") ? chip.qr_code : `data:image/png;base64,${chip.qr_code}`}
-                        alt={`QR Chip #${displayIdx + 1}`}
+                        alt={`QR Chip #${chip.chip_index}`}
                         width={200}
                         height={200}
                         className="rounded"
@@ -557,342 +323,36 @@ function DisposableChipsSection({ collaboratorId }: { collaboratorId: string | n
                     <p className="text-xs text-muted-foreground animate-pulse">Aguardando conexão...</p>
                   </div>
                 )}
+
+                {/* Instância info */}
+                {chip.instance_name && (
+                  <p className="text-xs text-muted-foreground">Instância: {chip.instance_name}</p>
+                )}
+
+                {/* Campos editáveis de servidor */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Servidor UAZAPI</Label>
+                    <Input
+                      value={chip.uazapi_server_url || ""}
+                      onChange={e => setChips(prev => prev.map(c => c.id === chip.id ? { ...c, uazapi_server_url: e.target.value } : c))}
+                      onBlur={e => updateField(chip.id, "uazapi_server_url", e.target.value)}
+                      className="bg-background border-border text-xs mt-1 h-8"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Admin Token</Label>
+                    <Input
+                      type="password"
+                      value={chip.uazapi_admin_token || ""}
+                      onChange={e => setChips(prev => prev.map(c => c.id === chip.id ? { ...c, uazapi_admin_token: e.target.value } : c))}
+                      onBlur={e => updateField(chip.id, "uazapi_admin_token", e.target.value)}
+                      className="bg-background border-border text-xs mt-1 h-8"
+                    />
+                  </div>
+                </div>
               </div>
             ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Bot Training Section ──
-
-function BotTrainingSection({ collaboratorId }: { collaboratorId: string | null }) {
-  const [trainingText, setTrainingText] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!collaboratorId) { setLoading(false); return; }
-    (async () => {
-      setLoading(true);
-      const { data } = await supabase
-        .from("collaborators")
-        .select("bot_training")
-        .eq("id", collaboratorId)
-        .maybeSingle();
-      setTrainingText((data as any)?.bot_training || "");
-      setLoading(false);
-    })();
-  }, [collaboratorId]);
-
-  const handleSave = async () => {
-    if (!collaboratorId) return;
-    setSaving(true);
-    const { error } = await supabase
-      .from("collaborators")
-      .update({ bot_training: trainingText } as any)
-      .eq("id", collaboratorId);
-    setSaving(false);
-    if (error) { toast.error("Erro ao salvar: " + error.message); return; }
-    toast.success("Material de treino salvo!");
-  };
-
-  return (
-    <Card className="border-blue-500/30">
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <BookOpen className="h-5 w-5 text-blue-500" />
-          Treinar meu Bot
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">Cole aqui material da empresa para treinar seu bot (textos, scripts, FAQ, etc.)</p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {loading ? (
-          <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-        ) : (
-          <>
-            <Textarea
-              value={trainingText}
-              onChange={e => setTrainingText(e.target.value)}
-              placeholder="Cole aqui o material de treinamento do seu bot..."
-              className="min-h-[200px] bg-background border-border"
-            />
-            <div className="flex justify-end">
-              <Button onClick={handleSave} disabled={saving} className="gap-2">
-                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Salvar Material
-              </Button>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── WhatsApp Conversations Section ──
-
-interface WaBotConversation {
-  id: string;
-  collaborator_id: string;
-  contact_name: string | null;
-  contact_phone: string;
-  history: Array<{ role: string; content: string }>;
-  last_message_at: string | null;
-  created_at: string | null;
-}
-
-function WhatsAppConversationsSection({ collaboratorId }: { collaboratorId: string | null }) {
-  const [conversations, setConversations] = useState<WaBotConversation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedConversation, setSelectedConversation] = useState<WaBotConversation | null>(null);
-
-  useEffect(() => {
-    if (!collaboratorId) { setConversations([]); setLoading(false); return; }
-    (async () => {
-      setLoading(true);
-      const { data } = await supabase
-        .from("whatsapp_bot_conversations")
-        .select("*")
-        .eq("collaborator_id", collaboratorId)
-        .order("last_message_at", { ascending: false });
-      setConversations((data as WaBotConversation[]) || []);
-      setLoading(false);
-    })();
-  }, [collaboratorId]);
-
-  return (
-    <>
-      <Card className="border-green-500/30">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <MessageCircle className="h-5 w-5 text-green-500" />
-            Conversas do WhatsApp
-            {conversations.length > 0 && (
-              <span className="text-sm text-muted-foreground font-normal">({conversations.length})</span>
-            )}
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">Histórico de conversas do bot com contatos</p>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-          ) : conversations.length === 0 ? (
-            <div className="text-center py-8 space-y-3">
-              <MessageCircle className="h-10 w-10 text-muted-foreground mx-auto opacity-40" />
-              <p className="text-muted-foreground text-sm">Nenhuma conversa registrada ainda</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {conversations.map(conv => (
-                <button
-                  key={conv.id}
-                  onClick={() => setSelectedConversation(conv)}
-                  className="w-full text-left border border-border rounded-lg p-3 hover:border-green-500/40 hover:bg-muted/30 transition-colors flex items-center justify-between gap-3"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
-                      <MessageCircle className="h-4 w-4 text-green-500" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-sm text-foreground truncate">
-                        {conv.contact_name || conv.contact_phone}
-                      </p>
-                      {conv.contact_name && (
-                        <p className="text-xs text-muted-foreground">{conv.contact_phone}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-xs text-muted-foreground">
-                      {conv.last_message_at
-                        ? new Date(conv.last_message_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
-                        : "—"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{conv.history?.length || 0} msgs</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Modal de conversa */}
-      <Dialog open={!!selectedConversation} onOpenChange={open => !open && setSelectedConversation(null)}>
-        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageCircle className="h-5 w-5 text-green-500" />
-              {selectedConversation?.contact_name || selectedConversation?.contact_phone}
-            </DialogTitle>
-            {selectedConversation?.contact_name && (
-              <p className="text-xs text-muted-foreground">{selectedConversation.contact_phone}</p>
-            )}
-          </DialogHeader>
-          <ScrollArea className="flex-1 max-h-[60vh] px-1">
-            <div className="space-y-3 py-2">
-              {(selectedConversation?.history || []).map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-start" : "justify-end"}`}>
-                  <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
-                      msg.role === "user"
-                        ? "bg-muted text-foreground rounded-bl-md"
-                        : "bg-primary text-primary-foreground rounded-br-md"
-                    }`}
-                  >
-                    {msg.content}
-                  </div>
-                </div>
-              ))}
-              {(selectedConversation?.history || []).length === 0 && (
-                <p className="text-center text-muted-foreground text-sm py-8">Nenhuma mensagem</p>
-              )}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-// ── Admin: All Collaborators Chips Overview (CEO/Diretor only) ──
-
-interface CollabChipOverview {
-  collaborator_id: string;
-  collaborator_name: string;
-  chips: DisposableChip[];
-}
-
-function AdminChipsOverview() {
-  const [data, setData] = useState<CollabChipOverview[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [expandedCollabs, setExpandedCollabs] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      // Fetch all disposable chips with collaborator names
-      const { data: chips } = await supabase
-        .from("disposable_chips")
-        .select("*")
-        .order("chip_index");
-
-      const { data: collabs } = await supabase
-        .from("collaborators")
-        .select("id, name")
-        .eq("active", true)
-        .order("name");
-
-      if (chips && collabs) {
-        const collabMap = new Map(collabs.map((c: any) => [c.id, c.name]));
-        const grouped = new Map<string, DisposableChip[]>();
-
-        for (const chip of chips as DisposableChip[]) {
-          const existing = grouped.get(chip.collaborator_id) || [];
-          existing.push(chip);
-          grouped.set(chip.collaborator_id, existing);
-        }
-
-        const result: CollabChipOverview[] = [];
-        for (const [collabId, collabChips] of grouped.entries()) {
-          result.push({
-            collaborator_id: collabId,
-            collaborator_name: collabMap.get(collabId) || "Desconhecido",
-            chips: collabChips,
-          });
-        }
-        result.sort((a, b) => a.collaborator_name.localeCompare(b.collaborator_name));
-        setData(result);
-      }
-      setLoading(false);
-    })();
-  }, []);
-
-  const toggleExpand = (collabId: string) => {
-    setExpandedCollabs(prev => {
-      const next = new Set(prev);
-      if (next.has(collabId)) next.delete(collabId);
-      else next.add(collabId);
-      return next;
-    });
-  };
-
-  const statusDot = (status: string) => {
-    if (status === "connected") return "bg-emerald-500";
-    if (status === "connecting") return "bg-amber-500";
-    return "bg-red-500";
-  };
-
-  const totalChips = data.reduce((sum, d) => sum + d.chips.length, 0);
-  const connectedChips = data.reduce((sum, d) => sum + d.chips.filter(c => c.status === "connected").length, 0);
-
-  return (
-    <Card className="border-purple-500/30">
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Users className="h-5 w-5 text-purple-500" />
-          Painel Geral — Todos os Chips
-          <span className="text-sm text-muted-foreground font-normal ml-2">
-            {connectedChips}/{totalChips} conectados | {data.length} colaboradores
-          </span>
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">Visão administrativa de todos os chips descartáveis de todos os colaboradores</p>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-        ) : data.length === 0 ? (
-          <p className="text-center text-muted-foreground text-sm py-8">Nenhum chip cadastrado no sistema</p>
-        ) : (
-          <div className="space-y-2">
-            {data.map(item => {
-              const connected = item.chips.filter(c => c.status === "connected").length;
-              const isExpanded = expandedCollabs.has(item.collaborator_id);
-              return (
-                <div key={item.collaborator_id} className="border border-border rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => toggleExpand(item.collaborator_id)}
-                    className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex gap-1">
-                        {item.chips.map(c => (
-                          <div key={c.id} className={`w-2.5 h-2.5 rounded-full ${statusDot(c.status)}`} />
-                        ))}
-                      </div>
-                      <span className="font-medium text-sm">{item.collaborator_name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {connected}/{item.chips.length} chips
-                      </span>
-                    </div>
-                    {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                  </button>
-                  {isExpanded && (
-                    <div className="border-t border-border p-3 space-y-2 bg-muted/10">
-                      {item.chips.map((chip, idx) => (
-                        <div key={chip.id} className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${statusDot(chip.status)}`} />
-                            <span>Chip #{idx + 1}</span>
-                          </div>
-                          <span className="text-muted-foreground">{chip.phone || "Sem número"}</span>
-                          <Badge variant="outline" className={`text-[10px] ${
-                            chip.status === "connected" ? "text-emerald-400 border-emerald-500/30" :
-                            chip.status === "connecting" ? "text-amber-400 border-amber-500/30" :
-                            "text-red-400 border-red-500/30"
-                          }`}>
-                            {chip.status === "connected" ? "Conectado" : chip.status === "connecting" ? "Aguardando" : "Desconectado"}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
           </div>
         )}
       </CardContent>
@@ -1206,20 +666,21 @@ export default function Bots() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <PageHeader
-          title={roleLevel >= 2 ? "Meu WhatsApp & Chips" : "Gerenciamento de Bots"}
-          subtitle="Conecte seu WhatsApp e gerencie chips de disparo"
-        />
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Gerenciamento de Bots</h1>
+          <p className="text-sm text-muted-foreground">Cadastre e gerencie bots e API keys do sistema</p>
+        </div>
 
-        {roleLevel <= 1 && (
         <Tabs defaultValue="bots" className="w-full">
           <TabsList className="bg-[#111118] border border-[#1E1E2E]">
             <TabsTrigger value="bots" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <Bot className="h-4 w-4" /> Chips de Disparo
+              <Bot className="h-4 w-4" /> Bots
             </TabsTrigger>
-            <TabsTrigger value="apikeys" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-              <Key className="h-4 w-4" /> API Keys
-            </TabsTrigger>
+            {roleLevel <= 1 && (
+              <TabsTrigger value="apikeys" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+                <Key className="h-4 w-4" /> API Keys
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* ════════════════════ ABA BOTS ════════════════════ */}
@@ -1230,7 +691,7 @@ export default function Bots() {
                 <Input placeholder="Buscar bot..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 bg-[#111118] border-[#1E1E2E]" />
               </div>
               <Button onClick={openNewBot} className="gap-2 bg-primary hover:bg-primary/90">
-                <Plus className="h-4 w-4" /> Chip de Disparo
+                <Plus className="h-4 w-4" /> Novo Bot
               </Button>
             </div>
 
@@ -1292,6 +753,7 @@ export default function Bots() {
           </TabsContent>
 
           {/* ════════════════════ ABA API KEYS ════════════════════ */}
+          {roleLevel <= 1 && (
           <TabsContent value="apikeys" className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="relative max-w-sm flex-1">
@@ -1369,11 +831,8 @@ export default function Bots() {
               </div>
             )}
           </TabsContent>
+          )}
         </Tabs>
-        )}
-
-        {/* ════════════════════ PAINEL ADMIN — TODOS OS CHIPS ════════════════════ */}
-        {roleLevel <= 1 && <AdminChipsOverview />}
 
         {/* ════════════════════ MEU WHATSAPP ════════════════════ */}
         <Card className="border-emerald-500/30">
@@ -1393,30 +852,7 @@ export default function Bots() {
                   {waProfileName && <span className="text-foreground font-medium">{waProfileName}</span>}
                   {waPhone && <span className="text-muted-foreground text-sm ml-2">{waPhone}</span>}
                 </div>
-                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive gap-2" onClick={async () => {
-                  if (!window.confirm("Desconectar WhatsApp principal?")) return;
-                  try {
-                    const { data: instances } = await supabase
-                      .from("bot_instances")
-                      .select("id, uazapi_token")
-                      .eq("collaborator_id", collaborator?.id)
-                      .eq("bot_type", "whatsapp")
-                      .limit(1);
-                    const inst = instances?.[0];
-                    if (inst) {
-                      await supabase.from("bot_instances").update({
-                        whatsapp_status: "disconnected",
-                        uazapi_instance_id: null,
-                        uazapi_token: null,
-                        whatsapp_number: null
-                      }).eq("id", inst.id);
-                    }
-                    toast.success("WhatsApp desconectado");
-                    window.location.reload();
-                  } catch(e) {
-                    toast.error("Erro ao desconectar");
-                  }
-                }}>
+                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive gap-2" onClick={() => toast.info("Desconectar em breve")}>
                   <Power className="h-4 w-4" /> Desconectar
                 </Button>
               </div>
@@ -1449,18 +885,13 @@ export default function Bots() {
 
         {/* ════════════════════ CHIPS DESCARTÁVEIS ════════════════════ */}
         <DisposableChipsSection collaboratorId={collaborator?.id || null} />
-
-        {/* ════════════════════ TREINAR MEU BOT ════════════════════ */}
-        <BotTrainingSection collaboratorId={collaborator?.id || null} />
-
-        {/* ════════════════════ CONVERSAS DO WHATSAPP ════════════════════ */}
-        <WhatsAppConversationsSection collaboratorId={collaborator?.id || null} />
       </div>
+
       {/* ════════════════════ MODAL BOT ════════════════════ */}
       <Dialog open={botModalOpen} onOpenChange={setBotModalOpen}>
         <DialogContent className="bg-[#111118] border-[#1E1E2E] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingBot ? "Editar Bot" : "+ Chip de Disparo"}</DialogTitle>
+            <DialogTitle>{editingBot ? "Editar Bot" : "Novo Bot"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>

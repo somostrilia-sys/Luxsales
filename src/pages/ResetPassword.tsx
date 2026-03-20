@@ -7,8 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { toast } from "sonner";
-import { Lock, Loader2 } from "lucide-react";
-import { LOGO_URL } from "@/lib/constants";
+import { Bot, Lock, Loader2 } from "lucide-react";
 
 export default function ResetPassword() {
   const [password, setPassword] = useState("");
@@ -59,14 +58,13 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 login-bg">
-      <div className="w-full max-w-md space-y-8">
-        <div className="flex justify-center">
-          <img src={LOGO_URL} alt="Walk Holding" className="h-28 object-contain drop-shadow-[0_0_30px_hsl(217,91%,53%,0.15)]" />
-        </div>
-
-      <Card variant="gradient" className="card-accent-top">
-        <CardHeader className="text-center space-y-2">
+    <div className="min-h-screen flex items-center justify-center p-4 relative">
+      
+      <Card className="w-full max-w-md bg-card/80 backdrop-blur-md border-border/50 shadow-2xl animate-fade-in">
+        <CardHeader className="text-center space-y-4">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-kpi-from to-kpi-to flex items-center justify-center shadow-glow">
+            <Bot className="h-8 w-8 text-white" />
+          </div>
           <div>
             <CardTitle className="text-2xl font-bold">Nova senha</CardTitle>
             <CardDescription>Digite sua nova senha</CardDescription>
@@ -106,14 +104,13 @@ export default function ResetPassword() {
             </div>
           </CardContent>
           <CardFooter>
-            <Button type="submit" className="w-full h-11 btn-modern font-semibold" disabled={loading}>
+            <Button type="submit" className="w-full btn-shimmer bg-gradient-to-r from-kpi-from to-kpi-to" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Atualizar senha
             </Button>
           </CardFooter>
         </form>
       </Card>
-      </div>
     </div>
   );
 }
