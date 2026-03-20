@@ -41,7 +41,6 @@ interface Message {
   channel_type: string | null;
   media_url: string | null;
   media_type: string | null;
-  media_mimetype?: string | null;
   created_at: string | null;
   direction?: string | null;
   chip_id?: string | null;
@@ -503,7 +502,7 @@ export default function AtendimentoLeads() {
                             loading="lazy"
                           />
                         )}
-                        {/* Text content (skip if it's just a media label and we already rendered media) */}
+                        {/* Text content */}
                         {msg.content && !(msg.media_url && msg.media_type === "document") && (
                           <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                         )}

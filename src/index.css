@@ -6,44 +6,44 @@
 
 @layer base {
   :root {
-    --background: 240 15% 4%;
-    --foreground: 240 5% 95%;
+    --background: 220 20% 4%;
+    --foreground: 0 0% 95%;
 
-    --card: 240 15% 7%;
-    --card-foreground: 240 5% 95%;
+    --card: 220 16% 7%;
+    --card-foreground: 0 0% 95%;
 
-    --popover: 240 15% 7%;
-    --popover-foreground: 240 5% 95%;
+    --popover: 220 16% 7%;
+    --popover-foreground: 0 0% 95%;
 
     --primary: 217 91% 53%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 15% 11%;
-    --secondary-foreground: 240 5% 90%;
+    --secondary: 220 14% 11%;
+    --secondary-foreground: 220 10% 78%;
 
-    --muted: 240 15% 11%;
-    --muted-foreground: 240 10% 58%;
+    --muted: 220 14% 11%;
+    --muted-foreground: 220 10% 46%;
 
-    --accent: 160 84% 39%;
+    --accent: 199 89% 48%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 15% 15%;
-    --input: 240 15% 5%;
-    --input-border: 240 15% 20%;
+    --border: 220 14% 12%;
+    --input: 220 16% 8%;
+    --input-border: 220 12% 18%;
     --ring: 217 91% 53%;
 
-    --radius: 0.625rem;
+    --radius: 1rem;
 
-    --sidebar-background: 240 15% 7%;
-    --sidebar-foreground: 240 5% 85%;
+    --sidebar-background: 220 20% 5%;
+    --sidebar-foreground: 220 10% 72%;
     --sidebar-primary: 217 91% 53%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 15% 10%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 240 15% 11%;
+    --sidebar-accent: 220 14% 10%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 220 14% 10%;
     --sidebar-ring: 217 91% 53%;
 
     --success: 160 84% 39%;
@@ -51,7 +51,21 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --card-hover: 240 15% 10%;
+    --card-hover: 220 14% 12%;
+
+    /* Gradient tokens */
+    --gradient-card: linear-gradient(145deg, hsl(220 16% 9%), hsl(220 16% 6%));
+    --gradient-card-highlight: linear-gradient(145deg, hsl(220 14% 12%), hsl(220 16% 8%));
+    --gradient-primary: linear-gradient(135deg, hsl(217 91% 53%), hsl(217 91% 40%));
+    --gradient-accent: linear-gradient(135deg, hsl(199 89% 48%), hsl(217 91% 53%));
+    --gradient-surface: linear-gradient(180deg, hsl(220 16% 8%) 0%, hsl(220 20% 4%) 100%);
+
+    /* Shadow tokens */
+    --shadow-card: 0 1px 2px 0 hsl(0 0% 0% / 0.3);
+    --shadow-card-hover: 0 4px 12px -2px hsl(0 0% 0% / 0.4);
+    --shadow-glow-primary: 0 0 24px -4px hsl(217 91% 53% / 0.25);
+    --shadow-glow-accent: 0 0 20px -4px hsl(199 89% 48% / 0.2);
+    --shadow-elevated: 0 8px 24px -8px hsl(0 0% 0% / 0.5);
   }
 }
 
@@ -62,33 +76,137 @@
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-/* Table row hover */
+/* ─── Card gradient styles ─── */
+.card-gradient {
+  background: var(--gradient-card);
+  border-color: hsl(220 14% 13%);
+  box-shadow: var(--shadow-card);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-gradient:hover {
+  background: var(--gradient-card-highlight);
+  box-shadow: var(--shadow-card-hover);
+  border-color: hsl(220 14% 17%);
+}
+
+/* Card with colored top accent */
+.card-accent-top {
+  position: relative;
+  overflow: hidden;
+}
+.card-accent-top::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gradient-primary);
+}
+.card-accent-top.accent-green::before {
+  background: var(--gradient-accent);
+}
+.card-accent-top.accent-warning::before {
+  background: linear-gradient(90deg, hsl(38 92% 50%), hsl(25 95% 53%));
+}
+
+/* Glassmorphism card */
+.card-glass {
+  background: hsl(220 16% 7% / 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-color: hsl(220 14% 16% / 0.5);
+}
+
+/* ─── KPI stat icon containers ─── */
+.stat-icon-primary {
+  background: hsl(217 91% 53% / 0.1);
+  color: hsl(217 91% 60%);
+}
+.stat-icon-success {
+  background: hsl(160 84% 39% / 0.1);
+  color: hsl(160 84% 48%);
+}
+.stat-icon-warning {
+  background: hsl(38 92% 50% / 0.1);
+  color: hsl(38 92% 56%);
+}
+.stat-icon-muted {
+  background: hsl(220 10% 46% / 0.1);
+  color: hsl(220 10% 56%);
+}
+
+/* ─── Table row hover ─── */
 .table-row-hover {
-  transition: background-color 0.2s ease;
+  transition: background-color 0.15s ease;
 }
 .table-row-hover:hover {
   background-color: hsl(var(--card-hover));
 }
 
-/* Custom button styling */
+/* ─── Modern button ─── */
 .btn-modern {
-  border-radius: 10px;
-  transition: all 0.2s ease;
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px 0 hsl(0 0% 0% / 0.15);
 }
 .btn-modern:hover {
-  box-shadow: 0 0 20px -4px hsl(var(--primary) / 0.4);
+  box-shadow: var(--shadow-glow-primary);
+  transform: translateY(-1px);
 }
 
-/* Sidebar active gradient */
+/* ─── Sidebar ─── */
 .sidebar-active-gradient {
-  background: linear-gradient(135deg, hsl(var(--primary) / 0.15), hsl(var(--primary) / 0.05));
+  background: linear-gradient(135deg, hsl(217 91% 53% / 0.12), hsl(217 91% 53% / 0.03));
   border-left: 2px solid hsl(var(--primary));
 }
 
-/* Input styling */
+/* ─── Input styling ─── */
 input, textarea, [role="combobox"] {
   border-color: hsl(var(--input-border)) !important;
+}
+input:focus, textarea:focus, [role="combobox"]:focus {
+  border-color: hsl(var(--primary)) !important;
+  box-shadow: 0 0 0 2px hsl(217 91% 53% / 0.15) !important;
+}
+
+/* ─── Login background pattern ─── */
+.login-bg {
+  background-color: hsl(220 20% 4%);
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% -20%, hsl(217 91% 53% / 0.1), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 100%, hsl(199 89% 48% / 0.05), transparent);
+}
+
+/* ─── Top bar search ─── */
+.topbar-search {
+  background: hsl(220 14% 8%);
+  border: 1px solid hsl(220 14% 14%);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+.topbar-search:focus-within {
+  border-color: hsl(217 91% 53% / 0.4);
+  box-shadow: 0 0 0 3px hsl(217 91% 53% / 0.08);
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(220 14% 18%);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(220 14% 26%);
 }

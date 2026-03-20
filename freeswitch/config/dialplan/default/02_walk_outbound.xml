@@ -1,0 +1,51 @@
+<!-- Walk Agente Central Hub - Dialplan Outbound -->
+
+<include>
+  <!-- Chamadas AI (originadas pelo sistema) -->
+  <extension name="walk-ai-outbound">
+    <condition field="destination_number" expression="^ai_call_(.+)$">
+
+      <!-- Variáveis setadas pelo ESL controller -->
+      <action application="set" data="call_direction=outbound"/>
+      <action application="set" data="ai_mode=true"/>
+
+      <!-- Bridge para o número real via SIP Trunk -->
+      <action application="set" data="effective_caller_id_number=${outbound_caller_id}"/>
+      <action application="set" data="effective_caller_id_name=${company_name}"/>
+
+      <!-- Gravar -->
+      <action application="set" data="RECORD_STEREO=true"/>
+      <action application="set" data="recording_file=$${recordings_dir}/${uuid}.${record_ext}"/>
+      <action application="record_session" data="${recording_file}"/>
+
+      <!-- Originar chamada -->
+      <action application="bridge" data="sofia/gateway/walk-sip-trunk/$1"/>
+
+    </condition>
+  </extension>
+
+  <!-- Chamadas manuais de ramais (Discador.tsx) -->
+  <extension name="walk-manual-outbound">
+    <condition field="destination_number" expression="^9(\d{10,11})$">
+
+      <action application="set" data="call_direction=outbound"/>
+      <action application="set" data="ai_mode=false"/>
+
+      <!-- Gravar -->
+      <action application="set" data="RECORD_STEREO=true"/>
+      <action application="set" data="recording_file=$${recordings_dir}/${uuid}.${record_ext}"/>
+      <action application="record_session" data="${recording_file}"/>
+
+      <!-- Originar via SIP Trunk -->
+      <action application="bridge" data="sofia/gateway/walk-sip-trunk/55$1"/>
+
+    </condition>
+  </extension>
+
+  <!-- Transferência entre ramais internos -->
+  <extension name="walk-internal-transfer">
+    <condition field="destination_number" expression="^(\d{3,4})$">
+      <action application="bridge" data="user/$1@$${domain}"/>
+    </condition>
+  </extension>
+</include>

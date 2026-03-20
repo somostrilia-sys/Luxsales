@@ -1,0 +1,29 @@
+<!-- Walk Agente Central Hub - SIP Trunk Gateway -->
+<!-- Configurar com dados da Nvoip, Vono, ou operadora escolhida -->
+
+<include>
+  <gateway name="walk-sip-trunk">
+    <!-- Dados da operadora SIP -->
+    <param name="username" value="${SIP_TRUNK_USER}"/>
+    <param name="password" value="${SIP_TRUNK_PASS}"/>
+    <param name="realm" value="${SIP_TRUNK_HOST}"/>
+    <param name="proxy" value="${SIP_TRUNK_HOST}:${SIP_TRUNK_PORT}"/>
+    <param name="register" value="true"/>
+    <param name="register-transport" value="udp"/>
+
+    <!-- Caller ID -->
+    <param name="caller-id-in-from" value="true"/>
+
+    <!-- Codecs -->
+    <param name="codec-prefs" value="PCMA,PCMU,G729"/>
+
+    <!-- Timeouts -->
+    <param name="expire-seconds" value="3600"/>
+    <param name="retry-seconds" value="30"/>
+
+    <!-- Ping para manter conexão -->
+    <param name="ping" value="25"/>
+    <param name="ping-max" value="3"/>
+    <param name="ping-min" value="1"/>
+  </gateway>
+</include>
