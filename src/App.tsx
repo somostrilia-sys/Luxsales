@@ -62,8 +62,8 @@ const App = () => (
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="/extracao" element={<ProtectedRoute><Extracao /></ProtectedRoute>} />
           <Route path="/agentes" element={<ProtectedRoute minLevel={1}><Agentes /></ProtectedRoute>} />
-          <Route path="/bots" element={<ProtectedRoute><Bots /></ProtectedRoute>} />
-          <Route path="/proxy" element={<ProtectedRoute><Proxy /></ProtectedRoute>} />
+          <Route path="/bots" element={<ProtectedRoute minLevel={0}><Bots /></ProtectedRoute>} />
+          <Route path="/proxy" element={<ProtectedRoute minLevel={0}><Proxy /></ProtectedRoute>} />
           <Route path="/base-dados" element={<ProtectedRoute minLevel={2}><BaseDados /></ProtectedRoute>} />
           <Route path="/conversas" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
           <Route path="/meu-bot" element={<ProtectedRoute><MeuBot /></ProtectedRoute>} />
@@ -74,14 +74,14 @@ const App = () => (
           <Route path="/identidade-visual" element={<ProtectedRoute minLevel={0}><IdentidadeVisual /></ProtectedRoute>} />
           <Route path="/ceo" element={<ProtectedRoute minLevel={0}><CeoBolt /></ProtectedRoute>} />
           <Route path="/motor-leads" element={<ProtectedRoute><MotorLeads /></ProtectedRoute>} />
-          <Route path="/voice-ai" element={<ProtectedRoute minLevel={1}><VoiceAI /></ProtectedRoute>} />
+          <Route path="/voice-ai" element={<ProtectedRoute minLevel={0}><VoiceAI /></ProtectedRoute>} />
           <Route path="/call-campaigns" element={<ProtectedRoute minLevel={1}><CallCampaigns /></ProtectedRoute>} />
           <Route path="/atendimento" element={<ProtectedRoute><AtendimentoLeads /></ProtectedRoute>} />
 
           <Route path="/dashboard-voip" element={<ProtectedRoute minLevel={1}><DashboardVoip /></ProtectedRoute>} />
           <Route path="/discador" element={<ProtectedRoute minLevel={2}><Discador /></ProtectedRoute>} />
           <Route path="/leads-discador" element={<ProtectedRoute minLevel={1}><LeadsDiscador /></ProtectedRoute>} />
-          <Route path="/whatsapp-meta" element={<ProtectedRoute minLevel={1}><WhatsAppMeta /></ProtectedRoute>} />
+          <Route path="/whatsapp-meta" element={<ProtectedRoute minLevel={0}><WhatsAppMeta /></ProtectedRoute>} />
           <Route path="/relatorios-voz" element={<ProtectedRoute minLevel={1}><RelatoriosVoz /></ProtectedRoute>} />
           <Route path="/compliance-voz" element={<ProtectedRoute minLevel={0}><ComplianceVoz /></ProtectedRoute>} />
           <Route path="/configuracoes-voz" element={<ProtectedRoute minLevel={0}><ConfiguracoesVoz /></ProtectedRoute>} />

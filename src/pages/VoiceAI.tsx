@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { supabase } from "@/lib/supabase";
-import { SUPABASE_URL } from "@/lib/constants";
+import { SUPABASE_URL, EDGE_BASE } from "@/lib/constants";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,16 +13,26 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import {
   AudioLines,
+  Bot,
+  CheckCircle2,
   Loader2,
+  MessageSquare,
   Mic,
+  Pause,
   PhoneCall,
   Play,
   Plus,
+  RotateCcw,
+  Send,
   ShieldAlert,
   Trash2,
+  Upload,
   User,
   Users,
   Volume2,
@@ -77,6 +87,23 @@ type CallLog = {
   result: string | null;
   created_at: string | null;
   recording_url?: string | null;
+  ai_transcript?: { role: string; text: string; timestamp?: string }[] | null;
+};
+
+type SimMessage = {
+  id: string;
+  role: "lead" | "ai";
+  content: string;
+  timestamp: string;
+  audioUrl?: string;
+};
+
+type VoiceCloneForm = {
+  name: string;
+  consentChecked: boolean;
+  files: File[];
+  uploading: boolean;
+  trainingStatus: "idle" | "uploading" | "training" | "ready" | "failed";
 };
 
 type TrainingFormState = {
@@ -198,6 +225,7 @@ const normalizeLog = (item: any): CallLog => ({
   result: item.result ?? null,
   created_at: item.created_at ?? null,
   recording_url: item.recording_url ?? null,
+  ai_transcript: Array.isArray(item.ai_transcript) ? item.ai_transcript : null,
 });
 
 async function fetchRestTable(table: string, _select = "*") {
@@ -234,6 +262,36 @@ async function generateVoiceAudio(text: string, voiceKey: string) {
   return `data:audio/mpeg;base64,${payload.audio_base64}`;
 }
 
+function buildSimulatorSystemPrompt(form: TrainingFormState): string {
+  let prompt = `Você é ${form.aiSellerName}, um vendedor(a) de ${form.product} em uma ligação telefônica.`;
+  prompt += `\nTom de voz: ${form.voiceTone}.`;
+  prompt += `\nObjetivo da ligação: ${form.callGoal}.`;
+  prompt += `\n\nScript de abertura: ${form.openingScript}`;
+  prompt += `\nScript de desenvolvimento: ${form.developmentScript}`;
+  prompt += `\nScript de fechamento: ${form.closingScript}`;
+  prompt += `\n\nRegras: ${form.rules}`;
+  if (form.objections.length > 0) {
+    prompt += `\n\nQuando encontrar objeções, use estas respostas:`;
+    for (const obj of form.objections) {
+      if (obj.objection) prompt += `\n- "${obj.objection}": ${obj.response}`;
+    }
+  }
+  prompt += `\n\nIMPORTANTE:`;
+  prompt += `\n- Fale em português brasileiro natural.`;
+  prompt += `\n- Respostas curtas: máximo 2-3 frases por vez.`;
+  prompt += `\n- NÃO use markdown, emojis, ou formatação.`;
+  prompt += `\n- Fale como se estivesse conversando por telefone.`;
+  return prompt;
+}
+
+const initialVoiceCloneForm: VoiceCloneForm = {
+  name: "",
+  consentChecked: false,
+  files: [],
+  uploading: false,
+  trainingStatus: "idle",
+};
+
 export default function VoiceAI() {
   const { collaborator, roleLevel } = useCollaborator();
   const [trainingForm, setTrainingForm] = useState<TrainingFormState>(initialTrainingState);
@@ -251,6 +309,25 @@ export default function VoiceAI() {
   const [testingTrainingVoice, setTestingTrainingVoice] = useState(false);
   const [testingQuickCall, setTestingQuickCall] = useState(false);
   const [previewingVoiceKey, setPreviewingVoiceKey] = useState<string | null>(null);
+
+  // Simulator state
+  const [simMessages, setSimMessages] = useState<SimMessage[]>([]);
+  const [simInput, setSimInput] = useState("");
+  const [simLoading, setSimLoading] = useState(false);
+  const [simVoiceKey, setSimVoiceKey] = useState<string>("");
+  const [simAutoPlay, setSimAutoPlay] = useState(false);
+  const simScrollRef = useRef<HTMLDivElement>(null);
+  const simAudioRef = useRef<HTMLAudioElement>(null);
+
+  // Call player state
+  const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
+  const [playingCallId, setPlayingCallId] = useState<string | null>(null);
+  const [callAudioProgress, setCallAudioProgress] = useState<number>(0);
+  const callAudioRef = useRef<HTMLAudioElement>(null);
+
+  // Voice clone state
+  const [voiceCloneForm, setVoiceCloneForm] = useState<VoiceCloneForm>(initialVoiceCloneForm);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const stats = useMemo(() => {
     const today = new Date().toDateString();
@@ -426,6 +503,206 @@ export default function VoiceAI() {
     }
   };
 
+  // ============ SIMULATOR FUNCTIONS ============
+
+  const simSendMessage = async () => {
+    const text = simInput.trim();
+    if (!text || simLoading) return;
+
+    const leadMsg: SimMessage = {
+      id: crypto.randomUUID(),
+      role: "lead",
+      content: text,
+      timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    const updatedMessages = [...simMessages, leadMsg];
+    setSimMessages(updatedMessages);
+    setSimInput("");
+    setSimLoading(true);
+
+    try {
+      const session = await supabase.auth.getSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session.data.session?.access_token) {
+        headers.Authorization = `Bearer ${session.data.session.access_token}`;
+      }
+
+      const systemPrompt = buildSimulatorSystemPrompt(trainingForm);
+      const apiMessages = updatedMessages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      const response = await fetch(`${EDGE_BASE}/ai-simulator`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          messages: apiMessages,
+          system_prompt: systemPrompt,
+          voice_key: simAutoPlay ? (simVoiceKey || selectedVoice) : undefined,
+          generate_audio: simAutoPlay,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || "Erro na simulação");
+
+      const aiAudioUrl = payload.audio_base64
+        ? `data:audio/mpeg;base64,${payload.audio_base64}`
+        : undefined;
+
+      const aiMsg: SimMessage = {
+        id: crypto.randomUUID(),
+        role: "ai",
+        content: payload.response,
+        timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+        audioUrl: aiAudioUrl,
+      };
+
+      setSimMessages((prev) => [...prev, aiMsg]);
+
+      // Auto-play audio
+      if (simAutoPlay && aiAudioUrl && simAudioRef.current) {
+        simAudioRef.current.src = aiAudioUrl;
+        simAudioRef.current.play().catch(() => {});
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Erro ao simular conversa.");
+    } finally {
+      setSimLoading(false);
+    }
+  };
+
+  const simReset = () => {
+    setSimMessages([]);
+    setSimInput("");
+    setSimLoading(false);
+  };
+
+  const simPlayAudio = async (msg: SimMessage) => {
+    if (msg.audioUrl) {
+      if (simAudioRef.current) {
+        simAudioRef.current.src = msg.audioUrl;
+        simAudioRef.current.play().catch(() => {});
+      }
+      return;
+    }
+
+    // Generate audio on demand
+    const voiceKey = simVoiceKey || selectedVoice;
+    if (!voiceKey) {
+      toast.error("Selecione uma voz para reproduzir.");
+      return;
+    }
+
+    try {
+      const audioUrl = await generateVoiceAudio(msg.content, voiceKey);
+      setSimMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? { ...m, audioUrl } : m))
+      );
+      if (simAudioRef.current) {
+        simAudioRef.current.src = audioUrl;
+        simAudioRef.current.play().catch(() => {});
+      }
+    } catch (error) {
+      toast.error("Erro ao gerar áudio.");
+    }
+  };
+
+  // Auto-scroll simulator chat
+  useEffect(() => {
+    if (simScrollRef.current) {
+      simScrollRef.current.scrollTop = simScrollRef.current.scrollHeight;
+    }
+  }, [simMessages, simLoading]);
+
+  // ============ CALL PLAYER FUNCTIONS ============
+
+  const toggleCallPlayer = (logId: string) => {
+    setExpandedCallId((prev) => (prev === logId ? null : logId));
+    if (playingCallId === logId) {
+      callAudioRef.current?.pause();
+      setPlayingCallId(null);
+    }
+  };
+
+  const playCallAudio = (log: CallLog) => {
+    if (!log.recording_url || !callAudioRef.current) return;
+    if (playingCallId === log.id) {
+      callAudioRef.current.pause();
+      setPlayingCallId(null);
+      return;
+    }
+    callAudioRef.current.src = log.recording_url;
+    callAudioRef.current.play().catch(() => {});
+    setPlayingCallId(log.id);
+  };
+
+  // ============ VOICE CLONE FUNCTIONS ============
+
+  const handleCloneFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setVoiceCloneForm((prev) => ({ ...prev, files: [...prev.files, ...files] }));
+  };
+
+  const removeCloneFile = (index: number) => {
+    setVoiceCloneForm((prev) => ({
+      ...prev,
+      files: prev.files.filter((_, i) => i !== index),
+    }));
+  };
+
+  const submitVoiceClone = async () => {
+    if (!voiceCloneForm.name.trim()) {
+      toast.error("Informe um nome para a voz.");
+      return;
+    }
+    if (voiceCloneForm.files.length === 0) {
+      toast.error("Envie pelo menos um arquivo de áudio.");
+      return;
+    }
+    if (!voiceCloneForm.consentChecked) {
+      toast.error("Você precisa aceitar o consentimento LGPD.");
+      return;
+    }
+
+    setVoiceCloneForm((prev) => ({ ...prev, uploading: true, trainingStatus: "uploading" }));
+
+    try {
+      const uploadedPaths: string[] = [];
+      for (const file of voiceCloneForm.files) {
+        const filePath = `voice-clones/${crypto.randomUUID()}-${file.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("voice-samples")
+          .upload(filePath, file, { contentType: file.type });
+        if (uploadError) throw uploadError;
+        uploadedPaths.push(filePath);
+      }
+
+      const { error: insertError } = await supabase.from("ai_voice_clones").insert({
+        clone_name: voiceCloneForm.name,
+        sample_paths: uploadedPaths,
+        training_status: "pending",
+        lgpd_consent: true,
+        lgpd_consent_at: new Date().toISOString(),
+        company_id: collaborator?.company_id || null,
+      } as never);
+
+      if (insertError) throw insertError;
+
+      setVoiceCloneForm({ ...initialVoiceCloneForm, trainingStatus: "training" });
+      toast.success("Amostras enviadas! O treinamento da voz foi iniciado.");
+    } catch (error) {
+      console.error(error);
+      setVoiceCloneForm((prev) => ({ ...prev, trainingStatus: "failed" }));
+      toast.error("Erro ao enviar amostras de voz.");
+    } finally {
+      setVoiceCloneForm((prev) => ({ ...prev, uploading: false }));
+    }
+  };
+
   const createCampaign = async () => {
     setSavingCampaign(true);
     try {
@@ -503,6 +780,7 @@ export default function VoiceAI() {
             <TabsTrigger value="treinamento">Treinamento da IA</TabsTrigger>
             <TabsTrigger value="vozes">Vozes</TabsTrigger>
             <TabsTrigger value="campanhas">Campanhas & Dashboard</TabsTrigger>
+            <TabsTrigger value="simulador">Simulador</TabsTrigger>
           </TabsList>
 
           <TabsContent value="treinamento" className="space-y-6">
@@ -766,6 +1044,144 @@ export default function VoiceAI() {
                 );
               })}
             </div>
+            {/* Voice Clone Training Card */}
+            <Card className="border-border/60 bg-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mic className="h-5 w-5 text-primary" />
+                  Treinar Nova Voz
+                </CardTitle>
+                <CardDescription>
+                  Envie amostras de áudio para criar um clone de voz personalizado.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Nome da voz</Label>
+                  <Input
+                    value={voiceCloneForm.name}
+                    onChange={(e) =>
+                      setVoiceCloneForm((prev) => ({ ...prev, name: e.target.value }))
+                    }
+                    placeholder="Ex: Maria - Atendente"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Amostras de áudio</Label>
+                  <div
+                    className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border/60 bg-secondary/20 p-6 transition-colors hover:border-primary/40"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      Clique para enviar arquivos .wav ou .mp3
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Recomendado: 3-5 amostras de 30s a 2min cada
+                    </p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".wav,.mp3,audio/wav,audio/mpeg"
+                      multiple
+                      className="hidden"
+                      onChange={handleCloneFileChange}
+                    />
+                  </div>
+                  {voiceCloneForm.files.length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      {voiceCloneForm.files.map((file, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between rounded-lg border border-border/60 bg-secondary/20 px-3 py-2"
+                        >
+                          <div className="flex items-center gap-2 text-sm">
+                            <AudioLines className="h-4 w-4 text-primary" />
+                            <span className="truncate max-w-[200px]">{file.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({(file.size / 1024 / 1024).toFixed(1)} MB)
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => removeCloneFile(index)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="lgpd-consent"
+                    checked={voiceCloneForm.consentChecked}
+                    onCheckedChange={(checked) =>
+                      setVoiceCloneForm((prev) => ({
+                        ...prev,
+                        consentChecked: checked === true,
+                      }))
+                    }
+                  />
+                  <Label htmlFor="lgpd-consent" className="text-sm leading-relaxed">
+                    Declaro que possuo autorização expressa do titular da voz para
+                    utilização das amostras de áudio conforme a LGPD (Lei Geral de
+                    Proteção de Dados).
+                  </Label>
+                </div>
+
+                {voiceCloneForm.trainingStatus !== "idle" && (
+                  <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-secondary/20 px-3 py-2">
+                    {voiceCloneForm.trainingStatus === "uploading" && (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                        <span className="text-sm">Enviando amostras...</span>
+                      </>
+                    )}
+                    {voiceCloneForm.trainingStatus === "training" && (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />
+                        <span className="text-sm">Treinamento em andamento...</span>
+                      </>
+                    )}
+                    {voiceCloneForm.trainingStatus === "ready" && (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        <span className="text-sm">Voz pronta para uso!</span>
+                      </>
+                    )}
+                    {voiceCloneForm.trainingStatus === "failed" && (
+                      <>
+                        <ShieldAlert className="h-4 w-4 text-red-500" />
+                        <span className="text-sm">Erro no treinamento. Tente novamente.</span>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <Button
+                  onClick={submitVoiceClone}
+                  disabled={
+                    voiceCloneForm.uploading ||
+                    !voiceCloneForm.name.trim() ||
+                    voiceCloneForm.files.length === 0 ||
+                    !voiceCloneForm.consentChecked
+                  }
+                >
+                  {voiceCloneForm.uploading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="mr-2 h-4 w-4" />
+                  )}
+                  Enviar e Treinar
+                </Button>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="campanhas" className="space-y-6">
@@ -878,6 +1294,22 @@ export default function VoiceAI() {
                 <CardTitle>Histórico de ligações</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
+                {/* Hidden audio element for call playback */}
+                <audio
+                  ref={callAudioRef}
+                  className="hidden"
+                  onTimeUpdate={() => {
+                    if (callAudioRef.current && callAudioRef.current.duration) {
+                      setCallAudioProgress(
+                        (callAudioRef.current.currentTime / callAudioRef.current.duration) * 100
+                      );
+                    }
+                  }}
+                  onEnded={() => {
+                    setPlayingCallId(null);
+                    setCallAudioProgress(0);
+                  }}
+                />
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -888,7 +1320,7 @@ export default function VoiceAI() {
                       <TableHead>Resultado</TableHead>
                       <TableHead>Sentimento</TableHead>
                       <TableHead>Data</TableHead>
-                      <TableHead>Gravação</TableHead>
+                      <TableHead>Player</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -897,37 +1329,290 @@ export default function VoiceAI() {
                         <TableCell colSpan={8} className="text-center text-muted-foreground">Nenhum registro de ligação encontrado.</TableCell>
                       </TableRow>
                     ) : callLogs.map((log: any) => (
-                      <TableRow key={log.id}>
-                        <TableCell>{log.lead_phone || "—"}</TableCell>
-                        <TableCell>{log.voice_key || "—"}</TableCell>
-                        <TableCell><Badge variant="outline">{log.status || "—"}</Badge></TableCell>
-                        <TableCell>{log.duration_sec ? `${log.duration_sec}s` : "—"}</TableCell>
-                        <TableCell>
-                          {log.lead_temperature ? (
-                            <Badge variant="outline" className={
-                              log.lead_temperature === "hot" ? "bg-red-500/20 text-red-400" :
-                              log.lead_temperature === "warm" ? "bg-yellow-500/20 text-yellow-400" :
-                              "bg-blue-500/20 text-blue-400"
-                            }>{log.lead_temperature?.toUpperCase()}</Badge>
-                          ) : (log.result || "—")}
-                        </TableCell>
-                        <TableCell>
-                          {log.sentiment_overall ? (
-                            <Badge variant="outline" className={
-                              log.sentiment_overall === "positive" ? "bg-emerald-500/20 text-emerald-400" :
-                              log.sentiment_overall === "negative" ? "bg-red-500/20 text-red-400" :
-                              "bg-muted text-muted-foreground"
-                            }>{log.sentiment_overall}</Badge>
-                          ) : "—"}
-                        </TableCell>
-                        <TableCell>{formatDate(log.created_at)}</TableCell>
-                        <TableCell>
-                          {log.recording_url ? <audio controls className="max-w-[220px]" src={log.recording_url} /> : "—"}
-                        </TableCell>
-                      </TableRow>
+                      <>
+                        <TableRow key={log.id} className={expandedCallId === log.id ? "border-b-0" : ""}>
+                          <TableCell>{log.lead_phone || "—"}</TableCell>
+                          <TableCell>{log.voice_key || "—"}</TableCell>
+                          <TableCell><Badge variant="outline">{log.status || "—"}</Badge></TableCell>
+                          <TableCell>{log.duration_sec ? `${log.duration_sec}s` : "—"}</TableCell>
+                          <TableCell>
+                            {log.lead_temperature ? (
+                              <Badge variant="outline" className={
+                                log.lead_temperature === "hot" ? "bg-red-500/20 text-red-400" :
+                                log.lead_temperature === "warm" ? "bg-yellow-500/20 text-yellow-400" :
+                                "bg-blue-500/20 text-blue-400"
+                              }>{log.lead_temperature?.toUpperCase()}</Badge>
+                            ) : (log.result || "—")}
+                          </TableCell>
+                          <TableCell>
+                            {log.sentiment_overall ? (
+                              <Badge variant="outline" className={
+                                log.sentiment_overall === "positive" ? "bg-emerald-500/20 text-emerald-400" :
+                                log.sentiment_overall === "negative" ? "bg-red-500/20 text-red-400" :
+                                "bg-muted text-muted-foreground"
+                              }>{log.sentiment_overall}</Badge>
+                            ) : "—"}
+                          </TableCell>
+                          <TableCell>{formatDate(log.created_at)}</TableCell>
+                          <TableCell>
+                            {log.recording_url ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => toggleCallPlayer(log.id)}
+                              >
+                                {expandedCallId === log.id ? (
+                                  <Waves className="mr-1 h-4 w-4 text-primary" />
+                                ) : (
+                                  <Play className="mr-1 h-4 w-4" />
+                                )}
+                                {expandedCallId === log.id ? "Fechar" : "Player"}
+                              </Button>
+                            ) : "—"}
+                          </TableCell>
+                        </TableRow>
+                        {expandedCallId === log.id && (
+                          <TableRow key={`${log.id}-player`}>
+                            <TableCell colSpan={8} className="bg-secondary/20 p-4">
+                              <div className="space-y-4">
+                                {/* Audio Player Bar */}
+                                <div className="flex items-center gap-3">
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-9 w-9 shrink-0"
+                                    onClick={() => playCallAudio(log)}
+                                  >
+                                    {playingCallId === log.id ? (
+                                      <Pause className="h-4 w-4" />
+                                    ) : (
+                                      <Play className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                  <div className="flex-1">
+                                    <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                                      <div
+                                        className="h-full rounded-full bg-primary transition-all"
+                                        style={{
+                                          width: `${playingCallId === log.id ? callAudioProgress : 0}%`,
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                  <span className="text-xs text-muted-foreground shrink-0">
+                                    {log.duration_sec ? `${Math.floor(log.duration_sec / 60)}:${String(log.duration_sec % 60).padStart(2, "0")}` : "0:00"}
+                                  </span>
+                                </div>
+
+                                {/* Transcription */}
+                                {log.ai_transcript && Array.isArray(log.ai_transcript) && log.ai_transcript.length > 0 ? (
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Transcrição</Label>
+                                    <ScrollArea className="h-[200px] rounded-lg border border-border/60 bg-card p-3">
+                                      <div className="space-y-2">
+                                        {log.ai_transcript.map((segment: any, idx: number) => (
+                                          <div
+                                            key={idx}
+                                            className={`rounded-lg px-3 py-2 text-sm ${
+                                              segment.role === "ai"
+                                                ? "bg-primary/10 text-foreground"
+                                                : "bg-secondary text-foreground"
+                                            }`}
+                                          >
+                                            <span className="font-semibold text-xs">
+                                              {segment.role === "ai" ? "IA" : "Lead"}
+                                            </span>
+                                            {segment.timestamp && (
+                                              <span className="ml-2 text-xs text-muted-foreground">
+                                                {new Date(segment.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                                              </span>
+                                            )}
+                                            <p className="mt-0.5">{segment.text}</p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </ScrollArea>
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Sem transcrição disponível para esta ligação.</p>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </>
                     ))}
                   </TableBody>
                 </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ============ SIMULATOR TAB ============ */}
+          <TabsContent value="simulador" className="space-y-6">
+            <Card className="border-border/60 bg-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-primary" />
+                  Simulador de Conversa IA
+                </CardTitle>
+                <CardDescription>
+                  Simule uma conversa entre um lead e o Agente IA usando o script de treinamento atual.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Controls */}
+                <div className="flex flex-wrap items-end gap-4">
+                  <div className="space-y-2">
+                    <Label>Voz para áudio</Label>
+                    <Select
+                      value={simVoiceKey || selectedVoice}
+                      onValueChange={setSimVoiceKey}
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Selecione uma voz" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {voiceProfiles.map((voice) => (
+                          <SelectItem key={voice.id} value={voice.voice_key}>
+                            {voice.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="auto-play"
+                      checked={simAutoPlay}
+                      onCheckedChange={setSimAutoPlay}
+                    />
+                    <Label htmlFor="auto-play" className="text-sm">
+                      Auto-play áudio
+                    </Label>
+                  </div>
+                  <Button variant="outline" onClick={simReset} disabled={simMessages.length === 0}>
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Reiniciar
+                  </Button>
+                </div>
+
+                {/* Chat Area */}
+                <div className="rounded-xl border border-border/60 bg-secondary/10">
+                  <div
+                    ref={simScrollRef}
+                    className="h-[400px] overflow-y-auto p-4 space-y-3"
+                  >
+                    {simMessages.length === 0 && !simLoading && (
+                      <div className="flex h-full items-center justify-center">
+                        <div className="text-center space-y-2">
+                          <Bot className="mx-auto h-12 w-12 text-muted-foreground/40" />
+                          <p className="text-sm text-muted-foreground">
+                            Digite uma mensagem abaixo para iniciar a simulação.
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            O IA responderá usando o script de treinamento configurado na aba &quot;Treinamento da IA&quot;.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {simMessages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={`flex ${msg.role === "lead" ? "justify-end" : "justify-start"}`}
+                      >
+                        <div
+                          className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
+                            msg.role === "lead"
+                              ? "bg-primary text-primary-foreground rounded-br-md"
+                              : "bg-card border border-border/60 text-foreground rounded-bl-md"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-xs font-semibold opacity-80">
+                              {msg.role === "lead" ? "Lead" : `Agente IA (${trainingForm.aiSellerName})`}
+                            </span>
+                            <span className="text-xs opacity-50">{msg.timestamp}</span>
+                          </div>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                          {msg.role === "ai" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="mt-1 h-7 px-2 text-xs opacity-70 hover:opacity-100"
+                              onClick={() => simPlayAudio(msg)}
+                            >
+                              <Volume2 className="mr-1 h-3 w-3" />
+                              Ouvir
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    {simLoading && (
+                      <div className="flex justify-start">
+                        <div className="bg-card border border-border/60 rounded-2xl rounded-bl-md px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex gap-1">
+                              <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
+                              <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
+                              <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
+                            </div>
+                            <span className="text-xs text-muted-foreground">digitando...</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Input */}
+                  <div className="border-t border-border/60 p-3">
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        simSendMessage();
+                      }}
+                      className="flex gap-2"
+                    >
+                      <Input
+                        value={simInput}
+                        onChange={(e) => setSimInput(e.target.value)}
+                        placeholder="Digite como se fosse o lead..."
+                        disabled={simLoading}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="submit"
+                        disabled={!simInput.trim() || simLoading}
+                        size="icon"
+                      >
+                        {simLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </form>
+                  </div>
+                </div>
+
+                {/* Hidden audio for auto-play */}
+                <audio ref={simAudioRef} className="hidden" />
+
+                {/* Current training config summary */}
+                <Card className="border-border/60 bg-secondary/20">
+                  <CardContent className="p-4">
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <Badge variant="outline">Vendedor: {trainingForm.aiSellerName}</Badge>
+                      <Badge variant="outline">Produto: {trainingForm.product}</Badge>
+                      <Badge variant="outline">Tom: {trainingForm.voiceTone}</Badge>
+                      <Badge variant="outline">Objetivo: {trainingForm.callGoal}</Badge>
+                      <Badge variant="outline">{trainingForm.objections.length} objeções cadastradas</Badge>
+                    </div>
+                  </CardContent>
+                </Card>
               </CardContent>
             </Card>
           </TabsContent>
