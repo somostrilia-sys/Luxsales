@@ -74,7 +74,7 @@ Deno.serve(async (req: Request) => {
               const idempotencyKey = `msg_${message.id}`;
 
               // Inserir webhook event
-              await supabase.from("whatsapp_meta_webhook_events").insert({
+              const { error: webhookErr } = await supabase.from("whatsapp_meta_webhook_events").upsert({
                 company_id: companyId,
                 phone_number_id: phoneNumberId,
                 event_type: "messages",
@@ -85,7 +85,8 @@ Deno.serve(async (req: Request) => {
                 payload: message,
                 processing_status: "processing",
                 idempotency_key: idempotencyKey,
-              }).onConflict("idempotency_key").ignore();
+              }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+              if (webhookErr) console.error("Webhook event insert error:", webhookErr.message);
 
               // Inserir mensagem na tabela principal
               const messageBody =
@@ -101,7 +102,7 @@ Deno.serve(async (req: Request) => {
                 message.document?.id ||
                 null;
 
-              await supabase.from("whatsapp_meta_messages").insert({
+              const { error: msgErr } = await supabase.from("whatsapp_meta_messages").insert({
                 company_id: companyId,
                 message_id: message.id,
                 direction: "inbound",
@@ -112,7 +113,7 @@ Deno.serve(async (req: Request) => {
                 media_url: mediaUrl,
                 status: "received",
                 phone_number_id: phoneNumberId,
-                phone_number_fk: phoneRecord?.id,
+                phone_number_fk: phoneRecord?.id || null,
                 context: message.context || null,
                 metadata: {
                   timestamp: message.timestamp,
@@ -125,6 +126,7 @@ Deno.serve(async (req: Request) => {
                 frequently_forwarded:
                   message.context?.frequently_forwarded || false,
               });
+              if (msgErr) console.error("Message insert error:", msgErr.message);
 
               // Atualizar webhook event como processado
               await supabase
@@ -156,7 +158,7 @@ Deno.serve(async (req: Request) => {
               const idempotencyKey = `status_${status.id}_${status.status}`;
 
               // Log webhook event
-              await supabase.from("whatsapp_meta_webhook_events").insert({
+              const { error: statusEvtErr } = await supabase.from("whatsapp_meta_webhook_events").upsert({
                 company_id: companyId,
                 phone_number_id: phoneNumberId,
                 event_type: "statuses",
@@ -167,7 +169,8 @@ Deno.serve(async (req: Request) => {
                 payload: status,
                 processing_status: "processing",
                 idempotency_key: idempotencyKey,
-              }).onConflict("idempotency_key").ignore();
+              }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+              if (statusEvtErr) console.error("Status event insert error:", statusEvtErr.message);
 
               // Atualizar status da mensagem
               const updateData: Record<string, unknown> = {
