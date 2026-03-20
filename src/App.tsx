@@ -1,9 +1,16 @@
 import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { CollaboratorProvider } from "@/contexts/CollaboratorContext";
+import { CompanyFilterProvider } from "@/contexts/CompanyFilterContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Loader2 } from "lucide-react";
+
+const queryClient = new QueryClient();
 
 // Lazy-loaded pages
 const Index = lazy(() => import("./pages/Index"));
@@ -47,12 +54,16 @@ function PageLoader() {
 }
 
 const App = () => (
-  <>
-    <Toaster />
-    <Sonner />
-    <BrowserRouter>
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <AuthProvider>
+        <CollaboratorProvider>
+          <CompanyFilterProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/registro" element={<Registro />} />
@@ -86,11 +97,15 @@ const App = () => (
           <Route path="/compliance-voz" element={<ProtectedRoute minLevel={0}><ComplianceVoz /></ProtectedRoute>} />
           <Route path="/configuracoes-voz" element={<ProtectedRoute minLevel={0}><ConfiguracoesVoz /></ProtectedRoute>} />
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
-  </>
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </BrowserRouter>
+          </CompanyFilterProvider>
+        </CollaboratorProvider>
+      </AuthProvider>
+    </TooltipProvider>
+  </QueryClientProvider>
 );
 
 export default App;
