@@ -1,0 +1,13 @@
+{
+  "name": "walk-ai-pipeline",
+  "version": "1.0.0",
+  "description": "Walk Agente Central Hub - AI Voice Pipeline (STT → LLM → TTS)",
+  "main": "index.js",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "ws": "^8.16.0",
+    "dotenv": "^16.4.0"
+  }
+}

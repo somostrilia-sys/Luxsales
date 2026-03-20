@@ -1,0 +1,25 @@
+<configuration name="verto.conf" description="Verto WebRTC Endpoint">
+  <settings>
+    <param name="debug" value="0"/>
+  </settings>
+
+  <profiles>
+    <profile name="walk-webrtc">
+      <param name="bind-local" value="0.0.0.0:$${verto_port}"/>
+      <param name="force-register-domain" value="$${domain}"/>
+      <param name="secure-combined" value="/etc/freeswitch/tls/fullchain.pem"/>
+      <param name="secure-chain" value="/etc/freeswitch/tls/chain.pem"/>
+      <param name="userauth" value="true"/>
+      <param name="blind-reg" value="false"/>
+      <param name="mcast-ip" value=""/>
+      <param name="mcast-port" value=""/>
+      <param name="rtp-ip" value="$${local_ip_v4}"/>
+      <param name="ext-rtp-ip" value="$${external_rtp_ip}"/>
+      <param name="local-network" value="localnet.auto"/>
+      <param name="outbound-codec-string" value="opus,vp8"/>
+      <param name="inbound-codec-string" value="opus,vp8"/>
+      <param name="apply-candidate-acl" value="wan.auto"/>
+      <param name="timer-name" value="soft"/>
+    </profile>
+  </profiles>
+</configuration>

@@ -1,0 +1,40 @@
+<!-- Walk Agente Central Hub - Dialplan Inbound -->
+
+<include>
+  <!-- Chamadas entrando pelo SIP Trunk -->
+  <extension name="walk-inbound">
+    <condition field="context" expression="public"/>
+    <condition field="destination_number" expression="^(\+?55\d{10,11})$">
+
+      <!-- Setar variáveis -->
+      <action application="set" data="company_id=lookup"/>
+      <action application="set" data="call_direction=inbound"/>
+      <action application="set" data="call_id=${uuid}"/>
+
+      <!-- Notificar Supabase que chamada chegou -->
+      <action application="curl" data="$${supabase_url}/functions/v1/voip-webhook Content-Type:application/json post {\"event\":\"inbound_call\",\"call_id\":\"${uuid}\",\"caller\":\"${caller_id_number}\",\"destination\":\"$1\",\"trunk\":\"${sip_gateway_name}\"}"/>
+
+      <!-- Atender -->
+      <action application="answer"/>
+      <action application="sleep" data="500"/>
+
+      <!-- Gravar chamada -->
+      <action application="set" data="RECORD_STEREO=true"/>
+      <action application="set" data="recording_file=$${recordings_dir}/${uuid}.${record_ext}"/>
+      <action application="record_session" data="${recording_file}"/>
+
+      <!-- Enviar para IVR via Lua script (consulta Supabase) -->
+      <action application="lua" data="walk_ivr.lua"/>
+
+    </condition>
+  </extension>
+
+  <!-- Fallback: número não reconhecido -->
+  <extension name="walk-inbound-fallback">
+    <condition field="context" expression="public"/>
+    <condition field="destination_number" expression="^(.*)$">
+      <action application="log" data="WARNING Unmatched inbound call to $1 from ${caller_id_number}"/>
+      <action application="hangup" data="UNALLOCATED_NUMBER"/>
+    </condition>
+  </extension>
+</include>

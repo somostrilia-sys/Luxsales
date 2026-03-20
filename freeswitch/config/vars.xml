@@ -1,0 +1,41 @@
+<include>
+  <!-- Walk Agente Central Hub - FreeSWITCH Variables -->
+
+  <!-- Rede -->
+  <X-PRE-PROCESS cmd="set" data="local_ip_v4=${PUBLIC_IP}"/>
+  <X-PRE-PROCESS cmd="set" data="external_rtp_ip=${PUBLIC_IP}"/>
+  <X-PRE-PROCESS cmd="set" data="external_sip_ip=${PUBLIC_IP}"/>
+  <X-PRE-PROCESS cmd="set" data="domain=${DOMAIN}"/>
+  <X-PRE-PROCESS cmd="set" data="domain_name=$${domain}"/>
+
+  <!-- SIP -->
+  <X-PRE-PROCESS cmd="set" data="internal_sip_port=5060"/>
+  <X-PRE-PROCESS cmd="set" data="internal_tls_port=5061"/>
+  <X-PRE-PROCESS cmd="set" data="external_sip_port=5080"/>
+
+  <!-- Codecs (ordem de preferência) -->
+  <X-PRE-PROCESS cmd="set" data="global_codec_prefs=OPUS,PCMA,PCMU,G729"/>
+  <X-PRE-PROCESS cmd="set" data="outbound_codec_prefs=PCMA,PCMU,G729"/>
+
+  <!-- RTP -->
+  <X-PRE-PROCESS cmd="set" data="rtp_start_port=16384"/>
+  <X-PRE-PROCESS cmd="set" data="rtp_end_port=32768"/>
+
+  <!-- Gravações -->
+  <X-PRE-PROCESS cmd="set" data="recordings_dir=/var/lib/freeswitch/recordings"/>
+  <X-PRE-PROCESS cmd="set" data="record_ext=wav"/>
+
+  <!-- Sons -->
+  <X-PRE-PROCESS cmd="set" data="sound_prefix=$${sounds_dir}/en/us/callie"/>
+  <X-PRE-PROCESS cmd="set" data="hold_music=local_stream://moh"/>
+
+  <!-- Supabase -->
+  <X-PRE-PROCESS cmd="set" data="supabase_url=https://ecaduzwautlpzpvjognr.supabase.co"/>
+
+  <!-- Verto (WebRTC) -->
+  <X-PRE-PROCESS cmd="set" data="verto_port=8082"/>
+
+  <!-- Idioma padrão -->
+  <X-PRE-PROCESS cmd="set" data="default_language=pt"/>
+  <X-PRE-PROCESS cmd="set" data="default_country=BR"/>
+</include>
