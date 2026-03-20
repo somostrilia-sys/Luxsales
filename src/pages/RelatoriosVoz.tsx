@@ -58,9 +58,11 @@ export default function RelatoriosVoz() {
     const companyId = collaborator?.company_id;
 
     // Load call_logs data (with new fields from migration)
-    const { data: logs } = await supabase.from("call_logs")
+    let logsQuery = supabase.from("call_logs")
       .select("*, sentiment_overall, lead_temperature, compliance_flags, cost_brl, tokens_used")
       .order("created_at", { ascending: false }).limit(1000);
+    if (companyId) logsQuery = logsQuery.eq("company_id", companyId);
+    const { data: logs } = await logsQuery;
     const callData = logs ?? [];
 
     // Load AI analytics from new table

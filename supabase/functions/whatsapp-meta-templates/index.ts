@@ -173,8 +173,9 @@ async function deleteTemplate(companyId: string, templateName: string) {
   const apiVersion = creds.api_version || "v21.0";
   const wabaId = creds.meta_waba_id;
 
+  const params = new URLSearchParams({ name: templateName });
   const response = await fetch(
-    `${META_API_BASE}/${apiVersion}/${wabaId}/message_templates?name=${templateName}`,
+    `${META_API_BASE}/${apiVersion}/${wabaId}/message_templates?${params.toString()}`,
     {
       method: "DELETE",
       headers: { Authorization: `Bearer ${creds.meta_access_token}` },

@@ -170,6 +170,8 @@ Deno.serve(async (req: Request) => {
           return Response.json({ error: "phone required" }, { status: 400 });
         }
 
+        const normalizedPhone = phone.replace(/\D/g, "");
+
         // Coletar todos os dados do titular
         const { data: optIn } = await supabase
           .from("whatsapp_meta_opt_ins")
@@ -181,7 +183,7 @@ Deno.serve(async (req: Request) => {
           .from("whatsapp_meta_messages")
           .select("id, direction, type, body, status, created_at")
           .eq("company_id", company_id)
-          .or(`phone_from.eq.${phone},phone_to.eq.${phone}`)
+          .or(`phone_from.eq.${normalizedPhone},phone_to.eq.${normalizedPhone}`)
           .order("created_at", { ascending: false })
           .limit(500);
 

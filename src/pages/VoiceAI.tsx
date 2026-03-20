@@ -100,12 +100,8 @@ type CampaignFormState = {
   scheduleEnd: string;
 };
 
-const SUPABASE_URL = "https://ecaduzwautlpzpvjognr.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4";
-const REST_HEADERS = {
-  apikey: SUPABASE_ANON_KEY,
-  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-};
+// Usar o cliente Supabase existente ao invés de credenciais hardcoded
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://ecaduzwautlpzpvjognr.supabase.co";
 const DEFAULT_SAMPLE_TEXT = "Boa tarde, tudo bem? Meu nome é Lucas, da proteção veicular Objetivo.";
 
 const initialObjections = (): ObjectionItem[] => [
@@ -204,17 +200,10 @@ const normalizeLog = (item: any): CallLog => ({
   recording_url: item.recording_url ?? null,
 });
 
-async function fetchRestTable(table: string, select = "*") {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}`, {
-    headers: REST_HEADERS,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || `Erro ao carregar ${table}`);
-  }
-
-  return response.json();
+async function fetchRestTable(table: string, _select = "*") {
+  const { data, error } = await supabase.from(table).select(_select);
+  if (error) throw new Error(error.message || `Erro ao carregar ${table}`);
+  return data ?? [];
 }
 
 async function generateVoiceAudio(text: string, voiceKey: string) {

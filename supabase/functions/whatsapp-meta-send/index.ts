@@ -59,7 +59,8 @@ Deno.serve(async (req: Request) => {
       p_message_type: type === "template" ? (body.template?.name?.includes("marketing") ? "marketing" : "transactional") : "transactional",
     });
 
-    if (!optIn?.[0]?.has_opt_in && type !== "template") {
+    const hasOptIn = optIn?.[0]?.has_opt_in ?? false;
+    if (!hasOptIn && type !== "template") {
       return Response.json(
         { error: "Contato nao possui opt-in ativo. Envie um template primeiro." },
         { status: 403 },
@@ -116,6 +117,16 @@ Deno.serve(async (req: Request) => {
       }
       phoneNumberId = phone.phone_number_id;
       phoneRecord = phone;
+    }
+
+    if (!phoneRecord) {
+      // Buscar pelo ID se foi passado manualmente
+      const { data: manualPhone } = await supabase
+        .from("whatsapp_meta_phone_numbers")
+        .select("*")
+        .eq("phone_number_id", phoneNumberId)
+        .single();
+      phoneRecord = manualPhone;
     }
 
     // 5. Verificar rate limit (simples, via banco)
@@ -263,13 +274,13 @@ Deno.serve(async (req: Request) => {
       description: `WhatsApp ${type} para ${to}`,
     });
 
-    // 11. Atualizar stats do template
+    // 11. Atualizar stats do template (increment via SQL)
     if (templateId) {
-      await supabase.rpc("", {}); // handled by trigger or next query
+      await supabase.rpc("exec_sql" as any, {}).catch(() => null); // ignore if rpc doesn't exist
       await supabase
         .from("whatsapp_meta_templates")
         .update({
-          total_sent: (await supabase.from("whatsapp_meta_templates").select("total_sent").eq("id", templateId).single()).data?.total_sent + 1 || 1,
+          total_sent: ((await supabase.from("whatsapp_meta_templates").select("total_sent").eq("id", templateId).single()).data?.total_sent ?? 0) + 1,
           last_sent_at: new Date().toISOString(),
         })
         .eq("id", templateId);

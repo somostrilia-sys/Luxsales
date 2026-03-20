@@ -61,7 +61,8 @@ Deno.serve(async (req: Request) => {
           return Response.json({ error: "meta_access_token and meta_waba_id required" }, { status: 400 });
         }
 
-        const verifyToken = body.webhook_verify_token || crypto.randomUUID();
+        // Sempre gerar server-side para segurança — nunca aceitar do cliente
+        const verifyToken = crypto.randomUUID();
 
         // Verificar se já existe
         const { data: existing } = await supabase
