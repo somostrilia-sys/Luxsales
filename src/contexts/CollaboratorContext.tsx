@@ -77,7 +77,12 @@ export function CollaboratorProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   };
 
+  const userIdRef = useState({ current: "" })[0];
   useEffect(() => {
+    // Só re-fetch se o user ID realmente mudou (evita remount em token refresh)
+    const newId = user?.id || "";
+    if (newId === userIdRef.current && collaborator) return;
+    userIdRef.current = newId;
     fetchCollaborator();
   }, [user]);
 
