@@ -617,8 +617,10 @@ Deno.serve(async (req) => {
         .eq("collaborator_id", collaborator_id);
       if ((existing || []).length >= 5) return json({ error: "Limite de 5 chips atingido" }, 400);
 
-      const maxIndex = (existing || []).reduce((max: number, c: any) => Math.max(max, c.chip_index || 0), 0);
-      const chipIndex = maxIndex + 1;
+      // Fill gaps: find first available index (1-5)
+      const usedIndices = new Set((existing || []).map((c: any) => c.chip_index));
+      let chipIndex = 1;
+      while (usedIndices.has(chipIndex) && chipIndex <= 5) chipIndex++;
       const uazapiAccount = chipIndex <= 3 ? "account_b" : "account_c";
 
       let serverUrl = body.uazapi_server_url || "";
@@ -640,7 +642,7 @@ Deno.serve(async (req) => {
       if (!serverUrl) {
         serverUrl = uazapiAccount === "account_b"
           ? (Deno.env.get("UAZAPI_ACCOUNT_B_URL") || "https://walk2.uazapi.com")
-          : (Deno.env.get("UAZAPI_ACCOUNT_C_URL") || "https://walk2.uazapi.com");
+          : (Deno.env.get("UAZAPI_ACCOUNT_C_URL") || "https://walkholding.uazapi.com");
       }
       if (!finalAdminToken) {
         finalAdminToken = uazapiAccount === "account_b"
@@ -648,13 +650,14 @@ Deno.serve(async (req) => {
           : (Deno.env.get("UAZAPI_ACCOUNT_C_TOKEN") || "");
       }
 
-      if (!finalAdminToken) {
-        const { data: cfg } = await supabase
-          .from("system_configs")
-          .select("value")
-          .eq("key", "uazapi_admin_token")
+      // Fallback: buscar token da uazapi_accounts pelo server URL (nunca usar token genérico)
+      if (!finalAdminToken && serverUrl) {
+        const { data: matchAccount } = await supabase
+          .from("uazapi_accounts")
+          .select("admin_token")
+          .eq("api_url", serverUrl)
           .maybeSingle();
-        finalAdminToken = cfg?.value || "";
+        if (matchAccount?.admin_token) finalAdminToken = matchAccount.admin_token;
       }
 
       const instanceName = `chip_${collaborator_id.slice(0, 8)}_${chipIndex}`;
