@@ -222,24 +222,6 @@ Deno.serve(async (req) => {
 
         await supabase.from("whatsapp_instances").update(updatePayload).eq("id", instance.id);
 
-        // Auto-configure webhook when connected
-        if (connected && instance.instance_token) {
-          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-          try {
-            await fetch(`${serverUrl}/webhook?token=${instance.instance_token}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                webhookUrl: `${supabaseUrl}/functions/v1/webhook-whatsapp`,
-                webhookEnabled: true,
-              }),
-            });
-            console.log(`Webhook auto-configured for instance ${instance.id}`);
-          } catch (e) {
-            console.error("Failed to configure webhook:", e);
-          }
-        }
-
         return json({
           has_instance: true,
           connected,

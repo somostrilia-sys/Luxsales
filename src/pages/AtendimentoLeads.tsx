@@ -457,55 +457,7 @@ export default function AtendimentoLeads() {
                             : "bg-muted text-foreground rounded-bl-md"
                         }`}
                       >
-                        {/* ── Media rendering ── */}
-                        {msg.media_url && msg.media_type === "image" && (
-                          <img
-                            src={msg.media_url}
-                            alt="Imagem"
-                            className="rounded-lg max-w-full max-h-60 mb-1 cursor-pointer"
-                            onClick={() => window.open(msg.media_url!, "_blank")}
-                            loading="lazy"
-                          />
-                        )}
-                        {msg.media_url && msg.media_type === "video" && (
-                          <video
-                            src={msg.media_url}
-                            controls
-                            className="rounded-lg max-w-full max-h-60 mb-1"
-                            preload="metadata"
-                          />
-                        )}
-                        {msg.media_url && (msg.media_type === "audio" || msg.media_type === "ptt") && (
-                          <audio
-                            src={msg.media_url}
-                            controls
-                            className="max-w-full mb-1"
-                            preload="metadata"
-                          />
-                        )}
-                        {msg.media_url && msg.media_type === "document" && (
-                          <a
-                            href={msg.media_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background/50 hover:bg-background/80 transition-colors mb-1 text-xs"
-                          >
-                            <span>📄</span>
-                            <span className="underline">{msg.content || "Documento"}</span>
-                          </a>
-                        )}
-                        {msg.media_url && msg.media_type === "sticker" && (
-                          <img
-                            src={msg.media_url}
-                            alt="Figurinha"
-                            className="max-w-[150px] max-h-[150px] mb-1"
-                            loading="lazy"
-                          />
-                        )}
-                        {/* Text content */}
-                        {msg.content && !(msg.media_url && msg.media_type === "document") && (
-                          <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-                        )}
+                        <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                         <div className={`flex items-center gap-1 mt-1 ${outbound ? "justify-end" : "justify-start"}`}>
                           <span className="text-[10px] opacity-60">
                             {msg.created_at
