@@ -553,7 +553,7 @@ export default function VoiceAI() {
   const simEndCall = () => {
     setCallPhase("ended");
     if (callTimerRef.current) clearInterval(callTimerRef.current);
-    stopRecording();
+    releaseMicrophone();
     if (simAudioRef.current) {
       simAudioRef.current.pause();
       simAudioRef.current.currentTime = 0;
