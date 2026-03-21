@@ -8118,6 +8118,7 @@ export type Database = {
           total_responderam: number
         }[]
       }
+      get_my_company_id: { Args: never; Returns: string }
       get_next_lead_to_dial: {
         Args: { p_campaign_id: string; p_company_id: string }
         Returns: {
