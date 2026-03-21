@@ -114,6 +114,9 @@
 .card-accent-top.accent-warning::before {
   background: linear-gradient(90deg, hsl(38 92% 50%), hsl(25 95% 53%));
 }
+.card-accent-top.accent-gold::before {
+  background: linear-gradient(90deg, hsl(43 65% 55%), hsl(43 65% 40%));
+}
 
 /* Glassmorphism card */
 .card-glass {
