@@ -209,7 +209,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
     try {
       const formData = new FormData();
-      formData.append("audio", blob, "recording.webm");
+      formData.append("audio", blob, "audio.webm");
       formData.append("voice_key", voiceKey || selectedVoice || "default");
       formData.append("system_prompt", buildSystemPrompt(training));
       formData.append("history", JSON.stringify(
@@ -222,8 +222,9 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         objective: training.callGoal,
       }));
 
+      // NO Content-Type header — browser sets multipart boundary automatically
       const headers = await getAuthHeaders();
-      const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
+      const res = await fetch(API_URL, {
         method: "POST",
         headers,
         body: formData,
