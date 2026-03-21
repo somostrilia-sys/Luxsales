@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import {
   MessageSquare, Send, Search, Phone, Clock, Shield, FileText,
   CheckCheck, Check, X, Loader2, RefreshCw, AlertTriangle,
-  BarChart3, Users, Zap, CircleCheck, CircleX, CircleDot,
+  BarChart3, Zap, CircleCheck, CircleDot,
   Plus, Eye, Pencil, Trash2, Copy, TestTube2, Image, Video, File,
   Link, PhoneCall, Reply,
 } from "lucide-react";
