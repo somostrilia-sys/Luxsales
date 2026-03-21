@@ -1336,211 +1336,23 @@ export default function VoiceAI() {
             </Card>
           </TabsContent>
 
-          {/* ============ SIMULATOR TAB — LIGAÇÃO SIMULADA ============ */}
+          {/* ============ SIMULATOR TAB ============ */}
           <TabsContent value="simulador" className="space-y-6">
-            {/* Controles pré-chamada */}
-            {callPhase === "idle" && (
-              <Card className="border-border/60 bg-card">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <PhoneCall className="h-5 w-5 text-primary" />
-                    Simulador de Ligação IA
-                  </CardTitle>
-                  <CardDescription>
-                    Simule uma ligação real com o Agente IA. Fale pelo microfone e ouça a resposta em áudio.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-wrap items-end gap-4">
-                    <div className="space-y-2">
-                      <Label>Voz do Agente</Label>
-                      <Select value={simVoiceKey || selectedVoice} onValueChange={setSimVoiceKey}>
-                        <SelectTrigger className="w-[220px]">
-                          <SelectValue placeholder="Selecione uma voz" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {voiceProfiles.map((v) => (
-                            <SelectItem key={v.id} value={v.voice_key}>{v.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Switch id="voice-mode" checked={useVoiceMode} onCheckedChange={setUseVoiceMode} />
-                      <Label htmlFor="voice-mode" className="text-sm">Modo voz (microfone)</Label>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <Badge variant="outline">Vendedor: {trainingForm.aiSellerName}</Badge>
-                    <Badge variant="outline">Produto: {trainingForm.product}</Badge>
-                    <Badge variant="outline">Tom: {trainingForm.voiceTone}</Badge>
-                    <Badge variant="outline">Objetivo: {trainingForm.callGoal}</Badge>
-                    <Badge variant="outline">{trainingForm.objections.length} objeções</Badge>
-                  </div>
-                  <Button size="lg" className="w-full" onClick={simStartCall}>
-                    <PhoneCall className="mr-2 h-5 w-5" />
-                    Iniciar Ligação Simulada
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Interface de chamada ativa */}
-            {callPhase !== "idle" && (
-              <Card className="border-border/60 bg-card overflow-hidden">
-                {/* Barra de status da ligação */}
-                <div className={`px-6 py-3 flex items-center justify-between ${
-                  callPhase === "ended" ? "bg-muted" :
-                  callPhase === "ringing" ? "bg-yellow-500/10" : "bg-green-500/10"
-                }`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`h-3 w-3 rounded-full ${
-                      callPhase === "ended" ? "bg-muted-foreground" :
-                      callPhase === "ringing" ? "bg-yellow-500 animate-pulse" : "bg-green-500 animate-pulse"
-                    }`} />
-                    <span className="font-semibold text-sm">
-                      {callPhase === "ringing" && "Chamando..."}
-                      {callPhase === "connected" && "Conectado"}
-                      {callPhase === "ai_speaking" && `${trainingForm.aiSellerName} falando...`}
-                      {callPhase === "listening" && "Sua vez de falar"}
-                      {callPhase === "processing" && "Processando..."}
-                      {callPhase === "ended" && "Chamada encerrada"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm font-mono text-muted-foreground">{formatCallTime(callDuration)}</span>
-                    {callPhase !== "ended" ? (
-                      <Button variant="destructive" size="sm" onClick={simEndCall}>
-                        <PhoneCall className="mr-1 h-4 w-4 rotate-[135deg]" />
-                        Desligar
-                      </Button>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={simReset}>
-                        <RotateCcw className="mr-1 h-4 w-4" />
-                        Nova ligação
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Transcrição da conversa */}
-                <div ref={simScrollRef} className="h-[350px] overflow-y-auto p-4 space-y-3 bg-secondary/5">
-                  {simMessages.map((msg) => (
-                    <div key={msg.id} className={`flex ${msg.role === "lead" ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
-                        msg.role === "lead"
-                          ? "bg-primary text-primary-foreground rounded-br-md"
-                          : "bg-card border border-border/60 text-foreground rounded-bl-md"
-                      }`}>
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-xs font-semibold opacity-80">
-                            {msg.role === "lead" ? "Você (Lead)" : `${trainingForm.aiSellerName} (IA)`}
-                          </span>
-                          <span className="text-xs opacity-50">{msg.timestamp}</span>
-                        </div>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                        {msg.role === "ai" && msg.audioUrl && (
-                          <Button variant="ghost" size="sm" className="mt-1 h-7 px-2 text-xs opacity-70 hover:opacity-100"
-                            onClick={() => simPlayAudio(msg)}>
-                            <Volume2 className="mr-1 h-3 w-3" /> Ouvir novamente
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {(simLoading || callPhase === "processing") && (
-                    <div className="flex justify-start">
-                      <div className="bg-card border border-border/60 rounded-2xl rounded-bl-md px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">
-                            {callPhase === "processing" ? "Transcrevendo e processando..." : "IA pensando..."}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {callPhase === "ringing" && (
-                    <div className="flex h-full items-center justify-center">
-                      <div className="text-center space-y-3">
-                        <div className="mx-auto h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                          <PhoneCall className="h-8 w-8 text-yellow-500 animate-pulse" />
-                        </div>
-                        <p className="text-muted-foreground text-sm">Chamando lead simulado...</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Controles de áudio / input */}
-                {callPhase !== "ended" && callPhase !== "ringing" && (
-                  <div className="border-t border-border/60 p-4">
-                    {useVoiceMode ? (
-                      /* Modo voz — botão toggle (clique para gravar / clique para enviar) */
-                      <div className="flex flex-col items-center gap-3">
-                        <p className="text-xs text-muted-foreground">
-                          {isRecording ? "Gravando... clique para enviar" :
-                           callPhase === "ai_speaking" ? "Aguarde a IA terminar de falar..." :
-                           callPhase === "processing" ? "Processando seu áudio..." :
-                           "Clique para falar"}
-                        </p>
-                        <Button
-                          size="lg"
-                          variant={isRecording ? "destructive" : "default"}
-                          className={`h-16 w-16 rounded-full ${isRecording ? "animate-pulse ring-4 ring-destructive/30" : ""}`}
-                          disabled={callPhase === "ai_speaking" || callPhase === "processing" || simLoading}
-                          onClick={() => {
-                            if (isRecording) {
-                              stopRecording();
-                            } else if (callPhase === "listening") {
-                              startRecording();
-                            }
-                          }}
-                        >
-                          <Mic className={`h-6 w-6 ${isRecording ? "text-white" : ""}`} />
-                        </Button>
-                        {/* Fallback texto */}
-                        <button className="text-xs text-muted-foreground underline"
-                          onClick={() => setUseVoiceMode(false)}>
-                          Ou digite texto
-                        </button>
-                      </div>
-                    ) : (
-                      /* Modo texto */
-                      <form onSubmit={(e) => { e.preventDefault(); simSendText(); }} className="flex gap-2">
-                        <Input value={simInput} onChange={(e) => setSimInput(e.target.value)}
-                          placeholder="Fale como o lead responderia..."
-                          disabled={simLoading || callPhase === "ai_speaking"} className="flex-1" />
-                        <Button type="submit" disabled={!simInput.trim() || simLoading || callPhase === "ai_speaking"} size="icon">
-                          {simLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                        </Button>
-                        <button type="button" className="text-xs text-muted-foreground underline px-2"
-                          onClick={() => setUseVoiceMode(true)}>
-                          Usar mic
-                        </button>
-                      </form>
-                    )}
-                  </div>
-                )}
-
-                {/* Resumo pós-chamada */}
-                {callPhase === "ended" && simMessages.length > 0 && (
-                  <div className="border-t border-border/60 p-4 bg-secondary/10">
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <Badge>Duração: {formatCallTime(callDuration)}</Badge>
-                      <Badge variant="outline">{simMessages.filter((m) => m.role === "ai").length} falas da IA</Badge>
-                      <Badge variant="outline">{simMessages.filter((m) => m.role === "lead").length} falas do lead</Badge>
-                      <Badge variant="outline">Voz: {voiceProfiles.find((v) => v.voice_key === (simVoiceKey || selectedVoice))?.name || "—"}</Badge>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            )}
-
-            {/* Audio element oculto */}
-            <audio ref={simAudioRef} className="hidden" />
+            <CallSimulator
+              voiceProfiles={voiceProfiles}
+              selectedVoice={selectedVoice}
+              training={{
+                aiSellerName: trainingForm.aiSellerName,
+                product: trainingForm.product,
+                voiceTone: trainingForm.voiceTone,
+                callGoal: trainingForm.callGoal,
+                openingScript: trainingForm.openingScript,
+                developmentScript: trainingForm.developmentScript,
+                closingScript: trainingForm.closingScript,
+                rules: trainingForm.rules,
+                objections: trainingForm.objections,
+              }}
+            />
           </TabsContent>
         </Tabs>
 
