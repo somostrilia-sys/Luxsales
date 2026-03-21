@@ -661,25 +661,27 @@ export default function VoiceAI() {
       const now = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
       // Adicionar transcrição do lead (se veio do áudio)
-      if (result.lead_transcript && !isOpening) {
+      const leadTranscript = result.lead_transcript || result.user_text;
+      if (leadTranscript && !isOpening) {
         const leadMsg: SimMessage = {
           id: crypto.randomUUID(),
           role: "lead",
-          content: result.lead_transcript,
+          content: leadTranscript,
           timestamp: now,
         };
         setSimMessages((prev) => [...prev, leadMsg]);
       }
 
-      // Adicionar resposta da IA
-      const aiAudioUrl = result.audio_base64
-        ? `data:audio/mpeg;base64,${result.audio_base64}`
-        : undefined;
+      // Adicionar resposta da IA — suporta múltiplos formatos de resposta
+      const aiText = result.response || result.text || "";
+      const aiAudioUrl = result.audioUrl || result.audio_url
+        || (result.audio_base64 ? `data:audio/mpeg;base64,${result.audio_base64}` : undefined)
+        || (result.audio ? `data:audio/mpeg;base64,${result.audio}` : undefined);
 
       const aiMsg: SimMessage = {
         id: crypto.randomUUID(),
         role: "ai",
-        content: result.response,
+        content: aiText,
         timestamp: now,
         audioUrl: aiAudioUrl,
       };
