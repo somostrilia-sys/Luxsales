@@ -927,7 +927,7 @@ export default function VoiceAI() {
           subtitle={`Treinamento, vozes e campanhas${collaborator?.company?.name ? ` · ${collaborator.company.name}` : ""}`}
         />
 
-        <Tabs defaultValue="treinamento" className="space-y-6">
+        <Tabs defaultValue="treinamento" className="space-y-6" onValueChange={() => releaseMicrophone()}>
           <TabsList className="h-auto flex-wrap justify-start gap-2 rounded-xl border border-border/60 bg-secondary/40 p-1">
             <TabsTrigger value="treinamento">Treinamento da IA</TabsTrigger>
             <TabsTrigger value="vozes">Vozes</TabsTrigger>
