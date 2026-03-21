@@ -50,11 +50,12 @@ interface CallSimulatorProps {
 
 // ── Constants ──
 
-const SILENCE_THRESHOLD_DB = -45;
-const SILENCE_DURATION_MS = 3000;
-const MIN_RECORDING_MS = 2000;
+const SILENCE_THRESHOLD_DB = -42;
+const SILENCE_DURATION_MS = 1500;
+const MIN_RECORDING_MS = 1000;
 const MAX_RECORDING_MS = 60000;
 const LOW_VOLUME_WARN_MS = 3000;
+const SPEECH_DETECTED_DB = -40;
 
 // ── Helpers ──
 
@@ -125,12 +126,27 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   const lowVolStartRef = useRef<number | null>(null);
   const recStartTimeRef = useRef<number>(0);
   const animFrameRef = useRef<number>(0);
+  const speechDetectedRef = useRef(false);
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
+
+  // ── AUTO-START recording when phase becomes "listening" (hands-free mode) ──
+  const autoStartRef = useRef(false);
+  useEffect(() => {
+    if (phase === "listening" && !recording && !loading && autoStartRef.current) {
+      const timer = setTimeout(() => {
+        if (phaseRef.current === "listening" && !recorderRef.current) {
+          startRecording();
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, recording, loading]);
 
   useEffect(() => {
     return () => {
@@ -201,6 +217,12 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
       const elapsed = Date.now() - recStartTimeRef.current;
       const isAboveThreshold = db > SILENCE_THRESHOLD_DB;
+      const isSpeech = db > SPEECH_DETECTED_DB;
+
+      // Track if speech was ever detected in this recording
+      if (isSpeech && !speechDetectedRef.current) {
+        speechDetectedRef.current = true;
+      }
 
       // Low volume warning
       if (normalized < 15) {
@@ -221,8 +243,8 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         } else {
           if (!silenceStartRef.current) {
             silenceStartRef.current = Date.now();
-          } else if (Date.now() - silenceStartRef.current >= SILENCE_DURATION_MS) {
-            // 3s consecutive silence after minimum → auto-stop
+          } else if (Date.now() - silenceStartRef.current >= SILENCE_DURATION_MS && speechDetectedRef.current) {
+            // 1.5s consecutive silence after speech detected → auto-stop and send
             stopAndSendRecording();
             return;
           }
@@ -254,6 +276,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       chunksRef.current = [];
       silenceStartRef.current = null;
       lowVolStartRef.current = null;
+      speechDetectedRef.current = false;
       recStartTimeRef.current = Date.now();
 
       // Web Audio API setup for monitoring + gain
@@ -305,10 +328,17 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         audioCtxRef.current = null;
 
         const recElapsed = Date.now() - recStartTimeRef.current;
-        if (blob.size > 0 && recElapsed >= MIN_RECORDING_MS && phaseRef.current !== "ended") {
+        if (blob.size > 0 && speechDetectedRef.current && phaseRef.current !== "ended") {
           sendAudio(blob);
-        } else if (recElapsed < MIN_RECORDING_MS) {
-          toast.info("Gravação muito curta. Fale por pelo menos 2 segundos.");
+        } else if (!speechDetectedRef.current && recElapsed >= MIN_RECORDING_MS) {
+          // Long recording but no speech — restart listening
+          if (phaseRef.current !== "ended" && autoStartRef.current) {
+            setPhase("listening"); // triggers auto-restart
+          } else if (phaseRef.current !== "ended") {
+            toast.info("Nenhuma fala detectada. Tente novamente.");
+            setPhase("listening");
+          }
+        } else if (recElapsed < MIN_RECORDING_MS && !speechDetectedRef.current) {
           if (phaseRef.current !== "ended") setPhase("listening");
         }
       };
@@ -527,6 +557,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setPhase("ringing");
     setMessages([]);
     setDuration(0);
+    autoStartRef.current = true; // Enable hands-free mode
 
     await new Promise((r) => setTimeout(r, 1500));
     setPhase("connected");
@@ -568,6 +599,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   // ── End call ──
 
   function endCall() {
+    autoStartRef.current = false; // Disable hands-free mode
     setPhase("ended");
     if (timerRef.current) clearInterval(timerRef.current);
     releaseMic();
