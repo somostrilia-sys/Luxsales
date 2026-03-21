@@ -610,12 +610,22 @@ export default function VoiceAI() {
     }
   };
 
-  // Parar gravação
+  // Parar gravação e liberar microfone
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
     setIsRecording(false);
+  };
+
+  // Liberar stream do microfone completamente
+  const releaseMicrophone = () => {
+    stopRecording();
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+    mediaRecorderRef.current = null;
   };
 
   // Enviar mensagem (texto ou áudio) para IA
