@@ -1742,23 +1742,26 @@ export default function VoiceAI() {
                 {callPhase !== "ended" && callPhase !== "ringing" && (
                   <div className="border-t border-border/60 p-4">
                     {useVoiceMode ? (
-                      /* Modo voz — botão PTT (push-to-talk) */
+                      /* Modo voz — botão toggle (clique para gravar / clique para enviar) */
                       <div className="flex flex-col items-center gap-3">
                         <p className="text-xs text-muted-foreground">
-                          {isRecording ? "Gravando... solte para enviar" :
+                          {isRecording ? "Gravando... clique para enviar" :
                            callPhase === "ai_speaking" ? "Aguarde a IA terminar de falar..." :
                            callPhase === "processing" ? "Processando seu áudio..." :
-                           "Segure o botão para falar"}
+                           "Clique para falar"}
                         </p>
                         <Button
                           size="lg"
                           variant={isRecording ? "destructive" : "default"}
-                          className={`h-16 w-16 rounded-full ${isRecording ? "animate-pulse" : ""}`}
+                          className={`h-16 w-16 rounded-full ${isRecording ? "animate-pulse ring-4 ring-destructive/30" : ""}`}
                           disabled={callPhase === "ai_speaking" || callPhase === "processing" || simLoading}
-                          onMouseDown={() => { if (callPhase === "listening") startRecording(); }}
-                          onMouseUp={() => { if (isRecording) stopRecording(); }}
-                          onTouchStart={(e) => { e.preventDefault(); if (callPhase === "listening") startRecording(); }}
-                          onTouchEnd={(e) => { e.preventDefault(); if (isRecording) stopRecording(); }}
+                          onClick={() => {
+                            if (isRecording) {
+                              stopRecording();
+                            } else if (callPhase === "listening") {
+                              startRecording();
+                            }
+                          }}
                         >
                           <Mic className={`h-6 w-6 ${isRecording ? "text-white" : ""}`} />
                         </Button>
