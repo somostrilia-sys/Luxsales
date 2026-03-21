@@ -38,14 +38,15 @@ export default function Login() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background" />
       </div>
 
-      <div className="flex-1 flex items-start justify-center px-4 -mt-8 relative z-10">
+      {/* Logo between banner and card — NOT overlapping */}
+      <div className="flex flex-col items-center gap-2 mt-6">
+        <img src="/images/luxsales-symbol.png" alt="LuxSales" className="h-16 w-16 object-contain drop-shadow-[0_0_30px_hsl(120,60%,50%,0.3)]" />
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">LuxSales</h1>
+        <span className="text-xs text-muted-foreground tracking-widest uppercase">by Digital Lux</span>
+      </div>
+
+      <div className="flex-1 flex items-start justify-center px-4 mt-4">
         <div className="w-full max-w-md space-y-5">
-          {/* Logo + Branding */}
-          <div className="flex flex-col items-center gap-2">
-            <img src="/images/luxsales-symbol.png" alt="LuxSales" className="h-16 w-16 object-contain drop-shadow-[0_0_30px_hsl(120,60%,50%,0.3)]" />
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">LuxSales</h1>
-            <span className="text-xs text-muted-foreground tracking-widest uppercase">by Digital Lux</span>
-          </div>
 
           <Card variant="gradient" className="card-accent-top accent-gold">
             <form onSubmit={handleSubmit}>

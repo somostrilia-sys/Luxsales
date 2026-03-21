@@ -200,7 +200,7 @@ async function transcribeAudioBytes(audioBytes: Uint8Array, contentType: string)
           'Authorization': `Token ${DEEPGRAM_API_KEY}`,
           'Content-Type': contentType || 'audio/webm',
         },
-        body: audioBytes,
+        body: audioBytes as unknown as BodyInit,
       },
       15000
     ), 2)
