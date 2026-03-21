@@ -660,16 +660,18 @@ export default function VoiceAI() {
 
       const now = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
+      // Montar novas mensagens de uma vez para evitar race condition de setState
+      const newMessages: SimMessage[] = [];
+
       // Adicionar transcrição do lead (se veio do áudio)
       const leadTranscript = result.lead_transcript || result.user_text;
       if (leadTranscript && !isOpening) {
-        const leadMsg: SimMessage = {
+        newMessages.push({
           id: crypto.randomUUID(),
           role: "lead",
           content: leadTranscript,
           timestamp: now,
-        };
-        setSimMessages((prev) => [...prev, leadMsg]);
+        });
       }
 
       // Adicionar resposta da IA — suporta múltiplos formatos de resposta
@@ -678,14 +680,15 @@ export default function VoiceAI() {
         || (result.audio_base64 ? `data:audio/mpeg;base64,${result.audio_base64}` : undefined)
         || (result.audio ? `data:audio/mpeg;base64,${result.audio}` : undefined);
 
-      const aiMsg: SimMessage = {
+      newMessages.push({
         id: crypto.randomUUID(),
         role: "ai",
         content: aiText,
         timestamp: now,
         audioUrl: aiAudioUrl,
-      };
-      setSimMessages((prev) => [...prev, aiMsg]);
+      });
+
+      setSimMessages((prev) => [...prev, ...newMessages]);
 
       // Auto-play áudio da IA
       if (aiAudioUrl && simAudioRef.current) {
