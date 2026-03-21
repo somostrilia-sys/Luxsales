@@ -553,7 +553,7 @@ export default function VoiceAI() {
   const simEndCall = () => {
     setCallPhase("ended");
     if (callTimerRef.current) clearInterval(callTimerRef.current);
-    stopRecording();
+    releaseMicrophone();
     if (simAudioRef.current) {
       simAudioRef.current.pause();
       simAudioRef.current.currentTime = 0;
@@ -610,12 +610,22 @@ export default function VoiceAI() {
     }
   };
 
-  // Parar gravação
+  // Parar gravação e liberar microfone
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
     setIsRecording(false);
+  };
+
+  // Liberar stream do microfone completamente
+  const releaseMicrophone = () => {
+    stopRecording();
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+    mediaRecorderRef.current = null;
   };
 
   // Enviar mensagem (texto ou áudio) para IA
@@ -917,7 +927,7 @@ export default function VoiceAI() {
           subtitle={`Treinamento, vozes e campanhas${collaborator?.company?.name ? ` · ${collaborator.company.name}` : ""}`}
         />
 
-        <Tabs defaultValue="treinamento" className="space-y-6">
+        <Tabs defaultValue="treinamento" className="space-y-6" onValueChange={() => releaseMicrophone()}>
           <TabsList className="h-auto flex-wrap justify-start gap-2 rounded-xl border border-border/60 bg-secondary/40 p-1">
             <TabsTrigger value="treinamento">Treinamento da IA</TabsTrigger>
             <TabsTrigger value="vozes">Vozes</TabsTrigger>
