@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import CallSimulator from "@/components/simulator/CallSimulator";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
@@ -90,16 +91,7 @@ type CallLog = {
   ai_transcript?: { role: string; text: string; timestamp?: string }[] | null;
 };
 
-type SimMessage = {
-  id: string;
-  role: "lead" | "ai";
-  content: string;
-  timestamp: string;
-  audioUrl?: string;
-  audioBlob?: Blob;
-};
-
-type CallPhase = "idle" | "ringing" | "connected" | "ai_speaking" | "listening" | "processing" | "ended";
+// SimMessage and CallPhase types moved to CallSimulator component
 
 type VoiceCloneForm = {
   name: string;
@@ -317,22 +309,7 @@ export default function VoiceAI() {
   const [testingQuickCall, setTestingQuickCall] = useState(false);
   const [previewingVoiceKey, setPreviewingVoiceKey] = useState<string | null>(null);
 
-  // Simulator state — simula ligação real com áudio
-  const [simMessages, setSimMessages] = useState<SimMessage[]>([]);
-  const [simInput, setSimInput] = useState("");
-  const [simLoading, setSimLoading] = useState(false);
-  const [simVoiceKey, setSimVoiceKey] = useState<string>("");
-  const [simAutoPlay, setSimAutoPlay] = useState(true);
-  const [callPhase, setCallPhase] = useState<CallPhase>("idle");
-  const [callDuration, setCallDuration] = useState(0);
-  const [isRecording, setIsRecording] = useState(false);
-  const [useVoiceMode, setUseVoiceMode] = useState(true);
-  const simScrollRef = useRef<HTMLDivElement>(null);
-  const simAudioRef = useRef<HTMLAudioElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // (Simulator state moved to CallSimulator component)
 
   // Call player state
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
@@ -518,257 +495,7 @@ export default function VoiceAI() {
     }
   };
 
-  // ============ SIMULATOR FUNCTIONS — LIGAÇÃO SIMULADA ============
-
-  const formatCallTime = (secs: number) => {
-    const m = Math.floor(secs / 60).toString().padStart(2, "0");
-    const s = (secs % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
-  };
-
-  // Iniciar chamada simulada
-  const simStartCall = async () => {
-    if (!simVoiceKey && !selectedVoice) {
-      toast.error("Selecione uma voz antes de iniciar.");
-      return;
-    }
-    setCallPhase("ringing");
-    setSimMessages([]);
-    setCallDuration(0);
-
-    // Simular toque por 2s
-    await new Promise((r) => setTimeout(r, 2000));
-    setCallPhase("connected");
-
-    // Timer de duração
-    callTimerRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
-
-    // IA faz a abertura automaticamente
-    setCallPhase("ai_speaking");
-    await simSendToAI([], null, true);
-    setCallPhase("listening");
-  };
-
-  // Encerrar chamada
-  const simEndCall = () => {
-    setCallPhase("ended");
-    if (callTimerRef.current) clearInterval(callTimerRef.current);
-    releaseMicrophone();
-    if (simAudioRef.current) {
-      simAudioRef.current.pause();
-      simAudioRef.current.currentTime = 0;
-    }
-  };
-
-  // Reset
-  const simReset = () => {
-    simEndCall();
-    setCallPhase("idle");
-    setSimMessages([]);
-    setSimInput("");
-    setSimLoading(false);
-    setCallDuration(0);
-  };
-
-  // Começar gravação de áudio do mic
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-      audioChunksRef.current = [];
-
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm;codecs=opus" });
-        stream.getTracks().forEach((t) => t.stop());
-        mediaStreamRef.current = null;
-
-        if (audioBlob.size > 0) {
-          // Converter para base64 e enviar
-          const buffer = await audioBlob.arrayBuffer();
-          const bytes = new Uint8Array(buffer);
-          let binary = "";
-          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-          const base64 = btoa(binary);
-
-          setCallPhase("processing");
-          await simSendToAI(simMessages, base64, false);
-          setCallPhase("listening");
-        }
-      };
-
-      recorder.start();
-      setIsRecording(true);
-    } catch {
-      toast.error("Não foi possível acessar o microfone.");
-    }
-  };
-
-  // Parar gravação e liberar microfone
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-    }
-    setIsRecording(false);
-  };
-
-  // Liberar stream do microfone completamente
-  const releaseMicrophone = () => {
-    stopRecording();
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-      mediaStreamRef.current = null;
-    }
-    mediaRecorderRef.current = null;
-  };
-
-  // Enviar mensagem (texto ou áudio) para IA
-  const simSendToAI = async (
-    history: SimMessage[],
-    audioBase64: string | null,
-    isOpening: boolean
-  ) => {
-    setSimLoading(true);
-    try {
-      const session = await supabase.auth.getSession();
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (session.data.session?.access_token) {
-        headers.Authorization = `Bearer ${session.data.session.access_token}`;
-      }
-
-      const systemPrompt = buildSimulatorSystemPrompt(trainingForm);
-      const apiMessages = history.map((m) => ({ role: m.role, content: m.content }));
-
-      // Se for abertura, não manda mensagem do lead
-      const payload: Record<string, unknown> = {
-        messages: isOpening
-          ? [{ role: "lead", content: "(chamada atendida, o lead disse alô)" }]
-          : apiMessages,
-        system_prompt: systemPrompt,
-        voice_key: simVoiceKey || selectedVoice,
-      };
-
-      if (audioBase64 && !isOpening) {
-        payload.audio_base64 = audioBase64;
-        payload.audio_content_type = "audio/webm;codecs=opus";
-      }
-
-      const response = await fetch(`${EDGE_BASE}/ai-simulator`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw new Error(result?.error || "Erro na simulação");
-
-      const now = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-
-      // Montar novas mensagens de uma vez para evitar race condition de setState
-      const newMessages: SimMessage[] = [];
-
-      // Adicionar transcrição do lead (se veio do áudio)
-      const leadTranscript = result.lead_transcript || result.user_text;
-      if (leadTranscript && !isOpening) {
-        newMessages.push({
-          id: crypto.randomUUID(),
-          role: "lead",
-          content: leadTranscript,
-          timestamp: now,
-        });
-      }
-
-      // Adicionar resposta da IA — suporta múltiplos formatos de resposta
-      const aiText = result.response || result.text || "";
-      const aiAudioUrl = result.audioUrl || result.audio_url
-        || (result.audio_base64 ? `data:audio/mpeg;base64,${result.audio_base64}` : undefined)
-        || (result.audio ? `data:audio/mpeg;base64,${result.audio}` : undefined);
-
-      newMessages.push({
-        id: crypto.randomUUID(),
-        role: "ai",
-        content: aiText,
-        timestamp: now,
-        audioUrl: aiAudioUrl,
-      });
-
-      setSimMessages((prev) => [...prev, ...newMessages]);
-
-      // Auto-play áudio da IA
-      if (aiAudioUrl && simAudioRef.current) {
-        setCallPhase("ai_speaking");
-        simAudioRef.current.src = aiAudioUrl;
-        simAudioRef.current.onended = () => {
-          if (callPhase !== "ended") setCallPhase("listening");
-        };
-        simAudioRef.current.play().catch(() => {});
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : "Erro na simulação.");
-    } finally {
-      setSimLoading(false);
-    }
-  };
-
-  // Envio por texto (fallback se mic não disponível)
-  const simSendText = async () => {
-    const text = simInput.trim();
-    if (!text || simLoading) return;
-
-    const leadMsg: SimMessage = {
-      id: crypto.randomUUID(),
-      role: "lead",
-      content: text,
-      timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-    };
-
-    const updatedMessages = [...simMessages, leadMsg];
-    setSimMessages(updatedMessages);
-    setSimInput("");
-
-    setCallPhase("processing");
-    await simSendToAI(updatedMessages, null, false);
-    setCallPhase("listening");
-  };
-
-  // Play áudio de uma mensagem
-  const simPlayAudio = async (msg: SimMessage) => {
-    if (msg.audioUrl && simAudioRef.current) {
-      simAudioRef.current.src = msg.audioUrl;
-      simAudioRef.current.play().catch(() => {});
-      return;
-    }
-    const voiceKey = simVoiceKey || selectedVoice;
-    if (!voiceKey) { toast.error("Selecione uma voz."); return; }
-    try {
-      const audioUrl = await generateVoiceAudio(msg.content, voiceKey);
-      setSimMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, audioUrl } : m)));
-      if (simAudioRef.current) {
-        simAudioRef.current.src = audioUrl;
-        simAudioRef.current.play().catch(() => {});
-      }
-    } catch { toast.error("Erro ao gerar áudio."); }
-  };
-
-  // Auto-scroll
-  useEffect(() => {
-    if (simScrollRef.current) simScrollRef.current.scrollTop = simScrollRef.current.scrollHeight;
-  }, [simMessages, simLoading]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (callTimerRef.current) clearInterval(callTimerRef.current);
-      if (mediaStreamRef.current) mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
+  // ============ SIMULATOR — now in CallSimulator component ============
 
   // ============ CALL PLAYER FUNCTIONS ============
 
@@ -927,7 +654,7 @@ export default function VoiceAI() {
           subtitle={`Treinamento, vozes e campanhas${collaborator?.company?.name ? ` · ${collaborator.company.name}` : ""}`}
         />
 
-        <Tabs defaultValue="treinamento" className="space-y-6" onValueChange={() => releaseMicrophone()}>
+        <Tabs defaultValue="treinamento" className="space-y-6">
           <TabsList className="h-auto flex-wrap justify-start gap-2 rounded-xl border border-border/60 bg-secondary/40 p-1">
             <TabsTrigger value="treinamento">Treinamento da IA</TabsTrigger>
             <TabsTrigger value="vozes">Vozes</TabsTrigger>
@@ -1600,211 +1327,23 @@ export default function VoiceAI() {
             </Card>
           </TabsContent>
 
-          {/* ============ SIMULATOR TAB — LIGAÇÃO SIMULADA ============ */}
+          {/* ============ SIMULATOR TAB ============ */}
           <TabsContent value="simulador" className="space-y-6">
-            {/* Controles pré-chamada */}
-            {callPhase === "idle" && (
-              <Card className="border-border/60 bg-card">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <PhoneCall className="h-5 w-5 text-primary" />
-                    Simulador de Ligação IA
-                  </CardTitle>
-                  <CardDescription>
-                    Simule uma ligação real com o Agente IA. Fale pelo microfone e ouça a resposta em áudio.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-wrap items-end gap-4">
-                    <div className="space-y-2">
-                      <Label>Voz do Agente</Label>
-                      <Select value={simVoiceKey || selectedVoice} onValueChange={setSimVoiceKey}>
-                        <SelectTrigger className="w-[220px]">
-                          <SelectValue placeholder="Selecione uma voz" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {voiceProfiles.map((v) => (
-                            <SelectItem key={v.id} value={v.voice_key}>{v.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Switch id="voice-mode" checked={useVoiceMode} onCheckedChange={setUseVoiceMode} />
-                      <Label htmlFor="voice-mode" className="text-sm">Modo voz (microfone)</Label>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <Badge variant="outline">Vendedor: {trainingForm.aiSellerName}</Badge>
-                    <Badge variant="outline">Produto: {trainingForm.product}</Badge>
-                    <Badge variant="outline">Tom: {trainingForm.voiceTone}</Badge>
-                    <Badge variant="outline">Objetivo: {trainingForm.callGoal}</Badge>
-                    <Badge variant="outline">{trainingForm.objections.length} objeções</Badge>
-                  </div>
-                  <Button size="lg" className="w-full" onClick={simStartCall}>
-                    <PhoneCall className="mr-2 h-5 w-5" />
-                    Iniciar Ligação Simulada
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Interface de chamada ativa */}
-            {callPhase !== "idle" && (
-              <Card className="border-border/60 bg-card overflow-hidden">
-                {/* Barra de status da ligação */}
-                <div className={`px-6 py-3 flex items-center justify-between ${
-                  callPhase === "ended" ? "bg-muted" :
-                  callPhase === "ringing" ? "bg-yellow-500/10" : "bg-green-500/10"
-                }`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`h-3 w-3 rounded-full ${
-                      callPhase === "ended" ? "bg-muted-foreground" :
-                      callPhase === "ringing" ? "bg-yellow-500 animate-pulse" : "bg-green-500 animate-pulse"
-                    }`} />
-                    <span className="font-semibold text-sm">
-                      {callPhase === "ringing" && "Chamando..."}
-                      {callPhase === "connected" && "Conectado"}
-                      {callPhase === "ai_speaking" && `${trainingForm.aiSellerName} falando...`}
-                      {callPhase === "listening" && "Sua vez de falar"}
-                      {callPhase === "processing" && "Processando..."}
-                      {callPhase === "ended" && "Chamada encerrada"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm font-mono text-muted-foreground">{formatCallTime(callDuration)}</span>
-                    {callPhase !== "ended" ? (
-                      <Button variant="destructive" size="sm" onClick={simEndCall}>
-                        <PhoneCall className="mr-1 h-4 w-4 rotate-[135deg]" />
-                        Desligar
-                      </Button>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={simReset}>
-                        <RotateCcw className="mr-1 h-4 w-4" />
-                        Nova ligação
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Transcrição da conversa */}
-                <div ref={simScrollRef} className="h-[350px] overflow-y-auto p-4 space-y-3 bg-secondary/5">
-                  {simMessages.map((msg) => (
-                    <div key={msg.id} className={`flex ${msg.role === "lead" ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
-                        msg.role === "lead"
-                          ? "bg-primary text-primary-foreground rounded-br-md"
-                          : "bg-card border border-border/60 text-foreground rounded-bl-md"
-                      }`}>
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-xs font-semibold opacity-80">
-                            {msg.role === "lead" ? "Você (Lead)" : `${trainingForm.aiSellerName} (IA)`}
-                          </span>
-                          <span className="text-xs opacity-50">{msg.timestamp}</span>
-                        </div>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                        {msg.role === "ai" && msg.audioUrl && (
-                          <Button variant="ghost" size="sm" className="mt-1 h-7 px-2 text-xs opacity-70 hover:opacity-100"
-                            onClick={() => simPlayAudio(msg)}>
-                            <Volume2 className="mr-1 h-3 w-3" /> Ouvir novamente
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {(simLoading || callPhase === "processing") && (
-                    <div className="flex justify-start">
-                      <div className="bg-card border border-border/60 rounded-2xl rounded-bl-md px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">
-                            {callPhase === "processing" ? "Transcrevendo e processando..." : "IA pensando..."}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {callPhase === "ringing" && (
-                    <div className="flex h-full items-center justify-center">
-                      <div className="text-center space-y-3">
-                        <div className="mx-auto h-16 w-16 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                          <PhoneCall className="h-8 w-8 text-yellow-500 animate-pulse" />
-                        </div>
-                        <p className="text-muted-foreground text-sm">Chamando lead simulado...</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Controles de áudio / input */}
-                {callPhase !== "ended" && callPhase !== "ringing" && (
-                  <div className="border-t border-border/60 p-4">
-                    {useVoiceMode ? (
-                      /* Modo voz — botão toggle (clique para gravar / clique para enviar) */
-                      <div className="flex flex-col items-center gap-3">
-                        <p className="text-xs text-muted-foreground">
-                          {isRecording ? "Gravando... clique para enviar" :
-                           callPhase === "ai_speaking" ? "Aguarde a IA terminar de falar..." :
-                           callPhase === "processing" ? "Processando seu áudio..." :
-                           "Clique para falar"}
-                        </p>
-                        <Button
-                          size="lg"
-                          variant={isRecording ? "destructive" : "default"}
-                          className={`h-16 w-16 rounded-full ${isRecording ? "animate-pulse ring-4 ring-destructive/30" : ""}`}
-                          disabled={callPhase === "ai_speaking" || callPhase === "processing" || simLoading}
-                          onClick={() => {
-                            if (isRecording) {
-                              stopRecording();
-                            } else if (callPhase === "listening") {
-                              startRecording();
-                            }
-                          }}
-                        >
-                          <Mic className={`h-6 w-6 ${isRecording ? "text-white" : ""}`} />
-                        </Button>
-                        {/* Fallback texto */}
-                        <button className="text-xs text-muted-foreground underline"
-                          onClick={() => setUseVoiceMode(false)}>
-                          Ou digite texto
-                        </button>
-                      </div>
-                    ) : (
-                      /* Modo texto */
-                      <form onSubmit={(e) => { e.preventDefault(); simSendText(); }} className="flex gap-2">
-                        <Input value={simInput} onChange={(e) => setSimInput(e.target.value)}
-                          placeholder="Fale como o lead responderia..."
-                          disabled={simLoading || callPhase === "ai_speaking"} className="flex-1" />
-                        <Button type="submit" disabled={!simInput.trim() || simLoading || callPhase === "ai_speaking"} size="icon">
-                          {simLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                        </Button>
-                        <button type="button" className="text-xs text-muted-foreground underline px-2"
-                          onClick={() => setUseVoiceMode(true)}>
-                          Usar mic
-                        </button>
-                      </form>
-                    )}
-                  </div>
-                )}
-
-                {/* Resumo pós-chamada */}
-                {callPhase === "ended" && simMessages.length > 0 && (
-                  <div className="border-t border-border/60 p-4 bg-secondary/10">
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <Badge>Duração: {formatCallTime(callDuration)}</Badge>
-                      <Badge variant="outline">{simMessages.filter((m) => m.role === "ai").length} falas da IA</Badge>
-                      <Badge variant="outline">{simMessages.filter((m) => m.role === "lead").length} falas do lead</Badge>
-                      <Badge variant="outline">Voz: {voiceProfiles.find((v) => v.voice_key === (simVoiceKey || selectedVoice))?.name || "—"}</Badge>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            )}
-
-            {/* Audio element oculto */}
-            <audio ref={simAudioRef} className="hidden" />
+            <CallSimulator
+              voiceProfiles={voiceProfiles}
+              selectedVoice={selectedVoice}
+              training={{
+                aiSellerName: trainingForm.aiSellerName,
+                product: trainingForm.product,
+                voiceTone: trainingForm.voiceTone,
+                callGoal: trainingForm.callGoal,
+                openingScript: trainingForm.openingScript,
+                developmentScript: trainingForm.developmentScript,
+                closingScript: trainingForm.closingScript,
+                rules: trainingForm.rules,
+                objections: trainingForm.objections,
+              }}
+            />
           </TabsContent>
         </Tabs>
 

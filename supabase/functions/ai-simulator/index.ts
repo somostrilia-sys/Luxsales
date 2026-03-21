@@ -1,70 +1,129 @@
 /**
- * Walk Agente Central Hub - AI Simulator
- *
- * Simula uma ligação real com IA:
- * 1. Recebe áudio do lead (base64) → transcreve via Deepgram STT
- * 2. Ou recebe texto direto (fallback)
- * 3. Gera resposta com Claude Haiku
- * 4. Gera áudio TTS da resposta (sempre, para simular ligação)
- * 5. Retorna texto + áudio base64
+ * AI Simulator - Simula ligação real com IA
+ * Aceita JSON ou multipart/form-data
  */
 
 import { retryWithBackoff, fetchWithTimeout } from '../_shared/retry.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
 const DEEPGRAM_API_KEY = Deno.env.get('DEEPGRAM_API_KEY')
 const CARTESIA_API_KEY = Deno.env.get('CARTESIA_API_KEY')
 
+interface ParsedRequest {
+  messages: { role: string; content: string }[]
+  system_prompt: string
+  voice_key: string
+  text: string
+  audioBlob: Uint8Array | null
+  audioContentType: string
+  context: { vendor_name?: string; product?: string; tone?: string; objective?: string } | null
+}
+
+async function parseRequest(req: Request): Promise<ParsedRequest> {
+  const ct = req.headers.get('content-type') || ''
+
+  if (ct.includes('multipart/form-data')) {
+    const form = await req.formData()
+    const audioFile = form.get('audio') as File | null
+    let audioBlob: Uint8Array | null = null
+    let audioContentType = 'audio/webm'
+
+    if (audioFile && audioFile.size > 0) {
+      audioBlob = new Uint8Array(await audioFile.arrayBuffer())
+      audioContentType = audioFile.type || 'audio/webm'
+    }
+
+    const historyRaw = form.get('history') as string | null
+    const contextRaw = form.get('context') as string | null
+    const voice_key = (form.get('voice_key') as string) || 'default'
+    const system_prompt = (form.get('system_prompt') as string) || ''
+    const text = (form.get('text') as string) || ''
+
+    let messages: { role: string; content: string }[] = []
+    if (historyRaw) {
+      try {
+        const parsed = JSON.parse(historyRaw)
+        messages = Array.isArray(parsed) ? parsed.map((m: { role: string; text?: string; content?: string }) => ({
+          role: m.role === 'agent' ? 'ai' : m.role === 'user' ? 'lead' : m.role,
+          content: m.text || m.content || '',
+        })) : []
+      } catch { /* ignore */ }
+    }
+
+    let context = null
+    if (contextRaw) {
+      try { context = JSON.parse(contextRaw) } catch { /* ignore */ }
+    }
+
+    return { messages, system_prompt, voice_key, text, audioBlob, audioContentType, context }
+  }
+
+  // JSON fallback
+  const body = await req.json()
+  let audioBlob: Uint8Array | null = null
+  if (body.audio_base64) {
+    audioBlob = Uint8Array.from(atob(body.audio_base64), (c: string) => c.charCodeAt(0))
+  }
+
+  return {
+    messages: body.messages || [],
+    system_prompt: body.system_prompt || '',
+    voice_key: body.voice_key || 'default',
+    text: body.text || '',
+    audioBlob,
+    audioContentType: body.audio_content_type || 'audio/webm',
+    context: null,
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders })
   }
 
   try {
-    const body = await req.json()
-    const {
-      messages,
-      system_prompt,
-      voice_key,
-      audio_base64,      // áudio do lead (gravado pelo mic)
-      audio_content_type, // ex: "audio/webm;codecs=opus"
-      text,               // texto direto (fallback se não tiver áudio)
-    } = body
+    const parsed = await parseRequest(req)
+    let { messages, voice_key, text, audioBlob, audioContentType, context } = parsed
+    let system_prompt = parsed.system_prompt
 
-    if (!system_prompt) {
-      return jsonResponse({ error: 'system_prompt é obrigatório' }, 400)
+    // Build system_prompt from context if not provided directly
+    if (!system_prompt && context) {
+      system_prompt = buildSystemPrompt(context)
     }
 
-    // 1. Transcrever áudio do lead se enviado
-    let leadText = text || ''
-    if (audio_base64 && !text) {
-      leadText = await transcribeAudio(audio_base64, audio_content_type)
+    if (!system_prompt) {
+      return jsonResponse({ error: 'system_prompt ou context é obrigatório' }, 400)
+    }
+
+    // 1. STT if audio provided
+    let leadText = text
+    if (audioBlob && !text) {
+      leadText = await transcribeAudioBytes(audioBlob, audioContentType)
       if (!leadText) {
         return jsonResponse({ error: 'Não foi possível transcrever o áudio. Tente novamente.' }, 400)
       }
     }
 
-    if (!leadText && (!messages || messages.length === 0)) {
+    if (!leadText && messages.length === 0) {
       return jsonResponse({ error: 'Envie áudio ou texto para iniciar a conversa' }, 400)
     }
 
-    // 2. Montar histórico de conversa
-    const conversationMessages = (messages || []).map((m: { role: string; content: string }) => ({
+    // 2. Build conversation for Claude
+    const conversationMessages = messages.map((m) => ({
       role: m.role === 'lead' ? 'user' : m.role === 'ai' ? 'assistant' : m.role,
       content: m.content,
     }))
 
-    // Adicionar mensagem atual do lead
     if (leadText) {
       conversationMessages.push({ role: 'user', content: leadText })
     }
 
-    // 3. Gerar resposta com Claude
+    // 3. Claude response
     const claudeResponse = await retryWithBackoff(() => fetchWithTimeout('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -89,24 +148,27 @@ Deno.serve(async (req) => {
     const claudeResult = await claudeResponse.json()
     const responseText = claudeResult.content?.[0]?.text || ''
 
-    // 4. Gerar áudio TTS da resposta (sempre — é uma simulação de ligação)
+    // 4. TTS
     let audioBase64: string | null = null
     const vk = voice_key || 'default'
 
-    // Tentar Cartesia primeiro
     if (CARTESIA_API_KEY) {
       audioBase64 = await generateCartesiaTTS(responseText, vk)
     }
-
-    // Fallback: chamar edge function generate-voice
     if (!audioBase64) {
       audioBase64 = await generateVoiceViaEdge(responseText, vk)
     }
 
+    const audioUrl = audioBase64 ? `data:audio/mpeg;base64,${audioBase64}` : null
+
     return jsonResponse({
-      lead_transcript: leadText,
-      response: responseText,
+      user_text: leadText || '',
+      text: responseText,
+      audioUrl,
       audio_base64: audioBase64,
+      // Legacy compat
+      lead_transcript: leadText || '',
+      response: responseText,
     })
   } catch (err) {
     console.error('Error:', err)
@@ -114,16 +176,22 @@ Deno.serve(async (req) => {
   }
 })
 
-// ── STT: Transcrever áudio com Deepgram ──
-async function transcribeAudio(base64Audio: string, contentType?: string): Promise<string> {
+function buildSystemPrompt(ctx: { vendor_name?: string; product?: string; tone?: string; objective?: string }): string {
+  let p = `Você é ${ctx.vendor_name || 'Lucas'}, um vendedor(a) de ${ctx.product || 'proteção veicular'} em uma ligação telefônica.`
+  if (ctx.tone) p += `\nTom de voz: ${ctx.tone}.`
+  if (ctx.objective) p += `\nObjetivo: ${ctx.objective}.`
+  p += `\n\nIMPORTANTE:\n- Fale em português brasileiro natural.\n- Respostas curtas: máximo 2-3 frases por vez.\n- NÃO use markdown, emojis, ou formatação.\n- Fale como se estivesse conversando por telefone.`
+  return p
+}
+
+// ── STT: Transcrever áudio bytes diretamente com Deepgram ──
+async function transcribeAudioBytes(audioBytes: Uint8Array, contentType: string): Promise<string> {
   if (!DEEPGRAM_API_KEY) {
     console.warn('DEEPGRAM_API_KEY not set')
     return ''
   }
 
   try {
-    const audioBuffer = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0))
-
     const res = await retryWithBackoff(() => fetchWithTimeout(
       'https://api.deepgram.com/v1/listen?model=nova-2&language=pt-BR&smart_format=true&punctuate=true',
       {
@@ -132,7 +200,7 @@ async function transcribeAudio(base64Audio: string, contentType?: string): Promi
           'Authorization': `Token ${DEEPGRAM_API_KEY}`,
           'Content-Type': contentType || 'audio/webm',
         },
-        body: audioBuffer,
+        body: audioBytes,
       },
       15000
     ), 2)
@@ -150,13 +218,11 @@ async function transcribeAudio(base64Audio: string, contentType?: string): Promi
   }
 }
 
-// ── TTS: Cartesia direta ──
+// ── TTS: Cartesia ──
 async function generateCartesiaTTS(text: string, voiceKey: string): Promise<string | null> {
   try {
-    // Buscar voice_id do Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.49.1')
     const sb = createClient(supabaseUrl, supabaseKey)
 
@@ -190,7 +256,6 @@ async function generateCartesiaTTS(text: string, voiceKey: string): Promise<stri
     }
 
     const audioBytes = new Uint8Array(await res.arrayBuffer())
-    // Convert to base64
     let binary = ''
     for (let i = 0; i < audioBytes.length; i++) {
       binary += String.fromCharCode(audioBytes[i])
@@ -202,7 +267,7 @@ async function generateCartesiaTTS(text: string, voiceKey: string): Promise<stri
   }
 }
 
-// ── TTS: Fallback via edge function ──
+// ── TTS: Fallback ──
 async function generateVoiceViaEdge(text: string, voiceKey: string): Promise<string | null> {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -214,11 +279,7 @@ async function generateVoiceViaEdge(text: string, voiceKey: string): Promise<str
         'Authorization': `Bearer ${supabaseKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        action: 'generate',
-        text,
-        voice_key: voiceKey,
-      }),
+      body: JSON.stringify({ action: 'generate', text, voice_key: voiceKey }),
     }, 15000)
 
     if (res.ok) {
