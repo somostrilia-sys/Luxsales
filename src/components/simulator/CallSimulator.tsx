@@ -429,9 +429,17 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       const result = await res.json();
       if (!res.ok) throw new Error(result?.error || "Erro na simulação");
 
-      // Check for hallucination / no speech
+      // Check for hallucination / no speech / silence
+      if (result.silence === true) {
+        // Silent recording — just go back to listening (no toast in hands-free mode)
+        setPhase("listening");
+        return;
+      }
       if (result.hallucination === true || result.error === "No speech detected" || result.no_speech) {
-        toast.warning("Não consegui entender. Tente falar mais alto e próximo ao microfone.", { duration: 4000 });
+        // Only show warning if user manually recorded (not hands-free)
+        if (!autoStartRef.current) {
+          toast.warning("Não consegui entender. Tente falar mais alto e próximo ao microfone.", { duration: 4000 });
+        }
         setPhase("listening");
         return;
       }
