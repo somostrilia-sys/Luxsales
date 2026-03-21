@@ -250,7 +250,7 @@ async function generateVoiceAudio(text: string, voiceKey: string) {
   const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-voice`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ action: "generate", text, voice_key: voiceKey }),
+    body: JSON.stringify({ voice_key: voiceKey, text }),
   });
 
   const payload = await response.json().catch(() => null);
@@ -258,11 +258,15 @@ async function generateVoiceAudio(text: string, voiceKey: string) {
     throw new Error(payload?.error || "Não foi possível gerar o áudio.");
   }
 
-  if (!payload?.audio_base64) {
-    throw new Error("A função não retornou áudio.");
-  }
+  // Edge function returns: audioUrl, audio, audio_url
+  const audioSrc = payload?.audioUrl || payload?.audio_url;
+  if (audioSrc) return audioSrc;
 
-  return `data:audio/mpeg;base64,${payload.audio_base64}`;
+  // Fallback: raw base64
+  const b64 = payload?.audio || payload?.audioData;
+  if (b64) return `data:audio/mpeg;base64,${b64}`;
+
+  throw new Error("A função não retornou áudio.");
 }
 
 function buildSimulatorSystemPrompt(form: TrainingFormState): string {
