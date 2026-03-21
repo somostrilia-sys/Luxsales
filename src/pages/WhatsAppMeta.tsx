@@ -295,6 +295,12 @@ export default function WhatsAppMeta() {
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Nova Conversa state
+  const [newConvOpen, setNewConvOpen] = useState(false);
+  const [newConvPhone, setNewConvPhone] = useState("");
+  const [newConvTemplate, setNewConvTemplate] = useState("");
+  const [newConvSending, setNewConvSending] = useState(false);
+
   // Send Test Dialog state
   const [testOpen, setTestOpen] = useState(false);
   const [testTemplate, setTestTemplate] = useState<any>(null);
@@ -595,6 +601,39 @@ export default function WhatsAppMeta() {
     setTestSending(false);
   };
 
+  // ── Nova Conversa ──
+  const startNewConversation = async () => {
+    if (!newConvPhone.trim() || !newConvTemplate) return;
+    setNewConvSending(true);
+    try {
+      const tpl = templates.find((t: any) => t.name === newConvTemplate);
+      const { data, error } = await supabase.functions.invoke("whatsapp-meta-send", {
+        body: {
+          company_id: companyId,
+          to: newConvPhone.replace(/\D/g, ""),
+          type: "template",
+          template: {
+            name: newConvTemplate,
+            language: { code: tpl?.language || "pt_BR" },
+          },
+        },
+      });
+      if (error || data?.error) {
+        toast.error(data?.error || error?.message || "Erro ao enviar template");
+      } else {
+        toast.success(`Template "${newConvTemplate}" enviado para ${newConvPhone}!`);
+        setNewConvOpen(false);
+        setNewConvPhone("");
+        setNewConvTemplate("");
+        // Reload conversations
+        loadMetaData();
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao iniciar conversa");
+    }
+    setNewConvSending(false);
+  };
+
   // ── Form helpers ──
   const updateForm = <K extends keyof TemplateFormData>(key: K, value: TemplateFormData[K]) => {
     setTemplateForm((prev) => ({ ...prev, [key]: value }));
@@ -680,10 +719,15 @@ export default function WhatsAppMeta() {
           <TabsContent value="inbox">
             <div className="grid grid-cols-[320px_1fr] h-[550px] rounded-xl border border-border/60 overflow-hidden">
               <div className="border-r border-border/60 bg-card flex flex-col">
-                <div className="p-3 border-b border-border/60">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-9" />
+                <div className="p-3 border-b border-border/60 space-y-2">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-9" />
+                    </div>
+                    <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" title="Nova Conversa" onClick={() => setNewConvOpen(true)}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
                 <ScrollArea className="flex-1">
@@ -1280,6 +1324,57 @@ export default function WhatsAppMeta() {
             <Button onClick={sendTestTemplate} disabled={testSending || !testPhone.trim()} className="bg-emerald-600 hover:bg-emerald-700">
               {testSending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
               Enviar Teste
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Nova Conversa Dialog */}
+      <Dialog open={newConvOpen} onOpenChange={setNewConvOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nova Conversa</DialogTitle>
+            <DialogDescription>Envie um template aprovado para iniciar uma nova conversa via Meta API.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label>Número do WhatsApp</Label>
+              <Input
+                placeholder="+55 11 99999-9999"
+                value={newConvPhone}
+                onChange={e => setNewConvPhone(e.target.value)}
+                className="mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Formato: código do país + DDD + número</p>
+            </div>
+            <div>
+              <Label>Template Aprovado</Label>
+              <Select value={newConvTemplate} onValueChange={setNewConvTemplate}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Selecione um template" />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.filter((t: any) => t.status === "APPROVED").map((t: any) => (
+                    <SelectItem key={t.name} value={t.name}>
+                      {t.name} ({t.language})
+                    </SelectItem>
+                  ))}
+                  {templates.filter((t: any) => t.status === "APPROVED").length === 0 && (
+                    <SelectItem value="__none" disabled>Nenhum template aprovado</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewConvOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={startNewConversation}
+              disabled={!newConvPhone.trim() || !newConvTemplate || newConvSending}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {newConvSending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+              Enviar Template
             </Button>
           </DialogFooter>
         </DialogContent>
