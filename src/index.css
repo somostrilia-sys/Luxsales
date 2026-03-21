@@ -56,8 +56,8 @@
     /* Gradient tokens */
     --gradient-card: linear-gradient(145deg, hsl(220 16% 9%), hsl(220 16% 6%));
     --gradient-card-highlight: linear-gradient(145deg, hsl(220 14% 12%), hsl(220 16% 8%));
-    --gradient-primary: linear-gradient(135deg, hsl(217 91% 53%), hsl(217 91% 40%));
-    --gradient-accent: linear-gradient(135deg, hsl(199 89% 48%), hsl(217 91% 53%));
+    --gradient-primary: linear-gradient(135deg, hsl(43 65% 55%), hsl(43 65% 40%));
+    --gradient-accent: linear-gradient(135deg, hsl(43 65% 55%), hsl(38 70% 45%));
     --gradient-surface: linear-gradient(180deg, hsl(220 16% 8%) 0%, hsl(220 20% 4%) 100%);
 
     /* Shadow tokens */
