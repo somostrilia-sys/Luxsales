@@ -310,7 +310,10 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
     // Agent response bubble
     const agentText = result.text || result.response || "";
+    // Try all possible audio fields from the backend
     const agentAudio = result.audioUrl || result.audio_url
+      || (result.audio ? `data:audio/mpeg;base64,${result.audio}` : undefined)
+      || (result.audioData ? `data:audio/mpeg;base64,${result.audioData}` : undefined)
       || (result.audio_base64 ? `data:audio/mpeg;base64,${result.audio_base64}` : undefined);
 
     if (agentText) {
