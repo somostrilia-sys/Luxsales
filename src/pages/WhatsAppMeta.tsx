@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import {
   MessageSquare, Send, Search, Phone, Clock, Shield, FileText,
   CheckCheck, Check, X, Loader2, RefreshCw, AlertTriangle,
-  BarChart3, Users, Zap, CircleCheck, CircleX, CircleDot,
+  BarChart3, Zap, CircleCheck, CircleDot,
   Plus, Eye, Pencil, Trash2, Copy, TestTube2, Image, Video, File,
   Link, PhoneCall, Reply,
 } from "lucide-react";
@@ -274,14 +274,10 @@ export default function WhatsAppMeta() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // New tables data
+  // Meta API data
   const [credentials, setCredentials] = useState<any>(null);
   const [phoneNumbers, setPhoneNumbers] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
-  const [optIns, setOptIns] = useState<any[]>([]);
-  const [qualitySignals, setQualitySignals] = useState<any[]>([]);
-  const [billingData, setBillingData] = useState<any[]>([]);
-  const [webhookEvents, setWebhookEvents] = useState<any[]>([]);
   const [syncingTemplates, setSyncingTemplates] = useState(false);
 
   // Template Builder state
@@ -356,23 +352,15 @@ export default function WhatsAppMeta() {
   const loadMetaData = async () => {
     if (!companyId) return;
 
-    const [creds, phones, tmpls, opts, quality, billing, events] = await Promise.all([
+    const [creds, phones, tmpls] = await Promise.all([
       supabase.from("whatsapp_meta_credentials").select("*").eq("company_id", companyId).single(),
       supabase.from("whatsapp_meta_phone_numbers").select("*").eq("company_id", companyId),
       supabase.from("whatsapp_meta_templates").select("*").eq("company_id", companyId).neq("status", "DELETED").order("category").order("name"),
-      supabase.from("whatsapp_meta_opt_ins").select("*").eq("company_id", companyId).eq("is_active", true).order("created_at", { ascending: false }).limit(100),
-      supabase.from("whatsapp_meta_quality_signals").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50),
-      supabase.from("whatsapp_meta_conversations_billing").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50),
-      supabase.from("whatsapp_meta_webhook_events").select("*").eq("company_id", companyId).order("received_at", { ascending: false }).limit(50),
     ]);
 
     setCredentials(creds.data);
     setPhoneNumbers(phones.data ?? []);
     setTemplates(tmpls.data ?? []);
-    setOptIns(opts.data ?? []);
-    setQualitySignals(quality.data ?? []);
-    setBillingData(billing.data ?? []);
-    setWebhookEvents(events.data ?? []);
   };
 
   const loadConversations = async () => {
@@ -397,22 +385,6 @@ export default function WhatsAppMeta() {
         }
       });
       setConversations(Array.from(convMap.values()));
-    } else {
-      const { data: oldData } = await supabase
-        .from("whatsapp_messages")
-        .select("id, from_number, to_number, direction, content, status, created_at")
-        .order("created_at", { ascending: false }).limit(200);
-      if (oldData && oldData.length > 0) {
-        const convMap = new Map<string, Conversation>();
-        oldData.forEach((m: any) => {
-          const phone = m.direction === "inbound" ? m.from_number : m.to_number;
-          if (!phone) return;
-          if (!convMap.has(phone)) {
-            convMap.set(phone, { id: phone, phone, name: null, lastMessage: m.content ?? "", lastTime: m.created_at, unread: 0 });
-          }
-        });
-        setConversations(Array.from(convMap.values()));
-      }
     }
     setLoading(false);
   };
@@ -653,8 +625,6 @@ export default function WhatsAppMeta() {
 
   // Stats
   const approvedTemplates = templates.filter(t => t.status === "APPROVED").length;
-  const activeOptIns = optIns.length;
-  const unresolvedSignals = qualitySignals.filter(s => !s.resolved_at).length;
   const connectedPhones = phoneNumbers.filter(p => p.status === "connected").length;
 
   // ── Preview form for test dialog ──
@@ -669,8 +639,8 @@ export default function WhatsAppMeta() {
     <DashboardLayout>
       <div className="space-y-6">
         <PageHeader
-          title="WhatsApp Meta BSP"
-          subtitle="API oficial Meta — Templates, Quality Rating, Billing, LGPD"
+          title="WhatsApp Business"
+          subtitle="API oficial Meta — Inbox, Templates e Configurações"
           badge={credentials?.is_verified
             ? <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30"><Shield className="h-3 w-3 mr-1" />Verificado</Badge>
             : <Badge variant="outline" className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30">Pendente Verificacao</Badge>
@@ -678,14 +648,12 @@ export default function WhatsAppMeta() {
         />
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: "Quality Rating", value: credentials?.quality_rating ?? "—", icon: BarChart3, color: credentials?.quality_rating === "GREEN" ? "text-emerald-400" : credentials?.quality_rating === "RED" ? "text-red-400" : "text-yellow-400" },
             { label: "Msg Limit", value: credentials?.messaging_limit_tier?.replace("TIER_", "") ?? "250", icon: Zap, color: "text-blue-400" },
             { label: "Telefones", value: `${connectedPhones}/${phoneNumbers.length}`, icon: Phone, color: "text-emerald-400" },
             { label: "Templates", value: `${approvedTemplates}/${templates.length}`, icon: FileText, color: "text-violet-400" },
-            { label: "Opt-ins Ativos", value: activeOptIns, icon: Users, color: "text-blue-400" },
-            { label: "Alertas", value: unresolvedSignals, icon: AlertTriangle, color: unresolvedSignals > 0 ? "text-red-400" : "text-emerald-400" },
           ].map(k => (
             <Card key={k.label} className="bg-card border-border/60">
               <CardContent className="p-4">
@@ -705,10 +673,7 @@ export default function WhatsAppMeta() {
           <TabsList className="h-auto flex-wrap gap-2 rounded-xl border border-border/60 bg-secondary/40 p-1">
             <TabsTrigger value="inbox">Inbox {totalUnread > 0 && <Badge className="ml-1 h-5 bg-emerald-500 text-white text-[10px]">{totalUnread}</Badge>}</TabsTrigger>
             <TabsTrigger value="templates">Templates ({approvedTemplates})</TabsTrigger>
-            <TabsTrigger value="phones">Telefones ({phoneNumbers.length})</TabsTrigger>
-            <TabsTrigger value="optins">Opt-ins ({activeOptIns})</TabsTrigger>
-            <TabsTrigger value="quality">Quality Signals</TabsTrigger>
-            <TabsTrigger value="billing">Billing</TabsTrigger>
+            <TabsTrigger value="config">Configurações</TabsTrigger>
           </TabsList>
 
           {/* INBOX TAB */}
@@ -883,9 +848,73 @@ export default function WhatsAppMeta() {
             </Card>
           </TabsContent>
 
-          {/* PHONE NUMBERS TAB */}
-          <TabsContent value="phones" className="space-y-4">
+          {/* CONFIGURAÇÕES TAB */}
+          <TabsContent value="config" className="space-y-4">
+            {/* Credenciais WABA */}
             <Card className="border-border/60 bg-card">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2"><Shield className="h-4 w-4 text-emerald-400" />Credenciais Meta WABA</CardTitle>
+                <CardDescription>Dados da sua conta WhatsApp Business API</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {credentials ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">WABA ID</p>
+                      <p className="text-sm font-mono text-foreground bg-muted/30 px-3 py-2 rounded-lg">{credentials.waba_id ?? "—"}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Business ID</p>
+                      <p className="text-sm font-mono text-foreground bg-muted/30 px-3 py-2 rounded-lg">{credentials.meta_business_id ?? "—"}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">App ID</p>
+                      <p className="text-sm font-mono text-foreground bg-muted/30 px-3 py-2 rounded-lg">{credentials.meta_app_id ?? "—"}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">API Version</p>
+                      <p className="text-sm font-mono text-foreground bg-muted/30 px-3 py-2 rounded-lg">{credentials.api_version ?? "v21.0"}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Quality Rating</p>
+                      <div>{qualityBadge(credentials.quality_rating)}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Messaging Limit</p>
+                      <p className="text-sm text-foreground">{credentials.messaging_limit_tier ?? "TIER_250"}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Verificação</p>
+                      <div>
+                        {credentials.is_verified
+                          ? <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30"><CircleCheck className="h-3 w-3 mr-1" />Verificado</Badge>
+                          : <Badge variant="outline" className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30"><CircleDot className="h-3 w-3 mr-1" />Pendente</Badge>
+                        }
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Access Token</p>
+                      <p className="text-sm font-mono text-foreground bg-muted/30 px-3 py-2 rounded-lg truncate">
+                        {credentials.meta_access_token ? `${credentials.meta_access_token.substring(0, 20)}...` : "Não configurado"}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Nenhuma credencial configurada</AlertTitle>
+                    <AlertDescription>Configure suas credenciais Meta WABA para começar a usar o WhatsApp Business API.</AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Telefones */}
+            <Card className="border-border/60 bg-card">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2"><Phone className="h-4 w-4 text-emerald-400" />Números de Telefone</CardTitle>
+                <CardDescription>{connectedPhones} de {phoneNumbers.length} números conectados</CardDescription>
+              </CardHeader>
               <CardContent className="p-0">
                 <Table>
                   <TableHeader>
@@ -900,7 +929,7 @@ export default function WhatsAppMeta() {
                   </TableHeader>
                   <TableBody>
                     {phoneNumbers.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum numero registrado. Configure via Onboarding.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum número registrado. Configure via Meta Business Manager.</TableCell></TableRow>
                     ) : phoneNumbers.map(p => (
                       <TableRow key={p.id}>
                         <TableCell className="font-medium text-foreground font-mono">{p.display_phone}</TableCell>
@@ -914,122 +943,6 @@ export default function WhatsAppMeta() {
                         <TableCell>{qualityBadge(p.quality_rating)}</TableCell>
                         <TableCell className="text-muted-foreground">{p.messaging_limit ?? 250}/dia</TableCell>
                         <TableCell className="text-muted-foreground">{p.max_msgs_per_second ?? 80}/s</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* OPT-INS TAB */}
-          <TabsContent value="optins" className="space-y-4">
-            <Card className="border-border/60 bg-card">
-              <CardHeader>
-                <CardTitle className="text-base">Consentimentos Ativos (LGPD)</CardTitle>
-                <CardDescription>{activeOptIns} contatos com opt-in ativo</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Metodo</TableHead>
-                      <TableHead>Base Legal</TableHead>
-                      <TableHead>Marketing</TableHead>
-                      <TableHead>Data Opt-in</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {optIns.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum opt-in registrado</TableCell></TableRow>
-                    ) : optIns.map(o => (
-                      <TableRow key={o.id}>
-                        <TableCell className="font-mono text-foreground">{o.phone_number}</TableCell>
-                        <TableCell className="text-foreground">{o.contact_name ?? "—"}</TableCell>
-                        <TableCell><Badge variant="secondary">{o.opt_in_method}</Badge></TableCell>
-                        <TableCell className="text-muted-foreground">{o.lgpd_legal_basis ?? "—"}</TableCell>
-                        <TableCell>{o.consent_marketing ? <CircleCheck className="h-4 w-4 text-emerald-400" /> : <CircleX className="h-4 w-4 text-muted-foreground" />}</TableCell>
-                        <TableCell className="text-muted-foreground text-xs">{new Date(o.opted_in_at).toLocaleDateString("pt-BR")}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* QUALITY SIGNALS TAB */}
-          <TabsContent value="quality" className="space-y-4">
-            <Card className="border-border/60 bg-card">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-yellow-400" />Sinais de Qualidade</CardTitle>
-                <CardDescription>Blocks, reports e alertas da Meta</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Severidade</TableHead>
-                      <TableHead>De - Para</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Data</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {qualitySignals.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">Nenhum sinal de qualidade</TableCell></TableRow>
-                    ) : qualitySignals.map(q => (
-                      <TableRow key={q.id}>
-                        <TableCell className="text-foreground font-medium">{q.signal_type}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={q.severity === "critical" ? "bg-red-500/20 text-red-400" : q.severity === "high" ? "bg-orange-500/20 text-orange-400" : "bg-yellow-500/20 text-yellow-400"}>
-                            {q.severity ?? "—"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{q.old_value ?? "—"} - {q.new_value ?? "—"}</TableCell>
-                        <TableCell>{q.resolved_at ? <Badge className="bg-emerald-500/20 text-emerald-400">Resolvido</Badge> : <Badge className="bg-red-500/20 text-red-400">Aberto</Badge>}</TableCell>
-                        <TableCell className="text-muted-foreground text-xs">{new Date(q.created_at).toLocaleString("pt-BR")}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* BILLING TAB */}
-          <TabsContent value="billing" className="space-y-4">
-            <Card className="border-border/60 bg-card">
-              <CardHeader>
-                <CardTitle className="text-base">Conversas & Billing</CardTitle>
-                <CardDescription>Janelas de conversa e custos por categoria</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Contato</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Origem</TableHead>
-                      <TableHead>Msgs</TableHead>
-                      <TableHead>Custo</TableHead>
-                      <TableHead>Janela</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {billingData.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhuma conversa cobrada</TableCell></TableRow>
-                    ) : billingData.map(b => (
-                      <TableRow key={b.id}>
-                        <TableCell className="font-mono text-foreground">{b.contact_phone}</TableCell>
-                        <TableCell><Badge variant="secondary">{b.category}</Badge></TableCell>
-                        <TableCell className="text-muted-foreground">{b.origin === "business_initiated" ? "Empresa" : "Usuario"}</TableCell>
-                        <TableCell className="text-foreground">{b.message_count}</TableCell>
-                        <TableCell className="text-foreground">R$ {(b.cost_brl ?? 0).toFixed(4)}</TableCell>
-                        <TableCell className="text-muted-foreground text-xs">{new Date(b.window_start).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
