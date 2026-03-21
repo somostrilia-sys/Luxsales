@@ -385,22 +385,6 @@ export default function WhatsAppMeta() {
         }
       });
       setConversations(Array.from(convMap.values()));
-    } else {
-      const { data: oldData } = await supabase
-        .from("whatsapp_messages")
-        .select("id, from_number, to_number, direction, content, status, created_at")
-        .order("created_at", { ascending: false }).limit(200);
-      if (oldData && oldData.length > 0) {
-        const convMap = new Map<string, Conversation>();
-        oldData.forEach((m: any) => {
-          const phone = m.direction === "inbound" ? m.from_number : m.to_number;
-          if (!phone) return;
-          if (!convMap.has(phone)) {
-            convMap.set(phone, { id: phone, phone, name: null, lastMessage: m.content ?? "", lastTime: m.created_at, unread: 0 });
-          }
-        });
-        setConversations(Array.from(convMap.values()));
-      }
     }
     setLoading(false);
   };
