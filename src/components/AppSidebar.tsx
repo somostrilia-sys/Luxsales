@@ -73,7 +73,7 @@ export function AppSidebar() {
             to={item.url}
             end={item.url === "/"}
             className="hover:bg-sidebar-accent/70 transition-all duration-150 rounded-xl gap-3 px-3 py-2"
-            activeClassName="sidebar-active-gradient text-primary font-semibold"
+            activeClassName="sidebar-active-gradient text-gold font-semibold"
           >
             <item.icon className="h-[18px] w-[18px] text-muted-foreground shrink-0" />
             {!collapsed && <span className="text-[13px]">{item.title}</span>}
@@ -93,7 +93,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarContent className="pt-5 bg-sidebar border-r border-sidebar-border/60">
         {/* Logo */}
-        <div className="px-4 mb-5 flex items-center justify-center">
+        <div className="px-4 mb-5 flex flex-col items-center justify-center gap-1">
           {collaborator?.company?.logo_url ? (
             <img
               src={collaborator.company.logo_url}
@@ -101,11 +101,16 @@ export function AppSidebar() {
               className="h-10 shrink-0 object-contain"
             />
           ) : (
-            <img
-              src={LOGO_URL}
-              alt="Walk Holding"
-              className="h-16 w-auto object-contain max-w-[180px] shrink-0 drop-shadow-[0_0_16px_hsl(217,91%,53%,0.08)]"
-            />
+            <>
+              <img
+                src={LOGO_URL}
+                alt="LuxSales"
+                className="h-12 w-auto object-contain max-w-[180px] shrink-0 drop-shadow-[0_0_16px_hsl(43,65%,55%,0.12)]"
+              />
+              {!collapsed && (
+                <span className="text-[10px] text-muted-foreground/50 tracking-widest uppercase">LuxSales</span>
+              )}
+            </>
           )}
         </div>
 
@@ -153,6 +158,9 @@ export function AppSidebar() {
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
+          {!collapsed && (
+            <p className="text-[9px] text-muted-foreground/40 text-center mt-2">LuxSales © 2026 — Digital Lux</p>
+          )}
         </SidebarFooter>
       </SidebarContent>
     </Sidebar>

@@ -335,7 +335,7 @@ function InviteRegistration({ token }: { token: string }) {
       <div className="w-full max-w-lg space-y-6">
         <div className="text-center space-y-4">
           <div className="flex justify-center">
-            <img src={LOGO_URL} alt="Walk Holding" className="h-28 object-contain drop-shadow-[0_0_30px_hsl(217,91%,53%,0.15)]" />
+            <img src={LOGO_URL} alt="LuxSales" className="h-28 object-contain drop-shadow-[0_0_30px_hsl(43,65%,55%,0.2)]" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Cadastro de Colaborador</h1>
           {(displayCompanyName || displayRoleName) && (
