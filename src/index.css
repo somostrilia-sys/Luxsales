@@ -191,8 +191,8 @@ input:focus, textarea:focus, [role="combobox"]:focus {
   transition: all 0.2s ease;
 }
 .topbar-search:focus-within {
-  border-color: hsl(217 91% 53% / 0.4);
-  box-shadow: 0 0 0 3px hsl(217 91% 53% / 0.08);
+  border-color: hsl(43 65% 55% / 0.4);
+  box-shadow: 0 0 0 3px hsl(43 65% 55% / 0.08);
 }
 
 /* ─── Scrollbar ─── */
