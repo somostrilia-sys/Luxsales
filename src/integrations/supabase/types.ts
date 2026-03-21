@@ -817,13 +817,16 @@ export type Database = {
           actor_type: string | null
           company_id: string
           created_at: string
+          details: Json | null
+          entity_id: string | null
+          entity_type: string | null
           id: string
           ip_address: unknown
           metadata: Json | null
           new_data: Json | null
           old_data: Json | null
           record_id: string | null
-          table_name: string
+          table_name: string | null
           user_agent: string | null
         }
         Insert: {
@@ -832,13 +835,16 @@ export type Database = {
           actor_type?: string | null
           company_id: string
           created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type?: string | null
           id?: string
           ip_address?: unknown
           metadata?: Json | null
           new_data?: Json | null
           old_data?: Json | null
           record_id?: string | null
-          table_name: string
+          table_name?: string | null
           user_agent?: string | null
         }
         Update: {
@@ -847,13 +853,16 @@ export type Database = {
           actor_type?: string | null
           company_id?: string
           created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type?: string | null
           id?: string
           ip_address?: unknown
           metadata?: Json | null
           new_data?: Json | null
           old_data?: Json | null
           record_id?: string | null
-          table_name?: string
+          table_name?: string | null
           user_agent?: string | null
         }
         Relationships: [
@@ -3123,7 +3132,9 @@ export type Database = {
           last_message: string | null
           last_message_at: string | null
           lead_id: string | null
+          lead_name: string | null
           lead_phone: string
+          lead_profile_pic: string | null
           status: string | null
           unread_count: number | null
           updated_at: string | null
@@ -3140,7 +3151,9 @@ export type Database = {
           last_message?: string | null
           last_message_at?: string | null
           lead_id?: string | null
+          lead_name?: string | null
           lead_phone: string
+          lead_profile_pic?: string | null
           status?: string | null
           unread_count?: number | null
           updated_at?: string | null
@@ -3157,7 +3170,9 @@ export type Database = {
           last_message?: string | null
           last_message_at?: string | null
           lead_id?: string | null
+          lead_name?: string | null
           lead_phone?: string
+          lead_profile_pic?: string | null
           status?: string | null
           unread_count?: number | null
           updated_at?: string | null
@@ -4370,13 +4385,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_company_whatsapp_health"
             referencedColumns: ["company_id"]
-          },
-          {
-            foreignKeyName: "leads_consultant_id_fkey"
-            columns: ["consultant_id"]
-            isOneToOne: false
-            referencedRelation: "consultants"
-            referencedColumns: ["id"]
           },
         ]
       }
@@ -6801,6 +6809,7 @@ export type Database = {
           phone_number: string | null
           qr_code: string | null
           status: string | null
+          uazapi_server_url: string | null
           updated_at: string | null
         }
         Insert: {
@@ -6814,6 +6823,7 @@ export type Database = {
           phone_number?: string | null
           qr_code?: string | null
           status?: string | null
+          uazapi_server_url?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -6827,6 +6837,7 @@ export type Database = {
           phone_number?: string | null
           qr_code?: string | null
           status?: string | null
+          uazapi_server_url?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -8005,35 +8016,23 @@ export type Database = {
           p_ai_qualification?: string
           p_ai_summary?: string
           p_call_id: string
-          p_duration: number
-          p_status: string
+          p_duration?: number
+          p_status?: string
         }
         Returns: undefined
       }
       count_available_leads: { Args: { p_company_id?: string }; Returns: Json }
-      distribute_leads:
-        | {
-            Args: {
-              p_assigned_by?: string
-              p_assigned_to: string
-              p_company_id?: string
-              p_filtro_cidade?: string
-              p_filtro_ddd?: string
-              p_quantidade?: number
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_assigned_by?: string
-              p_assigned_to: string
-              p_company_id?: string
-              p_filtro_cidade?: string
-              p_filtro_ddd?: string
-              p_quantidade: number
-            }
-            Returns: Json
-          }
+      distribute_leads: {
+        Args: {
+          p_assigned_by: string
+          p_assigned_to: string
+          p_company_id: string
+          p_filtro_cidade?: string
+          p_filtro_ddd?: string
+          p_quantidade?: number
+        }
+        Returns: Json
+      }
       fn_check_dnc: {
         Args: { p_company_id?: string; p_phone: string }
         Returns: boolean
@@ -8133,7 +8132,7 @@ export type Database = {
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       sync_leads_from_base: {
-        Args: { p_company_id?: string; p_limit?: number }
+        Args: { p_company_id: string; p_limit?: number }
         Returns: Json
       }
     }

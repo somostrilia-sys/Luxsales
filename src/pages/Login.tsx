@@ -4,9 +4,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Mail, Lock, Loader2, ArrowRight } from "lucide-react";
+import luxBanner from "@/assets/luxsales-banner.png";
 import { LOGO_URL } from "@/lib/constants";
 
 export default function Login() {
@@ -30,68 +31,80 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 login-bg">
-      <div className="w-full max-w-md space-y-8">
-        {/* Logo area */}
-        <div className="flex justify-center">
-          <img src={LOGO_URL} alt="Walk Holding" className="h-32 object-contain drop-shadow-[0_0_30px_hsl(217,91%,53%,0.15)]" />
-        </div>
+    <div className="min-h-screen flex flex-col login-bg">
+      {/* Banner topo */}
+      <div className="w-full h-48 md:h-56 relative overflow-hidden">
+        <img src={luxBanner} alt="Digital Lux" className="w-full h-full object-cover object-center" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background" />
+      </div>
 
-        <Card variant="gradient" className="card-accent-top">
-          <form onSubmit={handleSubmit}>
-            <CardContent className="pt-6 space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">E-mail</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="seu@email.com"
-                    className="pl-10 h-11 bg-secondary/50 border-border"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
+      <div className="flex-1 flex items-start justify-center px-4 -mt-16 relative z-10">
+        <div className="w-full max-w-md space-y-6">
+          {/* Logo + Branding */}
+          <div className="flex flex-col items-center gap-2">
+            <img src={LOGO_URL} alt="LuxSales" className="h-20 object-contain drop-shadow-[0_0_30px_hsl(43,65%,55%,0.25)]" />
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">LuxSales</h1>
+            <span className="text-xs text-muted-foreground tracking-widest uppercase">by Digital Lux</span>
+          </div>
+
+          <Card variant="gradient" className="card-accent-top accent-gold">
+            <form onSubmit={handleSubmit}>
+              <CardContent className="pt-6 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">E-mail</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="seu@email.com"
+                      className="pl-10 h-11 bg-secondary/50 border-border"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Senha</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    className="pl-10 h-11 bg-secondary/50 border-border"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Senha</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="••••••••"
+                      className="pl-10 h-11 bg-secondary/50 border-border"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="flex justify-end">
-                <Link to="/forgot-password" className="text-xs text-primary hover:underline">Esqueceu a senha?</Link>
-              </div>
-            </CardContent>
-            <CardFooter className="flex flex-col gap-4 pb-6">
-              <Button type="submit" className="w-full h-11 btn-modern font-semibold" disabled={loading}>
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <>
-                    Entrar
-                    <ArrowRight className="h-4 w-4 ml-1" />
-                  </>
-                )}
-              </Button>
-              <p className="text-xs text-muted-foreground text-center">
-                Não tem conta?{" "}
-                <Link to="/register" className="text-primary hover:underline font-medium">Cadastre-se</Link>
-              </p>
-            </CardFooter>
-          </form>
-        </Card>
+                <div className="flex justify-end">
+                  <Link to="/forgot-password" className="text-xs text-gold hover:underline">Esqueceu a senha?</Link>
+                </div>
+              </CardContent>
+              <CardFooter className="flex flex-col gap-4 pb-6">
+                <Button type="submit" className="w-full h-11 btn-modern font-semibold bg-gold hover:bg-gold/90 text-gold-foreground" disabled={loading}>
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <>
+                      Entrar
+                      <ArrowRight className="h-4 w-4 ml-1" />
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  Não tem conta?{" "}
+                  <Link to="/register" className="text-gold hover:underline font-medium">Cadastre-se</Link>
+                </p>
+              </CardFooter>
+            </form>
+          </Card>
+
+          <p className="text-center text-[10px] text-muted-foreground/60">LuxSales © 2026 — Digital Lux</p>
+        </div>
       </div>
     </div>
   );
