@@ -136,17 +136,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
   // ── AUTO-START recording when phase becomes "listening" (hands-free mode) ──
   const autoStartRef = useRef(false);
-  useEffect(() => {
-    if (phase === "listening" && !recording && !loading && autoStartRef.current) {
-      const timer = setTimeout(() => {
-        if (phaseRef.current === "listening" && !recorderRef.current) {
-          startRecording();
-        }
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, recording, loading]);
+  const startRecordingRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     return () => {
@@ -333,13 +323,13 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         } else if (!speechDetectedRef.current && recElapsed >= MIN_RECORDING_MS) {
           // Long recording but no speech — restart listening
           if (phaseRef.current !== "ended" && autoStartRef.current) {
-            setPhase("listening"); // triggers auto-restart
+            goListening(); // triggers auto-restart
           } else if (phaseRef.current !== "ended") {
             toast.info("Nenhuma fala detectada. Tente novamente.");
-            setPhase("listening");
+            goListening();
           }
         } else if (recElapsed < MIN_RECORDING_MS && !speechDetectedRef.current) {
-          if (phaseRef.current !== "ended") setPhase("listening");
+          if (phaseRef.current !== "ended") goListening();
         }
       };
 
@@ -359,6 +349,21 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monitorAudio]);
+
+  // Keep ref in sync for auto-start
+  startRecordingRef.current = startRecording;
+
+  // Helper: go to listening phase and auto-start mic if hands-free
+  function goListening() {
+    setPhase("listening");
+    if (autoStartRef.current) {
+      setTimeout(() => {
+        if (phaseRef.current === "listening" && !recorderRef.current) {
+          startRecordingRef.current();
+        }
+      }, 400);
+    }
+  }
 
   const toggleRecording = useCallback(() => {
     if (recording) {
@@ -432,7 +437,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       // Check for hallucination / no speech / silence
       if (result.silence === true) {
         // Silent recording — just go back to listening (no toast in hands-free mode)
-        setPhase("listening");
+        goListening();
         return;
       }
       if (result.hallucination === true || result.error === "No speech detected" || result.no_speech) {
@@ -440,7 +445,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         if (!autoStartRef.current) {
           toast.warning("Não consegui entender. Tente falar mais alto e próximo ao microfone.", { duration: 4000 });
         }
-        setPhase("listening");
+        goListening();
         return;
       }
 
@@ -448,7 +453,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Erro na simulação");
-      setPhase("listening");
+      goListening();
     } finally {
       setLoading(false);
       setProcessingStage(null);
@@ -498,7 +503,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Erro na simulação");
-      setPhase("listening");
+      goListening();
     } finally {
       setLoading(false);
       setProcessingStage(null);
@@ -545,12 +550,12 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       audioRef.current.src = agentAudio;
       audioRef.current.onended = () => {
         if (phaseRef.current !== "ended") {
-          setPhase("listening");
+          goListening();
         }
       };
-      audioRef.current.play().catch(() => setPhase("listening"));
+      audioRef.current.play().catch(() => goListening());
     } else {
-      setPhase("listening");
+      goListening();
     }
   }
 
