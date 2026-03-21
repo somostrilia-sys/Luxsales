@@ -266,7 +266,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       const headers = await getAuthHeaders();
       headers["Content-Type"] = "application/json";
 
-      const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
+      const res = await fetch(API_URL, {
         method: "POST",
         headers,
         body: JSON.stringify({
