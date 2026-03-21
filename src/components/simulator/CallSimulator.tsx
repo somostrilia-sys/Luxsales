@@ -365,13 +365,15 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       const headers = await getAuthHeaders();
       headers["Content-Type"] = "application/json";
 
-      const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
+      const res = await fetch(API_URL, {
         method: "POST",
         headers,
         body: JSON.stringify({
+          action: "start",
           messages: [{ role: "lead", content: "(chamada atendida, o lead disse alô)" }],
           system_prompt: buildSystemPrompt(training),
           voice_key: voiceKey || selectedVoice || "default",
+          script: training.openingScript || "",
         }),
       });
 
