@@ -94,23 +94,13 @@ export function AppSidebar() {
       <SidebarContent className="pt-5 bg-sidebar border-r border-sidebar-border/60">
         {/* Logo */}
         <div className="px-4 mb-5 flex flex-col items-center justify-center gap-1">
-          {collaborator?.company?.logo_url ? (
-            <img
-              src={collaborator.company.logo_url}
-              alt={collaborator.company.name}
-              className="h-10 shrink-0 object-contain"
-            />
-          ) : (
-            <>
-              <img
-                src={LOGO_URL}
-                alt="LuxSales"
-                className="h-12 w-auto object-contain max-w-[180px] shrink-0 drop-shadow-[0_0_16px_hsl(43,65%,55%,0.12)]"
-              />
-              {!collapsed && (
-                <span className="text-[10px] text-muted-foreground/50 tracking-widest uppercase">LuxSales</span>
-              )}
-            </>
+          <img
+            src={LOGO_URL}
+            alt="LuxSales"
+            className="h-12 w-auto object-contain max-w-[180px] shrink-0 drop-shadow-[0_0_16px_hsl(43,65%,55%,0.12)]"
+          />
+          {!collapsed && (
+            <span className="text-[10px] text-muted-foreground/50 tracking-widest uppercase">LuxSales</span>
           )}
         </div>
 
