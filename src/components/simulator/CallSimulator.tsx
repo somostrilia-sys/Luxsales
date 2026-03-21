@@ -261,7 +261,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          sampleRate: 16000,
         },
       });
       streamRef.current = stream;
@@ -272,7 +271,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       recStartTimeRef.current = Date.now();
 
       // Web Audio API setup for monitoring + gain
-      const audioCtx = new AudioContext({ sampleRate: 16000 });
+      const audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
 
       const source = audioCtx.createMediaStreamSource(stream);
@@ -320,7 +319,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         audioCtxRef.current = null;
 
         const recElapsed = Date.now() - recStartTimeRef.current;
-        if (blob.size > 0 && speechDetectedRef.current && phaseRef.current !== "ended") {
+        if (blob.size > 0 && recElapsed >= MIN_RECORDING_MS && phaseRef.current !== "ended") {
           sendAudio(blob);
         } else if (!speechDetectedRef.current && recElapsed >= MIN_RECORDING_MS) {
           // Long recording but no speech — restart listening
