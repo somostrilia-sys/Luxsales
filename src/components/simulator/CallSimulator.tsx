@@ -51,7 +51,7 @@ interface CallSimulatorProps {
 // ── Constants ──
 
 const SILENCE_THRESHOLD_DB = -50;
-const SILENCE_DURATION_MS = 1500;
+const SILENCE_DURATION_MS = 1000;
 const MIN_RECORDING_MS = 800;
 const MAX_RECORDING_MS = 60000;
 const LOW_VOLUME_WARN_MS = 5000;
