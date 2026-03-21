@@ -151,6 +151,39 @@ export type Database = {
           },
         ]
       }
+      agent_memories: {
+        Row: {
+          category: string
+          consultant_id: string
+          content: string
+          created_at: string | null
+          embedding: string | null
+          id: string
+          lead_phone: string | null
+          metadata: Json | null
+        }
+        Insert: {
+          category: string
+          consultant_id: string
+          content: string
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          lead_phone?: string | null
+          metadata?: Json | null
+        }
+        Update: {
+          category?: string
+          consultant_id?: string
+          content?: string
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          lead_phone?: string | null
+          metadata?: Json | null
+        }
+        Relationships: []
+      }
       agent_messages: {
         Row: {
           content: string
@@ -8129,6 +8162,21 @@ export type Database = {
         }[]
       }
       has_social_selling_access: { Args: never; Returns: boolean }
+      match_memories: {
+        Args: {
+          match_count: number
+          match_threshold: number
+          p_consultant_id: string
+          query_embedding: string
+        }
+        Returns: {
+          category: string
+          content: string
+          id: string
+          lead_phone: string
+          similarity: number
+        }[]
+      }
       reset_daily_chip_counts: { Args: never; Returns: undefined }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
