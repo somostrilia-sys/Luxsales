@@ -625,8 +625,6 @@ export default function WhatsAppMeta() {
 
   // Stats
   const approvedTemplates = templates.filter(t => t.status === "APPROVED").length;
-  const activeOptIns = optIns.length;
-  const unresolvedSignals = qualitySignals.filter(s => !s.resolved_at).length;
   const connectedPhones = phoneNumbers.filter(p => p.status === "connected").length;
 
   // ── Preview form for test dialog ──
