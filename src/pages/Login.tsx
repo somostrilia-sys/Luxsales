@@ -33,16 +33,16 @@ export default function Login() {
   return (
     <div className="min-h-screen flex flex-col login-bg">
       {/* Banner topo */}
-      <div className="w-full h-48 md:h-56 relative overflow-hidden">
+      <div className="w-full h-44 md:h-52 relative overflow-hidden">
         <img src={luxBanner} alt="Digital Lux" className="w-full h-full object-cover object-center" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background" />
       </div>
 
-      <div className="flex-1 flex items-start justify-center px-4 -mt-16 relative z-10">
-        <div className="w-full max-w-md space-y-6">
+      <div className="flex-1 flex items-start justify-center px-4 -mt-8 relative z-10">
+        <div className="w-full max-w-md space-y-5">
           {/* Logo + Branding */}
           <div className="flex flex-col items-center gap-2">
-            <img src="/images/luxsales-symbol.png" alt="LuxSales" className="h-20 object-contain drop-shadow-[0_0_30px_hsl(120,60%,50%,0.3)]" />
+            <img src="/images/luxsales-symbol.png" alt="LuxSales" className="h-16 w-16 object-contain drop-shadow-[0_0_30px_hsl(120,60%,50%,0.3)]" />
             <h1 className="text-2xl font-bold tracking-tight text-foreground">LuxSales</h1>
             <span className="text-xs text-muted-foreground tracking-widest uppercase">by Digital Lux</span>
           </div>
