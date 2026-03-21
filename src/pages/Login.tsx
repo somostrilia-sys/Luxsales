@@ -40,7 +40,7 @@ export default function Login() {
 
       {/* Logo between banner and card — NOT overlapping */}
       <div className="flex flex-col items-center gap-1.5 mt-6">
-        <img src="/images/luxsales-symbol.png" alt="LuxSales" className="h-16 w-16 object-contain drop-shadow-[0_0_30px_hsl(120,60%,50%,0.3)]" />
+        
         <h1 className="text-[1.7rem] font-extralight tracking-[0.25em] uppercase text-foreground">
           Lux<span className="font-semibold text-gold">Sales</span>
         </h1>
