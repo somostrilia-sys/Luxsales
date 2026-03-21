@@ -53,6 +53,10 @@ export default {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
         },
+        gold: {
+          DEFAULT: "hsl(43, 65%, 55%)",
+          foreground: "hsl(0, 0%, 8%)",
+        },
         warning: {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
