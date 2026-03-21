@@ -353,6 +353,59 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   // Keep ref in sync for auto-start
   startRecordingRef.current = startRecording;
 
+  // VAD during AI playback — detect user speaking and interrupt
+  const vadStreamRef = useRef<MediaStream | null>(null);
+  const vadFrameRef = useRef<number>(0);
+
+  function startVADDuringPlayback() {
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      vadStreamRef.current = stream;
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+
+      const data = new Float32Array(analyser.fftSize);
+      let speechFrames = 0;
+
+      const check = () => {
+        if (phaseRef.current !== "ai_speaking") {
+          stream.getTracks().forEach(t => t.stop());
+          ctx.close().catch(() => {});
+          vadStreamRef.current = null;
+          return;
+        }
+        analyser.getFloatTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+        const db = 20 * Math.log10(Math.sqrt(sum / data.length) || 1e-10);
+
+        if (db > -35) {
+          speechFrames++;
+          if (speechFrames > 10) { // ~170ms of speech detected → interrupt
+            stream.getTracks().forEach(t => t.stop());
+            ctx.close().catch(() => {});
+            vadStreamRef.current = null;
+            // Interrupt AI and start recording
+            if (audioRef.current && !audioRef.current.paused) {
+              audioRef.current.pause();
+              audioRef.current.currentTime = 0;
+              audioRef.current.onended = null;
+            }
+            setPhase("listening");
+            startRecordingRef.current();
+            return;
+          }
+        } else {
+          speechFrames = Math.max(0, speechFrames - 1);
+        }
+        vadFrameRef.current = requestAnimationFrame(check);
+      };
+      vadFrameRef.current = requestAnimationFrame(check);
+    }).catch(() => {}); // mic permission denied — ignore
+  }
+
   // Helper: go to listening phase and auto-start mic if hands-free
   function goListening() {
     setPhase("listening");
@@ -369,11 +422,13 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     if (recording) {
       stopAndSendRecording();
     } else {
-      // If agent is speaking, interrupt
+      // Interrupt AI speaking immediately
       if (audioRef.current && !audioRef.current.paused) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
+        audioRef.current.onended = null; // prevent goListening from firing
       }
+      setPhase("listening");
       startRecording();
     }
   }, [recording, stopAndSendRecording, startRecording]);
@@ -553,16 +608,14 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
           goListening();
         }
       };
-      audioRef.current.onerror = (e) => {
-        console.error("[Audio playback error]", e);
-        goListening();
-      };
-      audioRef.current.play().catch((err) => {
-        console.error("[Audio play() failed]", err);
-        goListening();
-      });
+      audioRef.current.onerror = () => goListening();
+      audioRef.current.play().catch(() => goListening());
+
+      // Start listening for mic input during AI speech (for interruption)
+      if (autoStartRef.current) {
+        startVADDuringPlayback();
+      }
     } else {
-      console.warn("[No audio in response]", { hasAudio: !!agentAudio, hasRef: !!audioRef.current, keys: Object.keys(result) });
       goListening();
     }
   }
@@ -580,7 +633,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setDuration(0);
     autoStartRef.current = true; // Enable hands-free mode
 
-    await new Promise((r) => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, 500));
     setPhase("connected");
 
     timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
@@ -624,6 +677,12 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setPhase("ended");
     if (timerRef.current) clearInterval(timerRef.current);
     releaseMic();
+    // Cleanup VAD
+    if (vadStreamRef.current) {
+      vadStreamRef.current.getTracks().forEach(t => t.stop());
+      vadStreamRef.current = null;
+    }
+    if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
