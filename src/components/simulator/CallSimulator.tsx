@@ -30,6 +30,12 @@ type VoiceProfile = {
   name: string;
 };
 
+type LLMProvider = {
+  id: string;
+  name: string;
+  available: boolean;
+};
+
 interface TrainingContext {
   aiSellerName: string;
   product: string;
@@ -82,7 +88,7 @@ function buildSystemPrompt(t: TrainingContext): string {
       if (o.objection) p += `\n- "${o.objection}": ${o.response}`;
     }
   }
-  p += `\n\nIMPORTANTE:\n- Fale em português brasileiro natural.\n- Respostas curtas: máximo 2-3 frases.\n- NÃO use markdown, emojis ou formatação.\n- Fale como numa conversa por telefone.`;
+  p += `\n\nIMPORTANTE:\n- Fale em português brasileiro natural.\n- Respostas curtas: máximo 2-3 frases.\n- NÃO use markdown, emojis ou formatação.\n- Fale como numa conversa por telefone.\n- NUNCA repita a saudação se já se apresentou.\n- Mantenha o contexto de TODA a conversa anterior.`;
   return p;
 }
 
@@ -92,6 +98,12 @@ const STAGE_LABELS: Record<string, string> = {
   synthesizing: "Sintetizando voz...",
   slow: "Processamento demorado, aguarde...",
 };
+
+const DEFAULT_PROVIDERS: LLMProvider[] = [
+  { id: "groq", name: "Groq (LLaMA 3.3 70B) - Rápido", available: true },
+  { id: "openai", name: "OpenAI (GPT-4o-mini)", available: true },
+  { id: "claude", name: "Claude (Sonnet 4) - Inteligente", available: true },
+];
 
 // ── Component ──
 
@@ -108,6 +120,9 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   const [volumeLevel, setVolumeLevel] = useState(0);
   const [lowVolumeWarn, setLowVolumeWarn] = useState(false);
   const [processingStage, setProcessingStage] = useState<ProcessingStage>(null);
+  const [llmProvider, setLlmProvider] = useState<string>("groq");
+  const [providers, setProviders] = useState<LLMProvider[]>(DEFAULT_PROVIDERS);
+  const [liveTranscript, setLiveTranscript] = useState<string>("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -129,24 +144,98 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   const animFrameRef = useRef<number>(0);
   const speechDetectedRef = useRef(false);
 
+  // Web Speech API for live transcription
+  const recognitionRef = useRef<any>(null);
+
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, loading, liveTranscript]);
 
-  // ── AUTO-START recording when phase becomes "listening" (hands-free mode) ──
+  // Fetch available providers on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const session = await supabase.auth.getSession();
+        const headers: Record<string, string> = {
+          apikey: ANON_KEY,
+          "Content-Type": "application/json",
+        };
+        if (session.data.session?.access_token) {
+          headers.Authorization = `Bearer ${session.data.session.access_token}`;
+        }
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ action: "list-providers" }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.providers) setProviders(data.providers);
+        }
+      } catch { /* keep defaults */ }
+    })();
+  }, []);
+
+  // Auto-start recording ref
   const autoStartRef = useRef(false);
   const startRecordingRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     return () => {
       releaseMic();
+      stopLiveTranscription();
       if (timerRef.current) clearInterval(timerRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Live transcription (Web Speech API) ──
+
+  function startLiveTranscription() {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "pt-BR";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event: any) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          // Final result goes to live transcript
+          interim = transcript;
+        } else {
+          interim = transcript;
+        }
+      }
+      setLiveTranscript(interim);
+    };
+
+    recognition.onerror = () => { /* silent */ };
+    recognition.onend = () => {
+      // Auto-restart if still in call
+      if (phaseRef.current !== "ended" && phaseRef.current !== "idle" && recognitionRef.current) {
+        try { recognitionRef.current.start(); } catch { /* */ }
+      }
+    };
+
+    recognitionRef.current = recognition;
+    try { recognition.start(); } catch { /* */ }
+  }
+
+  function stopLiveTranscription() {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* */ }
+      recognitionRef.current = null;
+    }
+    setLiveTranscript("");
+  }
 
   // ── Mic helpers ──
 
@@ -195,7 +284,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       if (!analyserRef.current) return;
       analyser.getFloatTimeDomainData(dataArray);
 
-      // Calculate RMS → dB
       let sumSq = 0;
       for (let i = 0; i < dataArray.length; i++) {
         sumSq += dataArray[i] * dataArray[i];
@@ -203,7 +291,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       const rms = Math.sqrt(sumSq / dataArray.length);
       const db = rms > 0 ? 20 * Math.log10(rms) : -100;
 
-      // Normalize volume 0-100 for display (map -60dB..0dB → 0..100)
       const normalized = Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
       setVolumeLevel(normalized);
 
@@ -211,12 +298,10 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       const isAboveThreshold = db > SILENCE_THRESHOLD_DB;
       const isSpeech = db > SPEECH_DETECTED_DB;
 
-      // Track if speech was ever detected in this recording
       if (isSpeech && !speechDetectedRef.current) {
         speechDetectedRef.current = true;
       }
 
-      // Low volume warning — only below 5% (very quiet)
       if (normalized < 5) {
         if (!lowVolStartRef.current) lowVolStartRef.current = Date.now();
         if (Date.now() - lowVolStartRef.current > LOW_VOLUME_WARN_MS) {
@@ -227,23 +312,19 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         setLowVolumeWarn(false);
       }
 
-      // Silence detection — only after MIN_RECORDING_MS
       if (elapsed >= MIN_RECORDING_MS) {
         if (isAboveThreshold) {
-          // Voice detected → reset silence timer
           silenceStartRef.current = null;
         } else {
           if (!silenceStartRef.current) {
             silenceStartRef.current = Date.now();
           } else if (Date.now() - silenceStartRef.current >= SILENCE_DURATION_MS && speechDetectedRef.current) {
-            // 1.5s consecutive silence after speech detected → auto-stop and send
             stopAndSendRecording();
             return;
           }
         }
       }
 
-      // Max recording safety limit
       if (elapsed >= MAX_RECORDING_MS) {
         stopAndSendRecording();
         return;
@@ -270,7 +351,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       speechDetectedRef.current = false;
       recStartTimeRef.current = Date.now();
 
-      // Web Audio API setup for monitoring + gain
       const audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
 
@@ -280,16 +360,13 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       analyser.smoothingTimeConstant = 0.3;
       analyserRef.current = analyser;
 
-      // Gain node for audio normalization (boost input by 1.5x)
       const gainNode = audioCtx.createGain();
       gainNode.gain.value = 1.5;
       gainNodeRef.current = gainNode;
 
       source.connect(gainNode);
       gainNode.connect(analyser);
-      // Note: we don't connect analyser to destination (no feedback)
 
-      // Determine MIME type
       let mimeType = "audio/webm;codecs=opus";
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         mimeType = "audio/webm";
@@ -310,7 +387,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         if (recTimerRef.current) clearInterval(recTimerRef.current);
 
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        // Release mic immediately
         stream.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
         if (audioCtxRef.current?.state !== "closed") {
@@ -322,11 +398,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         if (blob.size > 0 && recElapsed >= MIN_RECORDING_MS && phaseRef.current !== "ended") {
           sendAudio(blob);
         } else if (!speechDetectedRef.current && recElapsed >= MIN_RECORDING_MS) {
-          // Long recording but no speech — restart listening
-          if (phaseRef.current !== "ended" && autoStartRef.current) {
-            goListening(); // triggers auto-restart
-          } else if (phaseRef.current !== "ended") {
-            toast.info("Nenhuma fala detectada. Tente novamente.");
+          if (phaseRef.current !== "ended") {
             goListening();
           }
         } else if (recElapsed < MIN_RECORDING_MS && !speechDetectedRef.current) {
@@ -338,12 +410,10 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       setRecording(true);
       setRecDuration(0);
 
-      // Recording duration timer
       recTimerRef.current = setInterval(() => {
         setRecDuration((d) => d + 1);
       }, 1000);
 
-      // Start audio monitoring loop
       monitorAudio();
     } catch {
       toast.error("Não foi possível acessar o microfone.");
@@ -351,20 +421,18 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monitorAudio]);
 
-  // Keep ref in sync for auto-start
   startRecordingRef.current = startRecording;
 
-  // VAD during AI playback — persistent mic stream for the entire call
+  // VAD during AI playback
   const vadStreamRef = useRef<MediaStream | null>(null);
   const vadCtxRef = useRef<AudioContext | null>(null);
   const vadAnalyserRef = useRef<AnalyserNode | null>(null);
   const vadFrameRef = useRef<number>(0);
   const vadActiveRef = useRef(false);
 
-  // Initialize VAD mic once when call starts (called from startCall)
   async function initVADStream() {
     try {
-      if (vadStreamRef.current) return; // already initialized
+      if (vadStreamRef.current) return;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       vadStreamRef.current = stream;
       const ctx = new AudioContext();
@@ -411,9 +479,8 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
       if (db > -35) {
         speechFrames++;
-        if (speechFrames > 8) { // ~130ms of speech → interrupt
+        if (speechFrames > 8) {
           vadActiveRef.current = false;
-          // Interrupt AI
           if (audioRef.current && !audioRef.current.paused) {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
@@ -430,9 +497,11 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     vadFrameRef.current = requestAnimationFrame(check);
   }
 
-  // Helper: go to listening phase and auto-start mic if hands-free
+  // Go to listening phase — auto-starts recording (hands-free always ON)
   function goListening() {
     setPhase("listening");
+    setLiveTranscript("");
+    // Always auto-start in hands-free mode
     if (autoStartRef.current) {
       setTimeout(() => {
         if (phaseRef.current === "listening" && !recorderRef.current) {
@@ -446,11 +515,10 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     if (recording) {
       stopAndSendRecording();
     } else {
-      // Interrupt AI speaking immediately
       if (audioRef.current && !audioRef.current.paused) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
-        audioRef.current.onended = null; // prevent goListening from firing
+        audioRef.current.onended = null;
       }
       setPhase("listening");
       startRecording();
@@ -471,17 +539,17 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     return h;
   }
 
-  // ── Processing stage simulation ──
+  // ── Processing stages ──
 
   function startProcessingStages() {
     setProcessingStage("transcribing");
-    const t1 = setTimeout(() => setProcessingStage("thinking"), 3000);
-    const t2 = setTimeout(() => setProcessingStage("synthesizing"), 7000);
-    const t3 = setTimeout(() => setProcessingStage("slow"), 15000);
+    const t1 = setTimeout(() => setProcessingStage("thinking"), 2000);
+    const t2 = setTimeout(() => setProcessingStage("synthesizing"), 5000);
+    const t3 = setTimeout(() => setProcessingStage("slow"), 12000);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }
 
-  // ── Send audio as multipart/form-data ──
+  // ── Send audio ──
 
   async function sendAudio(blob: Blob) {
     setPhase("processing");
@@ -493,6 +561,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       formData.append("audio", blob, "audio.webm");
       formData.append("voice_key", voiceKey || selectedVoice || "default");
       formData.append("system_prompt", buildSystemPrompt(training));
+      formData.append("llm_provider", llmProvider);
       formData.append("history", JSON.stringify(
         messagesRef.current.map((m) => ({ role: m.role, text: m.content }))
       ));
@@ -513,14 +582,11 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       const result = await res.json();
       if (!res.ok) throw new Error(result?.error || "Erro na simulação");
 
-      // Check for hallucination / no speech / silence
       if (result.silence === true) {
-        // Silent recording — just go back to listening (no toast in hands-free mode)
         goListening();
         return;
       }
       if (result.hallucination === true || result.error === "No speech detected" || result.no_speech) {
-        // Only show warning if user manually recorded (not hands-free)
         if (!autoStartRef.current) {
           toast.warning("Não consegui entender. Tente falar mais alto e próximo ao microfone.", { duration: 4000 });
         }
@@ -528,6 +594,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         return;
       }
 
+      setLiveTranscript("");
       handleAIResponse(result);
     } catch (err) {
       console.error(err);
@@ -540,7 +607,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     }
   }
 
-  // ── Send text (fallback) ──
+  // ── Send text ──
 
   async function sendText() {
     const text = textInput.trim();
@@ -568,10 +635,18 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         method: "POST",
         headers,
         body: JSON.stringify({
-          messages: updated.map((m) => ({ role: m.role === "user" ? "lead" : "ai", content: m.content })),
+          action: "respond",
+          text,
           system_prompt: buildSystemPrompt(training),
           voice_key: voiceKey || selectedVoice || "default",
-          text,
+          llm_provider: llmProvider,
+          history: updated.map((m) => ({ role: m.role, text: m.content })),
+          context: {
+            vendor_name: training.aiSellerName,
+            product: training.product,
+            tone: training.voiceTone,
+            objective: training.callGoal,
+          },
         }),
       });
 
@@ -635,12 +710,9 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       audioRef.current.onerror = () => goListening();
       audioRef.current.play().catch(() => goListening());
 
-      // Start listening for mic input during AI speech (for interruption)
       if (autoStartRef.current) {
-        // Reset VAD state before starting (prevents stale flag from blocking)
         vadActiveRef.current = false;
         if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
-        // Small delay to ensure phase is updated in ref
         setTimeout(() => startVADDuringPlayback(), 100);
       }
     } else {
@@ -659,8 +731,9 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setPhase("ringing");
     setMessages([]);
     setDuration(0);
-    autoStartRef.current = true; // Enable hands-free mode
-    await initVADStream(); // Open persistent mic for VAD
+    autoStartRef.current = true; // Always hands-free
+    await initVADStream();
+    startLiveTranscription();
 
     await new Promise((r) => setTimeout(r, 500));
     setPhase("connected");
@@ -679,10 +752,9 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         headers,
         body: JSON.stringify({
           action: "start",
-          messages: [{ role: "lead", content: "(chamada atendida, o lead disse alô)" }],
-          system_prompt: buildSystemPrompt(training),
           voice_key: voiceKey || selectedVoice || "default",
           script: training.openingScript || "",
+          llm_provider: llmProvider,
         }),
       });
 
@@ -702,11 +774,12 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   // ── End call ──
 
   function endCall() {
-    autoStartRef.current = false; // Disable hands-free mode
+    autoStartRef.current = false;
     setPhase("ended");
     if (timerRef.current) clearInterval(timerRef.current);
     releaseMic();
     cleanupVADStream();
+    stopLiveTranscription();
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -718,6 +791,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setPhase("idle");
     setMessages([]);
     setDuration(0);
+    setLiveTranscript("");
   }
 
   function replayAudio(msg: SimMessage) {
@@ -741,7 +815,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
             Simulador de Ligação IA
           </CardTitle>
           <CardDescription>
-            Simule uma ligação real com o Agente IA. Fale pelo microfone e ouça a resposta em áudio.
+            Simule uma ligação real com o Agente IA. O microfone fica aberto automaticamente — fale e ouça a resposta em áudio.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -755,6 +829,19 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
                 <SelectContent>
                   {voiceProfiles.map((v) => (
                     <SelectItem key={v.id} value={v.voice_key}>{v.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Modelo de IA</Label>
+              <Select value={llmProvider} onValueChange={setLlmProvider}>
+                <SelectTrigger className="w-[280px]">
+                  <SelectValue placeholder="Selecione o modelo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {providers.filter(p => p.available).map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -793,10 +880,15 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
               {phase === "ringing" && "Chamando..."}
               {phase === "connected" && "Conectado"}
               {phase === "ai_speaking" && `${agentName} falando...`}
-              {phase === "listening" && "Sua vez de falar"}
+              {phase === "listening" && (recording ? "Ouvindo..." : "Sua vez de falar")}
               {phase === "processing" && (processingStage ? STAGE_LABELS[processingStage] : "Processando...")}
               {phase === "ended" && "Chamada encerrada"}
             </span>
+            {phase !== "ended" && phase !== "idle" && phase !== "ringing" && (
+              <Badge variant="secondary" className="text-[10px]">
+                {providers.find(p => p.id === llmProvider)?.name || llmProvider}
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm font-mono text-muted-foreground">{formatTime(duration)}</span>
@@ -852,6 +944,19 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
             </div>
           ))}
 
+          {/* Live transcription bubble */}
+          {liveTranscript && phase === "listening" && (
+            <div className="flex justify-end">
+              <div className="max-w-[75%] rounded-2xl px-4 py-2.5 bg-primary/30 text-primary-foreground rounded-br-md border border-primary/40">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-semibold opacity-80">Você (ao vivo)</span>
+                  <Mic className="h-3 w-3 animate-pulse text-red-400" />
+                </div>
+                <p className="text-sm leading-relaxed italic opacity-80">{liveTranscript}</p>
+              </div>
+            </div>
+          )}
+
           {(loading || phase === "processing") && (
             <div className="flex justify-start">
               <div className="bg-card border border-border/60 rounded-2xl rounded-bl-md px-4 py-3 space-y-2">
@@ -883,13 +988,13 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
             {!useText ? (
               <div className="flex flex-col items-center gap-3">
                 <p className="text-xs text-muted-foreground">
-                  {recording ? `Gravando... ${formatTime(recDuration)} — clique para enviar` :
-                   phase === "ai_speaking" ? "Aguarde a IA terminar ou clique para interromper" :
-                   phase === "processing" ? "Processando seu áudio..." :
-                   "Clique para falar"}
+                  {recording ? `Ouvindo... ${formatTime(recDuration)}` :
+                   phase === "ai_speaking" ? "Fale para interromper a IA" :
+                   phase === "processing" ? "Processando..." :
+                   "Microfone aberto — fale quando quiser"}
                 </p>
 
-                {/* Volume meter */}
+                {/* Volume meter — always show when recording */}
                 {recording && (
                   <div className="w-48 space-y-1">
                     <div className="flex items-center gap-2">
@@ -908,23 +1013,27 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
                     </div>
                     {lowVolumeWarn && (
                       <p className="text-[10px] text-yellow-500 text-center animate-pulse">
-                        ⚠ Fale mais perto do microfone
+                        Fale mais perto do microfone
                       </p>
                     )}
                   </div>
                 )}
 
-                <Button
-                  size="lg"
-                  variant={recording ? "destructive" : "default"}
-                  className={`h-16 w-16 rounded-full transition-all ${
-                    recording ? "animate-pulse ring-4 ring-destructive/30" : ""
-                  }`}
-                  disabled={phase === "processing" || loading}
-                  onClick={toggleRecording}
-                >
-                  <Mic className={`h-6 w-6 ${recording ? "text-white" : ""}`} />
-                </Button>
+                {/* Mic button — visual indicator, but mic auto-starts */}
+                <div className="flex items-center gap-3">
+                  <Button
+                    size="lg"
+                    variant={recording ? "destructive" : "default"}
+                    className={`h-16 w-16 rounded-full transition-all ${
+                      recording ? "animate-pulse ring-4 ring-destructive/30" :
+                      phase === "listening" ? "ring-2 ring-green-500/50" : ""
+                    }`}
+                    disabled={phase === "processing" || loading}
+                    onClick={toggleRecording}
+                  >
+                    <Mic className={`h-6 w-6 ${recording ? "text-white" : ""}`} />
+                  </Button>
+                </div>
                 <button className="text-xs text-muted-foreground underline" onClick={() => setUseText(true)}>
                   Ou digite texto
                 </button>
@@ -959,6 +1068,9 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
               <Badge variant="outline">{messages.filter((m) => m.role === "user").length} falas do lead</Badge>
               <Badge variant="outline">
                 Voz: {voiceProfiles.find((v) => v.voice_key === (voiceKey || selectedVoice))?.name || "—"}
+              </Badge>
+              <Badge variant="outline">
+                Modelo: {providers.find(p => p.id === llmProvider)?.name || llmProvider}
               </Badge>
             </div>
           </div>
