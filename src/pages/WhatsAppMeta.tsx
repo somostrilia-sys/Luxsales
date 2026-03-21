@@ -352,23 +352,15 @@ export default function WhatsAppMeta() {
   const loadMetaData = async () => {
     if (!companyId) return;
 
-    const [creds, phones, tmpls, opts, quality, billing, events] = await Promise.all([
+    const [creds, phones, tmpls] = await Promise.all([
       supabase.from("whatsapp_meta_credentials").select("*").eq("company_id", companyId).single(),
       supabase.from("whatsapp_meta_phone_numbers").select("*").eq("company_id", companyId),
       supabase.from("whatsapp_meta_templates").select("*").eq("company_id", companyId).neq("status", "DELETED").order("category").order("name"),
-      supabase.from("whatsapp_meta_opt_ins").select("*").eq("company_id", companyId).eq("is_active", true).order("created_at", { ascending: false }).limit(100),
-      supabase.from("whatsapp_meta_quality_signals").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50),
-      supabase.from("whatsapp_meta_conversations_billing").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50),
-      supabase.from("whatsapp_meta_webhook_events").select("*").eq("company_id", companyId).order("received_at", { ascending: false }).limit(50),
     ]);
 
     setCredentials(creds.data);
     setPhoneNumbers(phones.data ?? []);
     setTemplates(tmpls.data ?? []);
-    setOptIns(opts.data ?? []);
-    setQualitySignals(quality.data ?? []);
-    setBillingData(billing.data ?? []);
-    setWebhookEvents(events.data ?? []);
   };
 
   const loadConversations = async () => {
