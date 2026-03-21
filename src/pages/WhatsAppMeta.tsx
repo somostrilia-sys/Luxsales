@@ -648,14 +648,12 @@ export default function WhatsAppMeta() {
         />
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: "Quality Rating", value: credentials?.quality_rating ?? "—", icon: BarChart3, color: credentials?.quality_rating === "GREEN" ? "text-emerald-400" : credentials?.quality_rating === "RED" ? "text-red-400" : "text-yellow-400" },
             { label: "Msg Limit", value: credentials?.messaging_limit_tier?.replace("TIER_", "") ?? "250", icon: Zap, color: "text-blue-400" },
             { label: "Telefones", value: `${connectedPhones}/${phoneNumbers.length}`, icon: Phone, color: "text-emerald-400" },
             { label: "Templates", value: `${approvedTemplates}/${templates.length}`, icon: FileText, color: "text-violet-400" },
-            { label: "Opt-ins Ativos", value: activeOptIns, icon: Users, color: "text-blue-400" },
-            { label: "Alertas", value: unresolvedSignals, icon: AlertTriangle, color: unresolvedSignals > 0 ? "text-red-400" : "text-emerald-400" },
           ].map(k => (
             <Card key={k.label} className="bg-card border-border/60">
               <CardContent className="p-4">
@@ -675,10 +673,7 @@ export default function WhatsAppMeta() {
           <TabsList className="h-auto flex-wrap gap-2 rounded-xl border border-border/60 bg-secondary/40 p-1">
             <TabsTrigger value="inbox">Inbox {totalUnread > 0 && <Badge className="ml-1 h-5 bg-emerald-500 text-white text-[10px]">{totalUnread}</Badge>}</TabsTrigger>
             <TabsTrigger value="templates">Templates ({approvedTemplates})</TabsTrigger>
-            <TabsTrigger value="phones">Telefones ({phoneNumbers.length})</TabsTrigger>
-            <TabsTrigger value="optins">Opt-ins ({activeOptIns})</TabsTrigger>
-            <TabsTrigger value="quality">Quality Signals</TabsTrigger>
-            <TabsTrigger value="billing">Billing</TabsTrigger>
+            <TabsTrigger value="config">Configurações</TabsTrigger>
           </TabsList>
 
           {/* INBOX TAB */}
