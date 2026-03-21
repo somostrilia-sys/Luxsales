@@ -274,14 +274,10 @@ export default function WhatsAppMeta() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // New tables data
+  // Meta API data
   const [credentials, setCredentials] = useState<any>(null);
   const [phoneNumbers, setPhoneNumbers] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
-  const [optIns, setOptIns] = useState<any[]>([]);
-  const [qualitySignals, setQualitySignals] = useState<any[]>([]);
-  const [billingData, setBillingData] = useState<any[]>([]);
-  const [webhookEvents, setWebhookEvents] = useState<any[]>([]);
   const [syncingTemplates, setSyncingTemplates] = useState(false);
 
   // Template Builder state
