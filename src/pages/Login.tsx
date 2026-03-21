@@ -42,7 +42,7 @@ export default function Login() {
         <div className="w-full max-w-md space-y-6">
           {/* Logo + Branding */}
           <div className="flex flex-col items-center gap-2">
-            <img src={LOGO_URL} alt="LuxSales" className="h-20 object-contain drop-shadow-[0_0_30px_hsl(43,65%,55%,0.25)]" />
+            <img src="/images/luxsales-symbol.png" alt="LuxSales" className="h-20 object-contain drop-shadow-[0_0_30px_hsl(120,60%,50%,0.3)]" />
             <h1 className="text-2xl font-bold tracking-tight text-foreground">LuxSales</h1>
             <span className="text-xs text-muted-foreground tracking-widest uppercase">by Digital Lux</span>
           </div>
