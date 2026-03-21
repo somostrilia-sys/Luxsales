@@ -639,8 +639,8 @@ export default function WhatsAppMeta() {
     <DashboardLayout>
       <div className="space-y-6">
         <PageHeader
-          title="WhatsApp Meta BSP"
-          subtitle="API oficial Meta — Templates, Quality Rating, Billing, LGPD"
+          title="WhatsApp Business"
+          subtitle="API oficial Meta — Inbox, Templates e Configurações"
           badge={credentials?.is_verified
             ? <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30"><Shield className="h-3 w-3 mr-1" />Verificado</Badge>
             : <Badge variant="outline" className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30">Pendente Verificacao</Badge>
