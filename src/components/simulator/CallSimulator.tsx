@@ -553,8 +553,16 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
           goListening();
         }
       };
-      audioRef.current.play().catch(() => goListening());
+      audioRef.current.onerror = (e) => {
+        console.error("[Audio playback error]", e);
+        goListening();
+      };
+      audioRef.current.play().catch((err) => {
+        console.error("[Audio play() failed]", err);
+        goListening();
+      });
     } else {
+      console.warn("[No audio in response]", { hasAudio: !!agentAudio, hasRef: !!audioRef.current, keys: Object.keys(result) });
       goListening();
     }
   }
