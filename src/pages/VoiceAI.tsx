@@ -318,22 +318,7 @@ export default function VoiceAI() {
   const [testingQuickCall, setTestingQuickCall] = useState(false);
   const [previewingVoiceKey, setPreviewingVoiceKey] = useState<string | null>(null);
 
-  // Simulator state — simula ligação real com áudio
-  const [simMessages, setSimMessages] = useState<SimMessage[]>([]);
-  const [simInput, setSimInput] = useState("");
-  const [simLoading, setSimLoading] = useState(false);
-  const [simVoiceKey, setSimVoiceKey] = useState<string>("");
-  const [simAutoPlay, setSimAutoPlay] = useState(true);
-  const [callPhase, setCallPhase] = useState<CallPhase>("idle");
-  const [callDuration, setCallDuration] = useState(0);
-  const [isRecording, setIsRecording] = useState(false);
-  const [useVoiceMode, setUseVoiceMode] = useState(true);
-  const simScrollRef = useRef<HTMLDivElement>(null);
-  const simAudioRef = useRef<HTMLAudioElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // (Simulator state moved to CallSimulator component)
 
   // Call player state
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
