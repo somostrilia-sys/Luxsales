@@ -189,9 +189,12 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
   // ── Auth header ──
 
+  const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4";
+  const API_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/ai-simulator";
+
   async function getAuthHeaders(): Promise<Record<string, string>> {
     const session = await supabase.auth.getSession();
-    const h: Record<string, string> = {};
+    const h: Record<string, string> = { apikey: ANON_KEY };
     if (session.data.session?.access_token) {
       h.Authorization = `Bearer ${session.data.session.access_token}`;
     }
