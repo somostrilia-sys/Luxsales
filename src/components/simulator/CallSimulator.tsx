@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { EDGE_BASE } from "@/lib/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -189,9 +188,12 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
   // ── Auth header ──
 
+  const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4";
+  const API_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/ai-simulator";
+
   async function getAuthHeaders(): Promise<Record<string, string>> {
     const session = await supabase.auth.getSession();
-    const h: Record<string, string> = {};
+    const h: Record<string, string> = { apikey: ANON_KEY };
     if (session.data.session?.access_token) {
       h.Authorization = `Bearer ${session.data.session.access_token}`;
     }
@@ -206,7 +208,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
     try {
       const formData = new FormData();
-      formData.append("audio", blob, "recording.webm");
+      formData.append("audio", blob, "audio.webm");
       formData.append("voice_key", voiceKey || selectedVoice || "default");
       formData.append("system_prompt", buildSystemPrompt(training));
       formData.append("history", JSON.stringify(
@@ -219,8 +221,9 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         objective: training.callGoal,
       }));
 
+      // NO Content-Type header — browser sets multipart boundary automatically
       const headers = await getAuthHeaders();
-      const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
+      const res = await fetch(API_URL, {
         method: "POST",
         headers,
         body: formData,
@@ -262,7 +265,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       const headers = await getAuthHeaders();
       headers["Content-Type"] = "application/json";
 
-      const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
+      const res = await fetch(API_URL, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -306,7 +309,10 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
     // Agent response bubble
     const agentText = result.text || result.response || "";
+    // Try all possible audio fields from the backend
     const agentAudio = result.audioUrl || result.audio_url
+      || (result.audio ? `data:audio/mpeg;base64,${result.audio}` : undefined)
+      || (result.audioData ? `data:audio/mpeg;base64,${result.audioData}` : undefined)
       || (result.audio_base64 ? `data:audio/mpeg;base64,${result.audio_base64}` : undefined);
 
     if (agentText) {
@@ -361,13 +367,15 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       const headers = await getAuthHeaders();
       headers["Content-Type"] = "application/json";
 
-      const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
+      const res = await fetch(API_URL, {
         method: "POST",
         headers,
         body: JSON.stringify({
+          action: "start",
           messages: [{ role: "lead", content: "(chamada atendida, o lead disse alô)" }],
           system_prompt: buildSystemPrompt(training),
           voice_key: voiceKey || selectedVoice || "default",
+          script: training.openingScript || "",
         }),
       });
 
