@@ -91,16 +91,7 @@ type CallLog = {
   ai_transcript?: { role: string; text: string; timestamp?: string }[] | null;
 };
 
-type SimMessage = {
-  id: string;
-  role: "lead" | "ai";
-  content: string;
-  timestamp: string;
-  audioUrl?: string;
-  audioBlob?: Blob;
-};
-
-type CallPhase = "idle" | "ringing" | "connected" | "ai_speaking" | "listening" | "processing" | "ended";
+// SimMessage and CallPhase types moved to CallSimulator component
 
 type VoiceCloneForm = {
   name: string;
