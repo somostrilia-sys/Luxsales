@@ -172,7 +172,7 @@ input, textarea, [role="combobox"] {
 }
 input:focus, textarea:focus, [role="combobox"]:focus {
   border-color: hsl(var(--primary)) !important;
-  box-shadow: 0 0 0 2px hsl(217 91% 53% / 0.15) !important;
+  box-shadow: 0 0 0 2px hsl(43 65% 55% / 0.15) !important;
 }
 
 /* ─── Login background pattern ─── */
