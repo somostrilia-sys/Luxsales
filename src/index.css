@@ -125,8 +125,8 @@
 
 /* ─── KPI stat icon containers ─── */
 .stat-icon-primary {
-  background: hsl(217 91% 53% / 0.1);
-  color: hsl(217 91% 60%);
+  background: hsl(43 65% 55% / 0.1);
+  color: hsl(43 65% 60%);
 }
 .stat-icon-success {
   background: hsl(160 84% 39% / 0.1);
