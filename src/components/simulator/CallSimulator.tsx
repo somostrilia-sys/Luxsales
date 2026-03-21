@@ -638,7 +638,11 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
       // Start listening for mic input during AI speech (for interruption)
       if (autoStartRef.current) {
-        startVADDuringPlayback();
+        // Reset VAD state before starting (prevents stale flag from blocking)
+        vadActiveRef.current = false;
+        if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
+        // Small delay to ensure phase is updated in ref
+        setTimeout(() => startVADDuringPlayback(), 100);
       }
     } else {
       goListening();
