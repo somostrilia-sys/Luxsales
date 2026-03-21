@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { Loader2, Mic, PhoneCall, RotateCcw, Send, Volume2 } from "lucide-react";
 
@@ -20,6 +21,8 @@ type SimMessage = {
 };
 
 type CallPhase = "idle" | "ringing" | "connected" | "ai_speaking" | "listening" | "processing" | "ended";
+
+type ProcessingStage = "transcribing" | "thinking" | "synthesizing" | "slow" | null;
 
 type VoiceProfile = {
   id: string;
@@ -44,6 +47,14 @@ interface CallSimulatorProps {
   selectedVoice: string;
   training: TrainingContext;
 }
+
+// ── Constants ──
+
+const SILENCE_THRESHOLD_DB = -45;
+const SILENCE_DURATION_MS = 3000;
+const MIN_RECORDING_MS = 2000;
+const MAX_RECORDING_MS = 60000;
+const LOW_VOLUME_WARN_MS = 3000;
 
 // ── Helpers ──
 
@@ -74,6 +85,13 @@ function buildSystemPrompt(t: TrainingContext): string {
   return p;
 }
 
+const STAGE_LABELS: Record<string, string> = {
+  transcribing: "Transcrevendo áudio...",
+  thinking: "Gerando resposta...",
+  synthesizing: "Sintetizando voz...",
+  slow: "Processamento demorado, aguarde...",
+};
+
 // ── Component ──
 
 export default function CallSimulator({ voiceProfiles, selectedVoice, training }: CallSimulatorProps) {
@@ -85,6 +103,10 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   const [loading, setLoading] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [useText, setUseText] = useState(false);
+  const [recDuration, setRecDuration] = useState(0);
+  const [volumeLevel, setVolumeLevel] = useState(0);
+  const [lowVolumeWarn, setLowVolumeWarn] = useState(false);
+  const [processingStage, setProcessingStage] = useState<ProcessingStage>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -92,18 +114,24 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const phaseRef = useRef<CallPhase>("idle");
 
-  // Keep phaseRef in sync
+  // Web Audio refs
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const silenceStartRef = useRef<number | null>(null);
+  const lowVolStartRef = useRef<number | null>(null);
+  const recStartTimeRef = useRef<number>(0);
+  const animFrameRef = useRef<number>(0);
+
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
-  // Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       releaseMic();
@@ -115,23 +143,148 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   // ── Mic helpers ──
 
   const releaseMic = useCallback(() => {
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (recTimerRef.current) clearInterval(recTimerRef.current);
     if (recorderRef.current?.state !== "inactive") {
       try { recorderRef.current?.stop(); } catch { /* */ }
     }
     recorderRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
-    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    if (audioCtxRef.current?.state !== "closed") {
+      try { audioCtxRef.current?.close(); } catch { /* */ }
+    }
+    audioCtxRef.current = null;
+    analyserRef.current = null;
+    gainNodeRef.current = null;
+    silenceStartRef.current = null;
+    lowVolStartRef.current = null;
     setRecording(false);
+    setRecDuration(0);
+    setVolumeLevel(0);
+    setLowVolumeWarn(false);
   }, []);
+
+  const stopAndSendRecording = useCallback(() => {
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (recTimerRef.current) clearInterval(recTimerRef.current);
+    if (recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
+    }
+    setRecording(false);
+    setRecDuration(0);
+    setVolumeLevel(0);
+    setLowVolumeWarn(false);
+  }, []);
+
+  const monitorAudio = useCallback(() => {
+    const analyser = analyserRef.current;
+    if (!analyser) return;
+
+    const dataArray = new Float32Array(analyser.fftSize);
+
+    const loop = () => {
+      if (!analyserRef.current) return;
+      analyser.getFloatTimeDomainData(dataArray);
+
+      // Calculate RMS → dB
+      let sumSq = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sumSq += dataArray[i] * dataArray[i];
+      }
+      const rms = Math.sqrt(sumSq / dataArray.length);
+      const db = rms > 0 ? 20 * Math.log10(rms) : -100;
+
+      // Normalize volume 0-100 for display (map -60dB..0dB → 0..100)
+      const normalized = Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
+      setVolumeLevel(normalized);
+
+      const elapsed = Date.now() - recStartTimeRef.current;
+      const isAboveThreshold = db > SILENCE_THRESHOLD_DB;
+
+      // Low volume warning
+      if (normalized < 15) {
+        if (!lowVolStartRef.current) lowVolStartRef.current = Date.now();
+        if (Date.now() - lowVolStartRef.current > LOW_VOLUME_WARN_MS) {
+          setLowVolumeWarn(true);
+        }
+      } else {
+        lowVolStartRef.current = null;
+        setLowVolumeWarn(false);
+      }
+
+      // Silence detection — only after MIN_RECORDING_MS
+      if (elapsed >= MIN_RECORDING_MS) {
+        if (isAboveThreshold) {
+          // Voice detected → reset silence timer
+          silenceStartRef.current = null;
+        } else {
+          if (!silenceStartRef.current) {
+            silenceStartRef.current = Date.now();
+          } else if (Date.now() - silenceStartRef.current >= SILENCE_DURATION_MS) {
+            // 3s consecutive silence after minimum → auto-stop
+            stopAndSendRecording();
+            return;
+          }
+        }
+      }
+
+      // Max recording safety limit
+      if (elapsed >= MAX_RECORDING_MS) {
+        stopAndSendRecording();
+        return;
+      }
+
+      animFrameRef.current = requestAnimationFrame(loop);
+    };
+
+    animFrameRef.current = requestAnimationFrame(loop);
+  }, [stopAndSendRecording]);
 
   const startRecording = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 16000,
+        },
+      });
       streamRef.current = stream;
       chunksRef.current = [];
+      silenceStartRef.current = null;
+      lowVolStartRef.current = null;
+      recStartTimeRef.current = Date.now();
 
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      // Web Audio API setup for monitoring + gain
+      const audioCtx = new AudioContext({ sampleRate: 16000 });
+      audioCtxRef.current = audioCtx;
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.3;
+      analyserRef.current = analyser;
+
+      // Gain node for audio normalization (boost input by 1.5x)
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.value = 1.5;
+      gainNodeRef.current = gainNode;
+
+      source.connect(gainNode);
+      gainNode.connect(analyser);
+      // Note: we don't connect analyser to destination (no feedback)
+
+      // Determine MIME type
+      let mimeType = "audio/webm;codecs=opus";
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = "audio/webm";
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = "audio/wav";
+        }
+      }
+
+      const recorder = new MediaRecorder(stream, { mimeType });
       recorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
@@ -139,43 +292,47 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       };
 
       recorder.onstop = () => {
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-        const blob = new Blob(chunksRef.current, { type: "audio/webm;codecs=opus" });
+        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+        if (recTimerRef.current) clearInterval(recTimerRef.current);
+
+        const blob = new Blob(chunksRef.current, { type: mimeType });
         // Release mic immediately
         stream.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+        if (audioCtxRef.current?.state !== "closed") {
+          try { audioCtxRef.current?.close(); } catch { /* */ }
+        }
+        audioCtxRef.current = null;
 
-        if (blob.size > 0 && phaseRef.current !== "ended") {
+        const recElapsed = Date.now() - recStartTimeRef.current;
+        if (blob.size > 0 && recElapsed >= MIN_RECORDING_MS && phaseRef.current !== "ended") {
           sendAudio(blob);
+        } else if (recElapsed < MIN_RECORDING_MS) {
+          toast.info("Gravação muito curta. Fale por pelo menos 2 segundos.");
+          if (phaseRef.current !== "ended") setPhase("listening");
         }
       };
 
-      recorder.start(250); // collect in 250ms chunks for silence detection
+      recorder.start(250);
       setRecording(true);
+      setRecDuration(0);
 
-      // 3-second silence auto-send
-      silenceTimerRef.current = setTimeout(() => {
-        if (recorderRef.current?.state === "recording") {
-          recorderRef.current.stop();
-          setRecording(false);
-        }
-      }, 3000);
+      // Recording duration timer
+      recTimerRef.current = setInterval(() => {
+        setRecDuration((d) => d + 1);
+      }, 1000);
+
+      // Start audio monitoring loop
+      monitorAudio();
     } catch {
       toast.error("Não foi possível acessar o microfone.");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const stopRecording = useCallback(() => {
-    if (recorderRef.current?.state === "recording") {
-      recorderRef.current.stop();
-    }
-    setRecording(false);
-  }, []);
+  }, [monitorAudio]);
 
   const toggleRecording = useCallback(() => {
     if (recording) {
-      stopRecording();
+      stopAndSendRecording();
     } else {
       // If agent is speaking, interrupt
       if (audioRef.current && !audioRef.current.paused) {
@@ -184,7 +341,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       }
       startRecording();
     }
-  }, [recording, stopRecording, startRecording]);
+  }, [recording, stopAndSendRecording, startRecording]);
 
   // ── Auth header ──
 
@@ -200,11 +357,22 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     return h;
   }
 
+  // ── Processing stage simulation ──
+
+  function startProcessingStages() {
+    setProcessingStage("transcribing");
+    const t1 = setTimeout(() => setProcessingStage("thinking"), 3000);
+    const t2 = setTimeout(() => setProcessingStage("synthesizing"), 7000);
+    const t3 = setTimeout(() => setProcessingStage("slow"), 15000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }
+
   // ── Send audio as multipart/form-data ──
 
   async function sendAudio(blob: Blob) {
     setPhase("processing");
     setLoading(true);
+    const cleanupStages = startProcessingStages();
 
     try {
       const formData = new FormData();
@@ -221,7 +389,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         objective: training.callGoal,
       }));
 
-      // NO Content-Type header — browser sets multipart boundary automatically
       const headers = await getAuthHeaders();
       const res = await fetch(API_URL, {
         method: "POST",
@@ -232,6 +399,13 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       const result = await res.json();
       if (!res.ok) throw new Error(result?.error || "Erro na simulação");
 
+      // Check for hallucination / no speech
+      if (result.hallucination === true || result.error === "No speech detected" || result.no_speech) {
+        toast.warning("Não consegui entender. Tente falar mais alto e próximo ao microfone.", { duration: 4000 });
+        setPhase("listening");
+        return;
+      }
+
       handleAIResponse(result);
     } catch (err) {
       console.error(err);
@@ -239,6 +413,8 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       setPhase("listening");
     } finally {
       setLoading(false);
+      setProcessingStage(null);
+      cleanupStages();
     }
   }
 
@@ -260,6 +436,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setTextInput("");
     setPhase("processing");
     setLoading(true);
+    const cleanupStages = startProcessingStages();
 
     try {
       const headers = await getAuthHeaders();
@@ -279,7 +456,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       const result = await res.json();
       if (!res.ok) throw new Error(result?.error || "Erro na simulação");
 
-      // Don't add user bubble again — already added above
       handleAIResponse(result, true);
     } catch (err) {
       console.error(err);
@@ -287,17 +463,18 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       setPhase("listening");
     } finally {
       setLoading(false);
+      setProcessingStage(null);
+      cleanupStages();
     }
   }
 
   // ── Handle AI response ──
 
-  function handleAIResponse(result: Record<string, string | null>, skipUserBubble = false) {
+  function handleAIResponse(result: Record<string, string | boolean | null>, skipUserBubble = false) {
     const ts = now();
     const newMsgs: SimMessage[] = [];
 
-    // User transcription bubble
-    const userText = result.user_text || result.lead_transcript;
+    const userText = (result.user_text || result.lead_transcript) as string | undefined;
     if (userText && !skipUserBubble) {
       newMsgs.push({
         id: crypto.randomUUID(),
@@ -307,13 +484,11 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       });
     }
 
-    // Agent response bubble
-    const agentText = result.text || result.response || "";
-    // Try all possible audio fields from the backend
-    const agentAudio = result.audioUrl || result.audio_url
+    const agentText = (result.text || result.response || "") as string;
+    const agentAudio = (result.audioUrl || result.audio_url
       || (result.audio ? `data:audio/mpeg;base64,${result.audio}` : undefined)
       || (result.audioData ? `data:audio/mpeg;base64,${result.audioData}` : undefined)
-      || (result.audio_base64 ? `data:audio/mpeg;base64,${result.audio_base64}` : undefined);
+      || (result.audio_base64 ? `data:audio/mpeg;base64,${result.audio_base64}` : undefined)) as string | undefined;
 
     if (agentText) {
       newMsgs.push({
@@ -327,7 +502,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
     setMessages((prev) => [...prev, ...newMsgs]);
 
-    // Play agent audio, then activate mic
     if (agentAudio && audioRef.current) {
       setPhase("ai_speaking");
       audioRef.current.src = agentAudio;
@@ -359,7 +533,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
     timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
 
-    // Agent opening
     setPhase("ai_speaking");
     setLoading(true);
 
@@ -410,8 +583,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setMessages([]);
     setDuration(0);
   }
-
-  // ── Replay audio ──
 
   function replayAudio(msg: SimMessage) {
     if (msg.audioUrl && audioRef.current) {
@@ -487,7 +658,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
               {phase === "connected" && "Conectado"}
               {phase === "ai_speaking" && `${agentName} falando...`}
               {phase === "listening" && "Sua vez de falar"}
-              {phase === "processing" && "Processando..."}
+              {phase === "processing" && (processingStage ? STAGE_LABELS[processingStage] : "Processando...")}
               {phase === "ended" && "Chamada encerrada"}
             </span>
           </div>
@@ -547,13 +718,24 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
           {(loading || phase === "processing") && (
             <div className="flex justify-start">
-              <div className="bg-card border border-border/60 rounded-2xl rounded-bl-md px-4 py-3">
+              <div className="bg-card border border-border/60 rounded-2xl rounded-bl-md px-4 py-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">
-                    {phase === "processing" ? "Transcrevendo e processando..." : "IA pensando..."}
+                    {processingStage ? STAGE_LABELS[processingStage] : "Processando..."}
                   </span>
                 </div>
+                {processingStage && (
+                  <Progress
+                    value={
+                      processingStage === "transcribing" ? 25 :
+                      processingStage === "thinking" ? 55 :
+                      processingStage === "synthesizing" ? 80 :
+                      processingStage === "slow" ? 90 : 10
+                    }
+                    className="h-1.5 w-40"
+                  />
+                )}
               </div>
             </div>
           )}
@@ -565,11 +747,37 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
             {!useText ? (
               <div className="flex flex-col items-center gap-3">
                 <p className="text-xs text-muted-foreground">
-                  {recording ? "Gravando... clique para enviar" :
+                  {recording ? `Gravando... ${formatTime(recDuration)} — clique para enviar` :
                    phase === "ai_speaking" ? "Aguarde a IA terminar ou clique para interromper" :
                    phase === "processing" ? "Processando seu áudio..." :
                    "Clique para falar"}
                 </p>
+
+                {/* Volume meter */}
+                {recording && (
+                  <div className="w-48 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-100 ${
+                            volumeLevel > 50 ? "bg-green-500" :
+                            volumeLevel > 20 ? "bg-yellow-500" : "bg-red-500"
+                          }`}
+                          style={{ width: `${volumeLevel}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground w-8 text-right font-mono">
+                        {Math.round(volumeLevel)}%
+                      </span>
+                    </div>
+                    {lowVolumeWarn && (
+                      <p className="text-[10px] text-yellow-500 text-center animate-pulse">
+                        ⚠ Fale mais perto do microfone
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <Button
                   size="lg"
                   variant={recording ? "destructive" : "default"}
