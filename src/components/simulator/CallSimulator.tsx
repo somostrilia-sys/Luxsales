@@ -50,12 +50,12 @@ interface CallSimulatorProps {
 
 // ── Constants ──
 
-const SILENCE_THRESHOLD_DB = -42;
+const SILENCE_THRESHOLD_DB = -50;
 const SILENCE_DURATION_MS = 1500;
-const MIN_RECORDING_MS = 1000;
+const MIN_RECORDING_MS = 800;
 const MAX_RECORDING_MS = 60000;
-const LOW_VOLUME_WARN_MS = 3000;
-const SPEECH_DETECTED_DB = -40;
+const LOW_VOLUME_WARN_MS = 5000;
+const SPEECH_DETECTED_DB = -48;
 
 // ── Helpers ──
 
@@ -224,8 +224,8 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         speechDetectedRef.current = true;
       }
 
-      // Low volume warning
-      if (normalized < 15) {
+      // Low volume warning — only below 5% (very quiet)
+      if (normalized < 5) {
         if (!lowVolStartRef.current) lowVolStartRef.current = Date.now();
         if (Date.now() - lowVolStartRef.current > LOW_VOLUME_WARN_MS) {
           setLowVolumeWarn(true);
