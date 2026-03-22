@@ -3,6 +3,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { supabase } from "@/lib/supabase";
+import { DIALER_URL } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -106,7 +107,7 @@ export default function Discador() {
     setTranscript([]);
     setQualificationNotes("");
 
-    // Create call record
+    // Create call record in Supabase
     const { data: callData, error } = await supabase.from("calls").insert({
       company_id: collaborator?.company_id,
       campaign_id: selectedCampaign || null,
@@ -119,9 +120,29 @@ export default function Discador() {
     if (error) { console.error(error); toast.error("Erro ao iniciar ligação."); setCallStatus("idle"); return; }
     setCallId(callData.id);
 
-    // Simulate progression (in production, SIP events update the call status)
-    setTimeout(() => setCallStatus("ringing"), 1000);
-    setTimeout(() => { setCallStatus("in_call"); toast.success("Ligação conectada!"); }, 3000);
+    // Initiate real call via luxsales-dialer
+    try {
+      const res = await fetch(`${DIALER_URL}/call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: lead.phone.startsWith("+") ? lead.phone : `+55${lead.phone.replace(/\D/g, "")}`,
+          from: "+18155950103",
+          system_prompt: `Você é Lucas, vendedor IA da Objetivo Proteção Veicular. Fale em português brasileiro natural. Respostas de 2-4 frases. Seja educado e direto.`,
+          opening_script: "Boa tarde! Meu nome é Lucas da Objetivo Proteção Veicular. Tudo bem com você?",
+          supabase_call_id: callData.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error("Erro Telnyx: " + (data.error || "falha")); setCallStatus("idle"); return; }
+      toast.info("Discando...");
+      setCallStatus("ringing");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao conectar no dialer: " + err.message);
+      setCallStatus("idle");
+      return;
+    }
     await fetchNextLead();
   };
 

@@ -6,3 +6,4 @@ export const LOGO_URL = "/images/luxsales-logo.png";
 export const APP_NAME = "LuxSales";
 export const APP_TAGLINE = "by Digital Lux";
 export const APP_DESCRIPTION = "Plataforma Comercial Inteligente";
+export const DIALER_URL = import.meta.env.VITE_DIALER_URL || "https://adopt-tap-tutorial-councils.trycloudflare.com";
