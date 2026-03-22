@@ -627,7 +627,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
                 Mic ativo
               </Badge>
             )}
-            {phase !== "ended" && phase !== "idle" && phase !== "ringing" && (
+            {phase !== "ended" && phase !== "ringing" && (
               <Badge variant="secondary" className="text-[10px]">
                 {providers.find(p => p.id === llmProvider)?.name || llmProvider}
               </Badge>
