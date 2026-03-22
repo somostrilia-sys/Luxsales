@@ -165,9 +165,11 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   }, [messages, loading, liveTranscript]);
 
   // ── AUTO-START recording via useEffect when phase becomes "listening" ──
+  // This handles the normal case (AI finishes speaking). VAD interruption starts recording directly.
   useEffect(() => {
     if (phase === "listening" && autoStartRef.current) {
       const timer = setTimeout(() => {
+        // Only start if not already recording (VAD might have started it already)
         if (phaseRef.current === "listening" && !recorderRef.current) {
           console.log("[useEffect auto-start] Starting recording...");
           startRecordingRef.current();
@@ -516,12 +518,26 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
           vadActiveRef.current = false;
           if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
           vadFrameRef.current = 0;
+          // Stop AI audio
           if (audioRef.current && !audioRef.current.paused) {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
             audioRef.current.onended = null;
           }
-          goListening();
+          // Start recording IMMEDIATELY — user is already speaking, no delay
+          if (recorderRef.current) {
+            if (recorderRef.current.state === "recording") {
+              try { recorderRef.current.stop(); } catch { /* */ }
+            }
+            recorderRef.current = null;
+          }
+          if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+          animFrameRef.current = 0;
+          setRecording(false);
+          setLiveTranscript("");
+          setPhase("listening");
+          // No delay — start recording right now since user is already talking
+          startRecordingRef.current();
           return;
         }
       } else {
