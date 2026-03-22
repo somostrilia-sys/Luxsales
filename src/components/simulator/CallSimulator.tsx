@@ -117,6 +117,12 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingTextRef = useRef<string>("");
 
+  // VAD for interrupt detection (uses echo-cancelled mic stream)
+  const vadStreamRef = useRef<MediaStream | null>(null);
+  const vadCtxRef = useRef<AudioContext | null>(null);
+  const vadAnalyserRef = useRef<AnalyserNode | null>(null);
+  const vadFrameRef = useRef<number>(0);
+
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { loadingRef.current = loading; }, [loading]);
@@ -148,6 +154,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   useEffect(() => {
     return () => {
       stopRecognition();
+      cleanupVADMic();
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
@@ -161,6 +168,76 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       h.Authorization = `Bearer ${session.data.session.access_token}`;
     }
     return h;
+  }
+
+  // ── VAD: echo-cancelled mic for interrupt detection during AI speech ──
+
+  async function initVADMic() {
+    if (vadStreamRef.current) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      vadStreamRef.current = stream;
+      const ctx = new AudioContext();
+      if (ctx.state === "suspended") await ctx.resume();
+      vadCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+      vadAnalyserRef.current = analyser;
+    } catch { /* mic denied */ }
+  }
+
+  function cleanupVADMic() {
+    if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
+    vadFrameRef.current = 0;
+    vadStreamRef.current?.getTracks().forEach(t => t.stop());
+    vadStreamRef.current = null;
+    if (vadCtxRef.current?.state !== "closed") {
+      try { vadCtxRef.current?.close(); } catch { /* */ }
+    }
+    vadCtxRef.current = null;
+    vadAnalyserRef.current = null;
+  }
+
+  function startVADMonitor() {
+    const analyser = vadAnalyserRef.current;
+    if (!analyser) return;
+    const data = new Float32Array(analyser.fftSize);
+    let speechFrames = 0;
+
+    const check = () => {
+      if (phaseRef.current !== "ai_speaking") {
+        vadFrameRef.current = 0;
+        return;
+      }
+      analyser.getFloatTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+      const db = 20 * Math.log10(Math.sqrt(sum / data.length) || 1e-10);
+
+      // Echo cancellation filters speaker audio; only real voice passes
+      if (db > -35) {
+        speechFrames++;
+        if (speechFrames > 10) { // ~160ms of sustained voice
+          // Interrupt AI
+          if (audioRef.current && !audioRef.current.paused) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+            audioRef.current.onended = null;
+          }
+          setPhase("listening");
+          vadFrameRef.current = 0;
+          return;
+        }
+      } else {
+        speechFrames = Math.max(0, speechFrames - 1);
+      }
+      vadFrameRef.current = requestAnimationFrame(check);
+    };
+    vadFrameRef.current = requestAnimationFrame(check);
   }
 
   // ── Speech Recognition: continuous, handles everything ──
@@ -372,6 +449,9 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       };
       audioRef.current.onerror = () => setPhase("listening");
       audioRef.current.play().catch(() => setPhase("listening"));
+
+      // Start VAD monitor to detect user voice (echo-cancelled)
+      startVADMonitor();
     } else {
       setPhase("listening");
     }
@@ -389,7 +469,8 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setMessages([]);
     setDuration(0);
 
-    // Start speech recognition — this is the mic
+    // Start speech recognition + VAD mic for interruption
+    await initVADMic();
     startRecognition();
 
     await new Promise((r) => setTimeout(r, 500));
@@ -435,6 +516,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setPhase("ended");
     if (timerRef.current) clearInterval(timerRef.current);
     stopRecognition();
+    cleanupVADMic();
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
