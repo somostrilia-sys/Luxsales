@@ -43,7 +43,14 @@ import {
 
 type Produto = "Objetivo" | "Trilia";
 type TomVoz = "Informal" | "Semi-formal" | "Formal";
+type ScriptTone = "natural_confident" | "formal_consultive" | "casual_friendly" | "direct_objective";
 type ObjetivoLigacao = "Qualificar lead" | "Agendar apresentação" | "Informar promoção";
+
+type ConversationExample = {
+  id: string;
+  lead_says: string;
+  agent_responds: string;
+};
 
 type ObjectionItem = {
   id: string;
