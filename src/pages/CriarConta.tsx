@@ -62,7 +62,7 @@ export default function CriarConta() {
       const slug = slugify(companyName);
       const { data: company, error: companyError } = await supabase
         .from("companies")
-        .insert({ name: companyName, slug, plan: plano })
+        .insert({ name: companyName, slug, plan: plano, active: true, is_active: true })
         .select("id")
         .single();
 

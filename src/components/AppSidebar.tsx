@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone, Mic, PhoneCall, Network,
+  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone, Mic, PhoneCall, Network, Building2, Building,
   Headphones, Contact, MessageCircle, FileBarChart, ShieldCheck, Wrench, Megaphone, FileText,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
@@ -34,6 +34,8 @@ const managementItems: MenuItem[] = [
   { title: "Identidade Visual", url: "/identidade-visual", icon: Palette, levels: [0] },
   { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0] },
   { title: "CEO / Bolt", url: "/ceo", icon: Crown, levels: [0] },
+  { title: "Empresas", url: "/empresas", icon: Building2, levels: [0] },
+  { title: "Minha Empresa", url: "/minha-empresa", icon: Building, levels: [0, 1] },
   { title: "Leads & Disparo", url: "/motor-leads", icon: Rocket, levels: [0, 1, 2, 3] },
 ];
 

@@ -39,6 +39,8 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const CriarConta = lazy(() => import("./pages/CriarConta"));
 const MeuTime = lazy(() => import("./pages/MeuTime"));
 const Venda = lazy(() => import("./pages/Venda"));
+const Empresas = lazy(() => import("./pages/Empresas"));
+const MinhaEmpresa = lazy(() => import("./pages/MinhaEmpresa"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function PageLoader() {
@@ -90,6 +92,8 @@ const App = () => (
           <Route path="/whatsapp-meta" element={<ProtectedRoute minLevel={0}><WhatsAppMeta /></ProtectedRoute>} />
           <Route path="/relatorios-voz" element={<ProtectedRoute minLevel={1}><RelatoriosVoz /></ProtectedRoute>} />
           <Route path="/compliance-voz" element={<ProtectedRoute minLevel={0}><ComplianceVoz /></ProtectedRoute>} />
+          <Route path="/empresas" element={<ProtectedRoute minLevel={0}><Empresas /></ProtectedRoute>} />
+          <Route path="/minha-empresa" element={<ProtectedRoute minLevel={1}><MinhaEmpresa /></ProtectedRoute>} />
           <Route path="/configuracoes-voz" element={<ProtectedRoute minLevel={0}><ConfiguracoesVoz /></ProtectedRoute>} />
 
           <Route path="*" element={<NotFound />} />
