@@ -36,6 +36,7 @@ const Register = lazy(() => import("./pages/Register"));
 const Registro = lazy(() => import("./pages/Registro"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const CriarConta = lazy(() => import("./pages/CriarConta"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function PageLoader() {
@@ -58,6 +59,7 @@ const App = () => (
           <Route path="/registro" element={<Registro />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/criar-conta" element={<CriarConta />} />
 
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="/extracao" element={<ProtectedRoute><Extracao /></ProtectedRoute>} />
