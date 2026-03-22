@@ -88,7 +88,7 @@ function buildSystemPrompt(t: TrainingContext): string {
       if (o.objection) p += `\n- "${o.objection}": ${o.response}`;
     }
   }
-  p += `\n\nIMPORTANTE:\n- Fale em português brasileiro natural.\n- Respostas curtas: máximo 2-3 frases.\n- NÃO use markdown, emojis ou formatação.\n- Fale como numa conversa por telefone.\n- NUNCA repita a saudação se já se apresentou.\n- Mantenha o contexto de TODA a conversa anterior.`;
+  p += `\n\nIMPORTANTE:\n- Fale em português brasileiro natural.\n- Respostas naturais de 2-4 frases, seja conversacional.\n- NÃO use markdown, emojis ou formatação.\n- Fale como numa conversa por telefone.\n- NUNCA repita a saudação se já se apresentou.\n- Mantenha o contexto de TODA a conversa anterior.`;
   return p;
 }
 
