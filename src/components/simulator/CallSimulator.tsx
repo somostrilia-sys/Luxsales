@@ -198,6 +198,14 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       // Show live transcript
       setLiveTranscript(interimText || finalText);
 
+      // Interrupt AI audio immediately on any speech detection
+      if ((interimText || finalText) && phaseRef.current === "ai_speaking" && audioRef.current && !audioRef.current.paused) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current.onended = null;
+        setPhase("listening");
+      }
+
       if (finalText.trim().length > 2) {
         // Clear any pending silence timer
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
