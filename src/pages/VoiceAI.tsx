@@ -473,6 +473,77 @@ export default function VoiceAI() {
     }
   };
 
+  const saveScript = async () => {
+    setSavingScript(true);
+    try {
+      const payload: Record<string, unknown> = {
+        tone: scriptTone,
+        forbidden_words: forbiddenWords,
+        system_prompt: systemPrompt,
+        knowledge_base: knowledgeBase,
+        sales_techniques: salesTechniques,
+        qualifying_questions: qualifyingQuestions,
+        objection_handlers: scriptObjections.map(({ objection, response }) => ({ objection, response })),
+        conversation_examples: conversationExamples.map(({ lead_says, agent_responds }) => ({ lead_says, agent_responds })),
+        company_id: collaborator?.company_id || null,
+      };
+
+      if (scriptId) {
+        const { error } = await supabase.from("ai_call_scripts").update(payload as never).eq("id", scriptId);
+        if (error) throw error;
+      } else {
+        payload.name = `Script IA - ${trainingForm.product}`;
+        payload.flow = {};
+        const { data, error } = await supabase.from("ai_call_scripts").insert(payload as never).select("id").single();
+        if (error) throw error;
+        if (data) setScriptId((data as any).id);
+      }
+
+      toast.success("Treinamento salvo com sucesso!");
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao salvar treinamento.");
+    } finally {
+      setSavingScript(false);
+    }
+  };
+
+  const addForbiddenWord = () => {
+    const word = forbiddenWordInput.trim();
+    if (word && !forbiddenWords.includes(word)) {
+      setForbiddenWords(prev => [...prev, word]);
+    }
+    setForbiddenWordInput("");
+  };
+
+  const removeForbiddenWord = (word: string) => {
+    setForbiddenWords(prev => prev.filter(w => w !== word));
+  };
+
+  const addScriptObjection = () => {
+    setScriptObjections(prev => [...prev, { id: crypto.randomUUID(), objection: "", response: "" }]);
+  };
+
+  const updateScriptObjection = (id: string, field: "objection" | "response", value: string) => {
+    setScriptObjections(prev => prev.map(o => o.id === id ? { ...o, [field]: value } : o));
+  };
+
+  const removeScriptObjection = (id: string) => {
+    setScriptObjections(prev => prev.filter(o => o.id !== id));
+  };
+
+  const addConversationExample = () => {
+    setConversationExamples(prev => [...prev, { id: crypto.randomUUID(), lead_says: "", agent_responds: "" }]);
+  };
+
+  const updateConversationExample = (id: string, field: "lead_says" | "agent_responds", value: string) => {
+    setConversationExamples(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
+  };
+
+  const removeConversationExample = (id: string) => {
+    setConversationExamples(prev => prev.filter(e => e.id !== id));
+  };
+
   const testTrainingVoice = async () => {
     if (!selectedVoice) {
       toast.error("Selecione uma voz antes de testar.");
