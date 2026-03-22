@@ -127,8 +127,7 @@ export default function Empresas() {
     <DashboardLayout>
       <PageHeader
         title="Empresas"
-        description="Gerencie todas as empresas da plataforma"
-        icon={Building2}
+        subtitle="Gerencie todas as empresas da plataforma"
       />
 
       {/* Stats */}
