@@ -805,22 +805,17 @@ export default function VoiceAI() {
             <Card className="border-border/60 bg-card">
               <CardHeader>
                 <CardTitle>Treinamento da IA</CardTitle>
-                <CardDescription>Defina identidade, abordagem, regras e objetivo das ligações automatizadas.</CardDescription>
+                <CardDescription>Defina personalidade, conhecimento, técnicas de venda e exemplos de conversa.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Quick test section */}
                 <Card className="border-border/60 bg-secondary/20">
                   <CardContent className="p-4">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
                       <div className="grid flex-1 gap-3 md:grid-cols-[1.2fr,1fr]">
                         <div className="space-y-2">
                           <Label>Número de teste</Label>
-                          <Input
-                            type="tel"
-                            inputMode="numeric"
-                            placeholder="5511999999999"
-                            value={trainingForm.testPhone}
-                            onChange={(e) => handleTestPhoneChange(e.target.value)}
-                          />
+                          <Input type="tel" inputMode="numeric" placeholder="5511999999999" value={trainingForm.testPhone} onChange={(e) => handleTestPhoneChange(e.target.value)} />
                         </div>
                         <div className="space-y-2">
                           <Label>Voz para teste rápido</Label>
@@ -834,12 +829,7 @@ export default function VoiceAI() {
                           </Select>
                         </div>
                       </div>
-                      <Button
-                        type="button"
-                        onClick={handleQuickCall}
-                        disabled={testingQuickCall || !selectedVoice}
-                        className="bg-success text-success-foreground hover:bg-success/90"
-                      >
+                      <Button type="button" onClick={handleQuickCall} disabled={testingQuickCall || !selectedVoice} className="bg-success text-success-foreground hover:bg-success/90">
                         {testingQuickCall ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PhoneCall className="mr-2 h-4 w-4" />}
                         Ligar
                       </Button>
@@ -847,138 +837,186 @@ export default function VoiceAI() {
                   </CardContent>
                 </Card>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Produto</Label>
-                    <Select value={trainingForm.product} onValueChange={(value: Produto) => setTrainingForm((current) => ({ ...current, product: value }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Objetivo">Objetivo</SelectItem>
-                        <SelectItem value="Trilia">Trilia</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Nome do vendedor IA</Label>
-                    <Input value={trainingForm.aiSellerName} onChange={(e) => setTrainingForm((current) => ({ ...current, aiSellerName: e.target.value }))} placeholder="Ex: Lucas" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Tom de voz</Label>
-                    <Select value={trainingForm.voiceTone} onValueChange={(value: TomVoz) => setTrainingForm((current) => ({ ...current, voiceTone: value }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Informal">Informal</SelectItem>
-                        <SelectItem value="Semi-formal">Semi-formal</SelectItem>
-                        <SelectItem value="Formal">Formal</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Objetivo da ligação</Label>
-                    <Select value={trainingForm.callGoal} onValueChange={(value: ObjetivoLigacao) => setTrainingForm((current) => ({ ...current, callGoal: value }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Qualificar lead">Qualificar lead</SelectItem>
-                        <SelectItem value="Agendar apresentação">Agendar apresentação</SelectItem>
-                        <SelectItem value="Informar promoção">Informar promoção</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                {/* 4 Sub-Tabs */}
+                <Tabs defaultValue="personalidade" className="space-y-4">
+                  <TabsList className="h-auto flex-wrap justify-start gap-1 bg-secondary/30 p-1">
+                    <TabsTrigger value="personalidade" className="text-xs sm:text-sm">🎭 Personalidade</TabsTrigger>
+                    <TabsTrigger value="conhecimento" className="text-xs sm:text-sm">🧠 Conhecimento</TabsTrigger>
+                    <TabsTrigger value="vendas" className="text-xs sm:text-sm">🎯 Vendas</TabsTrigger>
+                    <TabsTrigger value="exemplos" className="text-xs sm:text-sm">💬 Exemplos</TabsTrigger>
+                  </TabsList>
 
-                <div className="grid gap-4 lg:grid-cols-3">
-                  <div className="space-y-2 lg:col-span-1">
-                    <Label>Script de abertura</Label>
-                    <Textarea value={trainingForm.openingScript} onChange={(e) => setTrainingForm((current) => ({ ...current, openingScript: e.target.value }))} className="min-h-[180px]" />
-                  </div>
-                  <div className="space-y-2 lg:col-span-1">
-                    <Label>Script de desenvolvimento</Label>
-                    <Textarea value={trainingForm.developmentScript} onChange={(e) => setTrainingForm((current) => ({ ...current, developmentScript: e.target.value }))} className="min-h-[180px]" />
-                  </div>
-                  <div className="space-y-2 lg:col-span-1">
-                    <Label>Script de fechamento</Label>
-                    <Textarea value={trainingForm.closingScript} onChange={(e) => setTrainingForm((current) => ({ ...current, closingScript: e.target.value }))} className="min-h-[180px]" />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Objeções e respostas</Label>
-                      <p className="text-sm text-muted-foreground">Cadastre respostas padrão para as objeções mais comuns.</p>
-                    </div>
-                    <Button type="button" variant="outline" onClick={addObjection}>
-                      <Plus className="mr-2 h-4 w-4" />Adicionar objeção
-                    </Button>
-                  </div>
-
-                  <div className="space-y-4">
-                    {trainingForm.objections.map((item, index) => (
-                      <Card key={item.id} className="border-border/60 bg-secondary/20">
-                        <CardContent className="grid gap-4 p-4 md:grid-cols-[1fr,1.5fr,auto] md:items-start">
-                          <div className="space-y-2">
-                            <Label>Objeção {index + 1}</Label>
-                            <Input value={item.objection} onChange={(e) => updateObjection(item.id, "objection", e.target.value)} placeholder="Ex: Tá caro" />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Resposta</Label>
-                            <Textarea value={item.response} onChange={(e) => updateObjection(item.id, "response", e.target.value)} className="min-h-[110px]" />
-                          </div>
-                          <Button type="button" variant="ghost" size="icon" onClick={() => removeObjection(item.id)} className="mt-7">
-                            <Trash2 className="h-4 w-4" />
+                  {/* === PERSONALIDADE === */}
+                  <TabsContent value="personalidade" className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Tom de Voz</Label>
+                        <Select value={scriptTone} onValueChange={(v: ScriptTone) => setScriptTone(v)}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="natural_confident">Natural e confiante</SelectItem>
+                            <SelectItem value="formal_consultive">Formal e consultivo</SelectItem>
+                            <SelectItem value="casual_friendly">Casual e amigável</SelectItem>
+                            <SelectItem value="direct_objective">Direto e objetivo</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Palavras Proibidas</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            value={forbiddenWordInput}
+                            onChange={(e) => setForbiddenWordInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addForbiddenWord(); } }}
+                            placeholder="Digite e pressione Enter"
+                          />
+                          <Button type="button" variant="outline" size="sm" onClick={addForbiddenWord}>
+                            <Plus className="h-4 w-4" />
                           </Button>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Regras</Label>
-                    <Textarea value={trainingForm.rules} onChange={(e) => setTrainingForm((current) => ({ ...current, rules: e.target.value }))} className="min-h-[140px]" />
-                  </div>
-                  <div className="space-y-4 rounded-xl border border-border/60 bg-secondary/20 p-4">
-                    <div className="space-y-2">
-                      <Label>Voz selecionada para teste</Label>
-                      <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                        <SelectTrigger><SelectValue placeholder="Selecione uma voz" /></SelectTrigger>
-                        <SelectContent>
-                          {voiceProfiles.map((voice) => (
-                            <SelectItem key={voice.id} value={voice.voice_key}>{voice.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        </div>
+                        {forbiddenWords.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {forbiddenWords.map((word) => (
+                              <Badge key={word} variant="secondary" className="gap-1 pr-1">
+                                {word}
+                                <button type="button" onClick={() => removeForbiddenWord(word)} className="ml-1 rounded-full hover:bg-muted p-0.5">
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">A voz de teste usa o script de abertura e a voz selecionada para a campanha.</p>
-                  </div>
-                </div>
+                    <div className="space-y-2">
+                      <Label>Prompt do Sistema</Label>
+                      <Textarea
+                        value={systemPrompt}
+                        onChange={(e) => setSystemPrompt(e.target.value)}
+                        className="min-h-[200px]"
+                        placeholder="Instruções gerais para o agente de IA: como se comportar, regras, limites..."
+                      />
+                    </div>
+                  </TabsContent>
 
-                <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-                  <div className="space-y-2">
-                    <Label>Número de Teste</Label>
-                    <Input
-                      type="tel"
-                      inputMode="numeric"
-                      placeholder="5511999999999"
-                      value={trainingForm.testPhone}
-                      onChange={(e) => handleTestPhoneChange(e.target.value)}
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    onClick={handleQuickCall}
-                    disabled={testingQuickCall || !selectedVoice}
-                    className="bg-success text-success-foreground hover:bg-success/90"
-                  >
-                    {testingQuickCall ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PhoneCall className="mr-2 h-4 w-4" />}
-                    Ligar Teste
-                  </Button>
-                </div>
+                  {/* === CONHECIMENTO === */}
+                  <TabsContent value="conhecimento" className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Base de Conhecimento</Label>
+                      <Textarea
+                        value={knowledgeBase}
+                        onChange={(e) => setKnowledgeBase(e.target.value)}
+                        className="min-h-[300px]"
+                        placeholder="Tudo que o agente precisa saber: produto, preço, FAQ, diferenciais, objeções comuns, informações sobre a empresa..."
+                      />
+                      <p className="text-xs text-muted-foreground">Quanto mais completa a base, melhor a performance do agente.</p>
+                    </div>
+                  </TabsContent>
 
-                <div className="flex flex-wrap gap-3">
-                  <Button onClick={saveTraining} disabled={savingTraining}>
-                    {savingTraining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {/* === VENDAS === */}
+                  <TabsContent value="vendas" className="space-y-4">
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Técnicas de Venda</Label>
+                        <Textarea
+                          value={salesTechniques}
+                          onChange={(e) => setSalesTechniques(e.target.value)}
+                          className="min-h-[180px]"
+                          placeholder="Descreva as técnicas de venda que o agente deve usar: SPIN Selling, rapport, escassez, prova social..."
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Perguntas de Qualificação</Label>
+                        <Textarea
+                          value={qualifyingQuestions}
+                          onChange={(e) => setQualifyingQuestions(e.target.value)}
+                          className="min-h-[180px]"
+                          placeholder="Perguntas que o agente deve fazer para qualificar o lead: orçamento, prazo, decisor, necessidade..."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label>Objeções e Respostas</Label>
+                          <p className="text-sm text-muted-foreground">Cadastre respostas padrão para as objeções mais comuns.</p>
+                        </div>
+                        <Button type="button" variant="outline" onClick={addScriptObjection}>
+                          <Plus className="mr-2 h-4 w-4" />Adicionar objeção
+                        </Button>
+                      </div>
+                      <div className="space-y-3">
+                        {scriptObjections.map((item, index) => (
+                          <Card key={item.id} className="border-border/60 bg-secondary/20">
+                            <CardContent className="grid gap-4 p-4 md:grid-cols-[1fr,1.5fr,auto] md:items-start">
+                              <div className="space-y-2">
+                                <Label>Objeção {index + 1}</Label>
+                                <Input value={item.objection} onChange={(e) => updateScriptObjection(item.id, "objection", e.target.value)} placeholder="Ex: Tá caro" />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Resposta</Label>
+                                <Textarea value={item.response} onChange={(e) => updateScriptObjection(item.id, "response", e.target.value)} className="min-h-[90px]" />
+                              </div>
+                              <Button type="button" variant="ghost" size="icon" onClick={() => removeScriptObjection(item.id)} className="mt-7">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        ))}
+                        {scriptObjections.length === 0 && (
+                          <p className="text-sm text-muted-foreground text-center py-4">Nenhuma objeção cadastrada.</p>
+                        )}
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* === EXEMPLOS === */}
+                  <TabsContent value="exemplos" className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label>Exemplos de Conversa</Label>
+                        <p className="text-sm text-muted-foreground">Adicione pares de fala do lead + resposta ideal do agente para guiar o comportamento da IA.</p>
+                      </div>
+                      <Button type="button" variant="outline" onClick={addConversationExample}>
+                        <Plus className="mr-2 h-4 w-4" />Adicionar Exemplo
+                      </Button>
+                    </div>
+                    <div className="space-y-3">
+                      {conversationExamples.map((ex, index) => (
+                        <Card key={ex.id} className="border-border/60 bg-secondary/20">
+                          <CardContent className="grid gap-4 p-4 md:grid-cols-[1fr,1fr,auto] md:items-start">
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-1.5">
+                                <User className="h-3.5 w-3.5 text-muted-foreground" />
+                                Lead diz (exemplo {index + 1})
+                              </Label>
+                              <Textarea value={ex.lead_says} onChange={(e) => updateConversationExample(ex.id, "lead_says", e.target.value)} placeholder="O que o lead diria..." className="min-h-[80px]" />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-1.5">
+                                <Bot className="h-3.5 w-3.5 text-primary" />
+                                Agente responde
+                              </Label>
+                              <Textarea value={ex.agent_responds} onChange={(e) => updateConversationExample(ex.id, "agent_responds", e.target.value)} placeholder="Resposta ideal do agente..." className="min-h-[80px]" />
+                            </div>
+                            <Button type="button" variant="ghost" size="icon" onClick={() => removeConversationExample(ex.id)} className="mt-7">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      {conversationExamples.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-8">Nenhum exemplo cadastrado. Clique em "+ Adicionar Exemplo" para começar.</p>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+
+                {/* Save button */}
+                <div className="flex flex-wrap gap-3 pt-2">
+                  <Button onClick={saveScript} disabled={savingScript}>
+                    {savingScript ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     Salvar Treinamento
                   </Button>
                   <Button variant="secondary" onClick={testTrainingVoice} disabled={testingTrainingVoice || !selectedVoice}>
