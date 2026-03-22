@@ -466,12 +466,38 @@ export default function VoiceAI() {
       return;
     }
 
-    const loadingToast = toast.loading("Gerando áudio de teste...");
+    const loadingToast = toast.loading("Gerando áudio e iniciando ligação...");
     setTestingQuickCall(true);
     try {
+      // Gerar audio preview
       const audioUrl = await generateVoiceAudio(trainingForm.openingScript, selectedVoice);
       setTrainingAudioUrl(audioUrl);
-      toast.success("Áudio gerado! Em breve a ligação será iniciada.", { id: loadingToast });
+
+      // Montar número E.164
+      const digits = normalizePhoneDigits(trainingForm.testPhone);
+      const e164Number = digits.startsWith("55") ? "+" + digits : "+55" + digits;
+
+      // Montar system prompt completo
+      const systemPrompt = buildSimulatorSystemPrompt(trainingForm);
+
+      // Chamar edge function make-call com action dial
+      const { data, error } = await supabase.functions.invoke("make-call", {
+        body: {
+          action: "dial",
+          to: e164Number,
+          voice_key: selectedVoice,
+          opening_script: trainingForm.openingScript,
+          system_prompt: systemPrompt,
+        },
+      });
+
+      if (error || !data?.success) {
+        const errMsg = data?.error || data?.detail || error?.message || "Erro ao iniciar ligação.";
+        toast.error(errMsg, { id: loadingToast });
+        return;
+      }
+
+      toast.success("Ligação iniciada para " + e164Number + "! (VAPI: " + (data.vapi_call_id || "") + ")", { id: loadingToast });
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "Erro ao iniciar teste.", { id: loadingToast });
