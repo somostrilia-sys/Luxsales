@@ -127,25 +127,35 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const messagesRef = useRef<SimMessage[]>([]);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const phaseRef = useRef<CallPhase>("idle");
 
-  // Web Audio refs
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const gainNodeRef = useRef<GainNode | null>(null);
+  // ── SINGLE persistent mic stream for the entire call ──
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const micCtxRef = useRef<AudioContext | null>(null);
+  const micAnalyserRef = useRef<AnalyserNode | null>(null);
+  const micGainRef = useRef<GainNode | null>(null);
+
+  // Recording state
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const silenceStartRef = useRef<number | null>(null);
   const lowVolStartRef = useRef<number | null>(null);
   const recStartTimeRef = useRef<number>(0);
   const animFrameRef = useRef<number>(0);
   const speechDetectedRef = useRef(false);
 
-  // Web Speech API for live transcription
+  // VAD state (uses same mic stream)
+  const vadActiveRef = useRef(false);
+  const vadFrameRef = useRef<number>(0);
+
+  // Live transcription
   const recognitionRef = useRef<any>(null);
+
+  // Hands-free mode
+  const autoStartRef = useRef(false);
+  const startRecordingRef = useRef<() => void>(() => {});
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
@@ -179,18 +189,76 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     })();
   }, []);
 
-  // Auto-start recording ref
-  const autoStartRef = useRef(false);
-  const startRecordingRef = useRef<() => void>(() => {});
-
   useEffect(() => {
     return () => {
-      releaseMic();
+      releaseAllMic();
       stopLiveTranscription();
       if (timerRef.current) clearInterval(timerRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Persistent mic stream: opened once per call ──
+
+  async function initMicStream() {
+    if (micStreamRef.current) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
+      micStreamRef.current = stream;
+
+      const ctx = new AudioContext();
+      if (ctx.state === "suspended") await ctx.resume();
+      micCtxRef.current = ctx;
+
+      const source = ctx.createMediaStreamSource(stream);
+      const gain = ctx.createGain();
+      gain.gain.value = 1.5;
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.3;
+
+      source.connect(gain);
+      gain.connect(analyser);
+
+      micGainRef.current = gain;
+      micAnalyserRef.current = analyser;
+    } catch {
+      toast.error("Não foi possível acessar o microfone.");
+    }
+  }
+
+  function releaseAllMic() {
+    // Stop any active recording
+    if (recorderRef.current?.state === "recording") {
+      try { recorderRef.current.stop(); } catch { /* */ }
+    }
+    recorderRef.current = null;
+
+    // Stop monitoring loops
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
+    if (recTimerRef.current) clearInterval(recTimerRef.current);
+    vadActiveRef.current = false;
+
+    // Close audio context
+    if (micCtxRef.current?.state !== "closed") {
+      try { micCtxRef.current?.close(); } catch { /* */ }
+    }
+    micCtxRef.current = null;
+    micAnalyserRef.current = null;
+    micGainRef.current = null;
+
+    // Stop mic tracks
+    micStreamRef.current?.getTracks().forEach(t => t.stop());
+    micStreamRef.current = null;
+
+    setRecording(false);
+    setRecDuration(0);
+    setVolumeLevel(0);
+    setLowVolumeWarn(false);
+  }
 
   // ── Live transcription (Web Speech API) ──
 
@@ -206,20 +274,13 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     recognition.onresult = (event: any) => {
       let interim = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          // Final result goes to live transcript
-          interim = transcript;
-        } else {
-          interim = transcript;
-        }
+        interim = event.results[i][0].transcript;
       }
       setLiveTranscript(interim);
     };
 
     recognition.onerror = () => { /* silent */ };
     recognition.onend = () => {
-      // Auto-restart if still in call
       if (phaseRef.current !== "ended" && phaseRef.current !== "idle" && recognitionRef.current) {
         try { recognitionRef.current.start(); } catch { /* */ }
       }
@@ -237,34 +298,13 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setLiveTranscript("");
   }
 
-  // ── Mic helpers ──
-
-  const releaseMic = useCallback(() => {
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (recTimerRef.current) clearInterval(recTimerRef.current);
-    if (recorderRef.current?.state !== "inactive") {
-      try { recorderRef.current?.stop(); } catch { /* */ }
-    }
-    recorderRef.current = null;
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    if (audioCtxRef.current?.state !== "closed") {
-      try { audioCtxRef.current?.close(); } catch { /* */ }
-    }
-    audioCtxRef.current = null;
-    analyserRef.current = null;
-    gainNodeRef.current = null;
-    silenceStartRef.current = null;
-    lowVolStartRef.current = null;
-    setRecording(false);
-    setRecDuration(0);
-    setVolumeLevel(0);
-    setLowVolumeWarn(false);
-  }, []);
+  // ── Recording: uses the persistent mic stream ──
 
   const stopAndSendRecording = useCallback(() => {
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    animFrameRef.current = 0;
     if (recTimerRef.current) clearInterval(recTimerRef.current);
+    recTimerRef.current = null;
     if (recorderRef.current?.state === "recording") {
       recorderRef.current.stop();
     }
@@ -275,13 +315,13 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   }, []);
 
   const monitorAudio = useCallback(() => {
-    const analyser = analyserRef.current;
+    const analyser = micAnalyserRef.current;
     if (!analyser) return;
 
     const dataArray = new Float32Array(analyser.fftSize);
 
     const loop = () => {
-      if (!analyserRef.current) return;
+      if (!micAnalyserRef.current || !recorderRef.current || recorderRef.current.state !== "recording") return;
       analyser.getFloatTimeDomainData(dataArray);
 
       let sumSq = 0;
@@ -337,44 +377,41 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   }, [stopAndSendRecording]);
 
   const startRecording = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-      });
-      streamRef.current = stream;
-      chunksRef.current = [];
-      silenceStartRef.current = null;
-      lowVolStartRef.current = null;
-      speechDetectedRef.current = false;
-      recStartTimeRef.current = Date.now();
+    const stream = micStreamRef.current;
+    const ctx = micCtxRef.current;
+    if (!stream || !ctx) {
+      console.warn("[startRecording] No persistent mic stream");
+      return;
+    }
 
-      const audioCtx = new AudioContext();
-      audioCtxRef.current = audioCtx;
+    // Resume AudioContext if suspended (browser policy)
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
 
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.3;
-      analyserRef.current = analyser;
-
-      const gainNode = audioCtx.createGain();
-      gainNode.gain.value = 1.5;
-      gainNodeRef.current = gainNode;
-
-      source.connect(gainNode);
-      gainNode.connect(analyser);
-
-      let mimeType = "audio/webm;codecs=opus";
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = "audio/webm";
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = "audio/wav";
-        }
+    // Clean up previous recorder if any
+    if (recorderRef.current) {
+      if (recorderRef.current.state === "recording") {
+        try { recorderRef.current.stop(); } catch { /* */ }
       }
+      recorderRef.current = null;
+    }
 
+    chunksRef.current = [];
+    silenceStartRef.current = null;
+    lowVolStartRef.current = null;
+    speechDetectedRef.current = false;
+    recStartTimeRef.current = Date.now();
+
+    let mimeType = "audio/webm;codecs=opus";
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+      mimeType = "audio/webm";
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = "audio/wav";
+      }
+    }
+
+    try {
       const recorder = new MediaRecorder(stream, { mimeType });
       recorderRef.current = recorder;
 
@@ -384,24 +421,19 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
       recorder.onstop = () => {
         if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = 0;
         if (recTimerRef.current) clearInterval(recTimerRef.current);
+        recTimerRef.current = null;
+        recorderRef.current = null;
 
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        stream.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        if (audioCtxRef.current?.state !== "closed") {
-          try { audioCtxRef.current?.close(); } catch { /* */ }
-        }
-        audioCtxRef.current = null;
-        recorderRef.current = null;
+        // NOTE: We do NOT stop the mic stream — it stays open for the entire call
 
         const recElapsed = Date.now() - recStartTimeRef.current;
         if (blob.size > 0 && recElapsed >= MIN_RECORDING_MS && phaseRef.current !== "ended") {
           sendAudio(blob);
         } else if (!speechDetectedRef.current && recElapsed >= MIN_RECORDING_MS) {
-          if (phaseRef.current !== "ended") {
-            goListening();
-          }
+          if (phaseRef.current !== "ended") goListening();
         } else if (recElapsed < MIN_RECORDING_MS && !speechDetectedRef.current) {
           if (phaseRef.current !== "ended") goListening();
         }
@@ -416,52 +448,19 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       }, 1000);
 
       monitorAudio();
-    } catch {
-      toast.error("Não foi possível acessar o microfone.");
+    } catch (err) {
+      console.error("[startRecording] MediaRecorder error:", err);
+      toast.error("Erro ao iniciar gravação.");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monitorAudio]);
 
   startRecordingRef.current = startRecording;
 
-  // VAD during AI playback
-  const vadStreamRef = useRef<MediaStream | null>(null);
-  const vadCtxRef = useRef<AudioContext | null>(null);
-  const vadAnalyserRef = useRef<AnalyserNode | null>(null);
-  const vadFrameRef = useRef<number>(0);
-  const vadActiveRef = useRef(false);
-
-  async function initVADStream() {
-    try {
-      if (vadStreamRef.current) return;
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      vadStreamRef.current = stream;
-      const ctx = new AudioContext();
-      vadCtxRef.current = ctx;
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 1024;
-      source.connect(analyser);
-      vadAnalyserRef.current = analyser;
-    } catch { /* mic denied */ }
-  }
-
-  function cleanupVADStream() {
-    vadActiveRef.current = false;
-    if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
-    if (vadStreamRef.current) {
-      vadStreamRef.current.getTracks().forEach(t => t.stop());
-      vadStreamRef.current = null;
-    }
-    if (vadCtxRef.current) {
-      vadCtxRef.current.close().catch(() => {});
-      vadCtxRef.current = null;
-    }
-    vadAnalyserRef.current = null;
-  }
+  // ── VAD during AI playback (uses same persistent mic analyser) ──
 
   function startVADDuringPlayback() {
-    const analyser = vadAnalyserRef.current;
+    const analyser = micAnalyserRef.current;
     if (!analyser || vadActiveRef.current) return;
     vadActiveRef.current = true;
 
@@ -483,6 +482,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         if (speechFrames > 8) {
           vadActiveRef.current = false;
           if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
+          vadFrameRef.current = 0;
           if (audioRef.current && !audioRef.current.paused) {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
@@ -499,28 +499,24 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     vadFrameRef.current = requestAnimationFrame(check);
   }
 
-  // Go to listening phase — auto-starts recording (hands-free always ON)
+  // ── Go to listening: auto-starts recording from persistent stream ──
+
   function goListening() {
     setPhase("listening");
     setLiveTranscript("");
-    // Clean up any stale recording state before auto-starting
+    setRecording(false);
+
+    // Stop any active recorder without stopping the mic stream
     if (recorderRef.current) {
-      if (recorderRef.current.state !== "inactive") {
+      if (recorderRef.current.state === "recording") {
         try { recorderRef.current.stop(); } catch { /* */ }
       }
       recorderRef.current = null;
     }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    if (audioCtxRef.current?.state !== "closed") {
-      try { audioCtxRef.current?.close(); } catch { /* */ }
-    }
-    audioCtxRef.current = null;
-    analyserRef.current = null;
-    setRecording(false);
-    // Always auto-start in hands-free mode
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    animFrameRef.current = 0;
+
+    // Auto-start recording from persistent stream
     if (autoStartRef.current) {
       setTimeout(() => {
         if (phaseRef.current === "listening") {
@@ -729,9 +725,11 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       audioRef.current.onerror = () => goListening();
       audioRef.current.play().catch(() => goListening());
 
+      // Start VAD to detect user interruption during AI playback
       if (autoStartRef.current) {
         vadActiveRef.current = false;
         if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
+        vadFrameRef.current = 0;
         setTimeout(() => startVADDuringPlayback(), 100);
       }
     } else {
@@ -750,8 +748,10 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setPhase("ringing");
     setMessages([]);
     setDuration(0);
-    autoStartRef.current = true; // Always hands-free
-    await initVADStream();
+    autoStartRef.current = true;
+
+    // Open ONE persistent mic stream for the entire call
+    await initMicStream();
     startLiveTranscription();
 
     await new Promise((r) => setTimeout(r, 500));
@@ -796,8 +796,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     autoStartRef.current = false;
     setPhase("ended");
     if (timerRef.current) clearInterval(timerRef.current);
-    releaseMic();
-    cleanupVADStream();
+    releaseAllMic();
     stopLiveTranscription();
     if (audioRef.current) {
       audioRef.current.pause();
@@ -1013,7 +1012,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
                    "Microfone aberto — fale quando quiser"}
                 </p>
 
-                {/* Volume meter — always show when recording */}
                 {recording && (
                   <div className="w-48 space-y-1">
                     <div className="flex items-center gap-2">
@@ -1038,7 +1036,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
                   </div>
                 )}
 
-                {/* Mic button — visual indicator, but mic auto-starts */}
                 <div className="flex items-center gap-3">
                   <Button
                     size="lg"
