@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Bot, Plus, Search, Info, Mic, Pencil } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
 import AgentFormDialog from "@/components/agentes/AgentFormDialog";
 
 interface Agent {
@@ -53,6 +54,7 @@ const MODEL_LABELS: Record<string, string> = {
 
 export default function Agentes() {
   const { toast } = useToast();
+  const { collaborator, roleLevel } = useCollaborator();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -66,18 +68,29 @@ export default function Agentes() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    const myCompanyId = collaborator?.company_id;
+    const shouldFilter = roleLevel > 0 && myCompanyId;
+
+    let agentsQuery = supabase.from("agent_definitions").select("id, name, slug, active, company_id, description, agent_type, model, voice_key, channel, max_tokens, temperature");
+    let companiesQuery = supabase.from("companies").select("id, name");
+    let rolesQuery = supabase.from("roles").select("id, level, company_id, slug");
+    let accessQuery = supabase.from("role_agent_access").select("agent_id, role_id");
+
+    if (shouldFilter) {
+      agentsQuery = agentsQuery.eq("company_id", myCompanyId);
+      companiesQuery = companiesQuery.eq("id", myCompanyId);
+      rolesQuery = rolesQuery.eq("company_id", myCompanyId);
+    }
+
     const [agentsRes, companiesRes, rolesRes, accessRes] = await Promise.all([
-      supabase.from("agent_definitions").select("id, name, slug, active, company_id, description, agent_type, model, voice_key, channel, max_tokens, temperature"),
-      supabase.from("companies").select("id, name"),
-      supabase.from("roles").select("id, level, company_id, slug"),
-      supabase.from("role_agent_access").select("agent_id, role_id"),
+      agentsQuery, companiesQuery, rolesQuery, accessQuery,
     ]);
     if (agentsRes.data) setAgents(agentsRes.data);
     if (companiesRes.data) setCompanies(companiesRes.data);
     if (rolesRes.data) setRoles(rolesRes.data);
     if (accessRes.data) setAccess(accessRes.data);
     setLoading(false);
-  }, []);
+  }, [collaborator?.company_id, roleLevel]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -206,7 +219,7 @@ export default function Agentes() {
                         {MODEL_LABELS[agent.model] || agent.model}
                       </Badge>
                     )}
-                    {agent.voice_key && (
+                    {agent.voice_key && roleLevel === 0 && (
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
                         <Mic className="h-3 w-3" /> Voz
                       </Badge>
@@ -262,7 +275,7 @@ export default function Agentes() {
             {detailAgent?.model && (
               <div><span className="font-medium text-foreground">Modelo:</span> <span className="text-muted-foreground">{detailAgent.model}</span></div>
             )}
-            {detailAgent?.voice_key && (
+            {detailAgent?.voice_key && roleLevel === 0 && (
               <div><span className="font-medium text-foreground">Voz:</span> <Badge variant="outline" className="gap-1"><Mic className="h-3 w-3" />{detailAgent.voice_key}</Badge></div>
             )}
             {detailAgent?.channel && (

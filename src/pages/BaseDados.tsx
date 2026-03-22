@@ -69,7 +69,7 @@ const IMPORT_FIELDS = ["name", "phone", "email", "document", "city", "state"] as
 type ImportField = typeof IMPORT_FIELDS[number];
 
 export default function BaseDados() {
-  const { roleLevel } = useCollaborator();
+  const { collaborator, roleLevel } = useCollaborator();
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,6 +136,11 @@ export default function BaseDados() {
     setLoading(true);
     let query = supabase.from("contact_leads").select("id,name,phone,email,tipo_pessoa,city,region,state,category,subcategory,source,score,status,created_at");
 
+    // Filter by company for non-CEO users
+    if (roleLevel > 0 && collaborator?.company_id) {
+      query = query.eq("company_target", collaborator.company_id);
+    }
+
     // Default: only leads with phone
     if (!includeNoPhone) query = query.not("phone", "is", null);
 
@@ -159,7 +164,7 @@ export default function BaseDados() {
     setLeads((data || []) as Lead[]);
     // Use stats from RPC loaded separately instead of count from query
     setLoading(false);
-  }, [activeTab, filterType, filterStatus, search, citySearch, dddFilter, includeNoPhone, page]);
+  }, [activeTab, filterType, filterStatus, search, citySearch, dddFilter, includeNoPhone, page, roleLevel, collaborator?.company_id]);
 
   useEffect(() => { loadCounts(); }, [loadCounts]);
   useEffect(() => { loadLeads(); }, [loadLeads]);
@@ -232,6 +237,11 @@ export default function BaseDados() {
   const exportCSV = async () => {
     toast.info("Preparando exportação...");
     let query = supabase.from("contact_leads").select("id,name,phone,email,tipo_pessoa,city,region,state,category,subcategory,source,score,status");
+
+    // Filter by company for non-CEO users
+    if (roleLevel > 0 && collaborator?.company_id) {
+      query = query.eq("company_target", collaborator.company_id);
+    }
 
     if (activeTab === "objetivo-transporte") query = query.eq("category", "objetivo-transporte");
     else if (activeTab === "motorista-app") query = query.eq("subcategory", "motorista-aplicativo");
@@ -540,7 +550,9 @@ export default function BaseDados() {
                 <SelectItem value="converted">Convertido</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="destructive" size="sm" onClick={bulkDelete}><Trash2 className="h-4 w-4 mr-1" /> Excluir</Button>
+            {roleLevel === 0 && (
+              <Button variant="destructive" size="sm" onClick={bulkDelete}><Trash2 className="h-4 w-4 mr-1" /> Excluir</Button>
+            )}
           </div>
         )}
 

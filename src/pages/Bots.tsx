@@ -1217,9 +1217,11 @@ export default function Bots() {
             <TabsTrigger value="bots" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
               <Bot className="h-4 w-4" /> Chips de Disparo
             </TabsTrigger>
+            {roleLevel === 0 && (
             <TabsTrigger value="apikeys" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
               <Key className="h-4 w-4" /> API Keys
             </TabsTrigger>
+            )}
           </TabsList>
 
           {/* ════════════════════ ABA BOTS ════════════════════ */}
@@ -1292,6 +1294,7 @@ export default function Bots() {
           </TabsContent>
 
           {/* ════════════════════ ABA API KEYS ════════════════════ */}
+          {roleLevel === 0 && (
           <TabsContent value="apikeys" className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="relative max-w-sm flex-1">
@@ -1369,11 +1372,12 @@ export default function Bots() {
               </div>
             )}
           </TabsContent>
+          )}
         </Tabs>
         )}
 
         {/* ════════════════════ PAINEL ADMIN — TODOS OS CHIPS ════════════════════ */}
-        {roleLevel <= 1 && <AdminChipsOverview />}
+        {roleLevel === 0 && <AdminChipsOverview />}
 
         {/* ════════════════════ MEU WHATSAPP ════════════════════ */}
         <Card className="border-emerald-500/30">
@@ -1448,7 +1452,9 @@ export default function Bots() {
         </Card>
 
         {/* ════════════════════ CHIPS DESCARTÁVEIS ════════════════════ */}
+        {roleLevel === 0 && (
         <DisposableChipsSection collaboratorId={collaborator?.id || null} />
+        )}
 
         {/* ════════════════════ TREINAR MEU BOT ════════════════════ */}
         <BotTrainingSection collaboratorId={collaborator?.id || null} />
@@ -1475,6 +1481,8 @@ export default function Bots() {
               </Select>
             </div>
 
+            {roleLevel === 0 && (
+            <>
             {/* API Key Anthropic - agora select do pool */}
             <div>
               <Label>API Key Anthropic</Label>
@@ -1500,6 +1508,8 @@ export default function Bots() {
                 Para chips descartáveis, use a aba "Chips Descartáveis" em Meu WhatsApp.
               </p>
             </div>
+            </>
+            )}
             <div>
               <Label>Número WhatsApp</Label>
               <Input value={botForm.whatsapp_number} onChange={e => setBotForm({ ...botForm, whatsapp_number: e.target.value })} className="bg-[#0a0a0f] border-[#1E1E2E]" placeholder="+55..." />

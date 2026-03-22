@@ -37,6 +37,8 @@ const Registro = lazy(() => import("./pages/Registro"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const CriarConta = lazy(() => import("./pages/CriarConta"));
+const MeuTime = lazy(() => import("./pages/MeuTime"));
+const Venda = lazy(() => import("./pages/Venda"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function PageLoader() {
@@ -60,9 +62,10 @@ const App = () => (
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/criar-conta" element={<CriarConta />} />
+          <Route path="/venda" element={<Venda />} />
 
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-          <Route path="/extracao" element={<ProtectedRoute><Extracao /></ProtectedRoute>} />
+          <Route path="/extracao" element={<ProtectedRoute minLevel={1}><Extracao /></ProtectedRoute>} />
           <Route path="/agentes" element={<ProtectedRoute minLevel={1}><Agentes /></ProtectedRoute>} />
           <Route path="/bots" element={<ProtectedRoute><Bots /></ProtectedRoute>} />
           <Route path="/proxy" element={<ProtectedRoute minLevel={0}><Proxy /></ProtectedRoute>} />
@@ -71,8 +74,9 @@ const App = () => (
           <Route path="/meu-bot" element={<ProtectedRoute><MeuBot /></ProtectedRoute>} />
           <Route path="/metricas" element={<ProtectedRoute minLevel={1}><Metricas /></ProtectedRoute>} />
           <Route path="/colaboradores" element={<ProtectedRoute minLevel={0}><Colaboradores /></ProtectedRoute>} />
+          <Route path="/meu-time" element={<ProtectedRoute minLevel={1}><MeuTime /></ProtectedRoute>} />
           <Route path="/cadastro" element={<ProtectedRoute minLevel={1}><Cadastro /></ProtectedRoute>} />
-          <Route path="/configuracoes" element={<ProtectedRoute minLevel={1}><Configuracoes /></ProtectedRoute>} />
+          <Route path="/configuracoes" element={<ProtectedRoute minLevel={0}><Configuracoes /></ProtectedRoute>} />
           <Route path="/identidade-visual" element={<ProtectedRoute minLevel={0}><IdentidadeVisual /></ProtectedRoute>} />
           <Route path="/ceo" element={<ProtectedRoute minLevel={0}><CeoBolt /></ProtectedRoute>} />
           <Route path="/motor-leads" element={<ProtectedRoute><MotorLeads /></ProtectedRoute>} />

@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { toast } from "sonner";
 import { Loader2, Copy, Download, Upload, Link2, Trash2, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
@@ -59,20 +60,34 @@ export default function Cadastro() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [generatedLink, setGeneratedLink] = useState("");
 
+  const { collaborator, roleLevel } = useCollaborator();
+
   useEffect(() => { loadData(); loadInvites(); }, []);
 
   const loadData = async () => {
     setLoading(true);
-    const [compRes, roleRes, sectorRes, collabRes] = await Promise.all([
-      supabase.from("companies").select("id, name").order("name"),
-      supabase.from("roles").select("id, name, level, company_id").eq("active", true).order("level"),
-      supabase.from("sectors").select("id, name, company_id").order("name"),
-      supabase.from("collaborators").select(`
+    const myCompanyId = collaborator?.company_id;
+    const shouldFilter = roleLevel > 0 && myCompanyId;
+
+    let compQuery = supabase.from("companies").select("id, name").order("name");
+    let roleQuery = supabase.from("roles").select("id, name, level, company_id").eq("active", true).order("level");
+    let sectorQuery = supabase.from("sectors").select("id, name, company_id").order("name");
+    let collabQuery = supabase.from("collaborators").select(`
         id, name, email, phone, active, company_id, company_ids,
         role:roles!collaborators_role_id_fkey(name, level),
         company:companies!collaborators_company_id_fkey(name),
         sector:sectors!collaborators_sector_id_fkey(name)
-      `).eq("active", true).order("name"),
+      `).eq("active", true).order("name");
+
+    if (shouldFilter) {
+      compQuery = compQuery.eq("id", myCompanyId);
+      roleQuery = roleQuery.eq("company_id", myCompanyId);
+      sectorQuery = sectorQuery.eq("company_id", myCompanyId);
+      collabQuery = collabQuery.eq("company_id", myCompanyId);
+    }
+
+    const [compRes, roleRes, sectorRes, collabRes] = await Promise.all([
+      compQuery, roleQuery, sectorQuery, collabQuery,
     ]);
     setCompanies(compRes.data || []);
     setRoles(roleRes.data || []);
@@ -83,11 +98,15 @@ export default function Cadastro() {
 
   const loadInvites = async () => {
     setInviteLoading(true);
-    const { data } = await supabase
+    let query = supabase
       .from("invite_links")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(50);
+    if (roleLevel > 0 && collaborator?.company_id) {
+      query = query.eq("company_id", collaborator.company_id);
+    }
+    const { data } = await query;
     setInviteLinks(data || []);
     setInviteLoading(false);
   };
