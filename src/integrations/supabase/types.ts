@@ -151,6 +151,60 @@ export type Database = {
           },
         ]
       }
+      agent_knowledge: {
+        Row: {
+          active: boolean | null
+          agent_id: string | null
+          category: string | null
+          company_id: string | null
+          content: string
+          created_at: string | null
+          id: string
+          metadata: Json | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          agent_id?: string | null
+          category?: string | null
+          company_id?: string | null
+          content: string
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          agent_id?: string | null
+          category?: string | null
+          company_id?: string | null
+          content?: string
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_knowledge_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agent_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_knowledge_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "v_agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+        ]
+      }
       agent_memories: {
         Row: {
           category: string
@@ -215,6 +269,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      agent_usage_logs: {
+        Row: {
+          agent_id: string | null
+          collaborator_id: string | null
+          company_id: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          input_tokens: number | null
+          model: string | null
+          output_tokens: number | null
+          response_time_ms: number | null
+          success: boolean | null
+          tools_used: string[] | null
+        }
+        Insert: {
+          agent_id?: string | null
+          collaborator_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          input_tokens?: number | null
+          model?: string | null
+          output_tokens?: number | null
+          response_time_ms?: number | null
+          success?: boolean | null
+          tools_used?: string[] | null
+        }
+        Update: {
+          agent_id?: string | null
+          collaborator_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          input_tokens?: number | null
+          model?: string | null
+          output_tokens?: number | null
+          response_time_ms?: number | null
+          success?: boolean | null
+          tools_used?: string[] | null
+        }
+        Relationships: []
       }
       agents: {
         Row: {
@@ -503,13 +602,16 @@ export type Database = {
           closing_message: string | null
           company_id: string
           compliance_disclaimers: string[] | null
+          conversation_examples: Json | null
           created_at: string
           description: string | null
           fallback_action: string | null
           fallback_target: string | null
           flow: Json
+          forbidden_words: string[] | null
           id: string
           is_active: boolean | null
+          knowledge_base: string | null
           max_duration_sec: number | null
           name: string
           objection_handlers: Json | null
@@ -517,10 +619,13 @@ export type Database = {
           parent_script_id: string | null
           personality: string | null
           qualification_criteria: Json | null
+          qualifying_questions: string | null
+          sales_techniques: string | null
           script_type: string | null
           silence_timeout_sec: number | null
           success_rate: number | null
           system_prompt: string | null
+          tone: string | null
           total_calls: number | null
           updated_at: string
           variables: Json | null
@@ -532,13 +637,16 @@ export type Database = {
           closing_message?: string | null
           company_id: string
           compliance_disclaimers?: string[] | null
+          conversation_examples?: Json | null
           created_at?: string
           description?: string | null
           fallback_action?: string | null
           fallback_target?: string | null
           flow?: Json
+          forbidden_words?: string[] | null
           id?: string
           is_active?: boolean | null
+          knowledge_base?: string | null
           max_duration_sec?: number | null
           name: string
           objection_handlers?: Json | null
@@ -546,10 +654,13 @@ export type Database = {
           parent_script_id?: string | null
           personality?: string | null
           qualification_criteria?: Json | null
+          qualifying_questions?: string | null
+          sales_techniques?: string | null
           script_type?: string | null
           silence_timeout_sec?: number | null
           success_rate?: number | null
           system_prompt?: string | null
+          tone?: string | null
           total_calls?: number | null
           updated_at?: string
           variables?: Json | null
@@ -561,13 +672,16 @@ export type Database = {
           closing_message?: string | null
           company_id?: string
           compliance_disclaimers?: string[] | null
+          conversation_examples?: Json | null
           created_at?: string
           description?: string | null
           fallback_action?: string | null
           fallback_target?: string | null
           flow?: Json
+          forbidden_words?: string[] | null
           id?: string
           is_active?: boolean | null
+          knowledge_base?: string | null
           max_duration_sec?: number | null
           name?: string
           objection_handlers?: Json | null
@@ -575,10 +689,13 @@ export type Database = {
           parent_script_id?: string | null
           personality?: string | null
           qualification_criteria?: Json | null
+          qualifying_questions?: string | null
+          sales_techniques?: string | null
           script_type?: string | null
           silence_timeout_sec?: number | null
           success_rate?: number | null
           system_prompt?: string | null
+          tone?: string | null
           total_calls?: number | null
           updated_at?: string
           variables?: Json | null
@@ -1733,6 +1850,48 @@ export type Database = {
           },
         ]
       }
+      call_transcripts: {
+        Row: {
+          call_id: string | null
+          created_at: string | null
+          id: string
+          role: string
+          text: string
+          timestamp: string | null
+        }
+        Insert: {
+          call_id?: string | null
+          created_at?: string | null
+          id?: string
+          role: string
+          text: string
+          timestamp?: string | null
+        }
+        Update: {
+          call_id?: string | null
+          created_at?: string | null
+          id?: string
+          role?: string
+          text?: string
+          timestamp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_transcripts_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_transcripts_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "v_recorded_calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_transfers: {
         Row: {
           answered_at: string | null
@@ -1873,6 +2032,8 @@ export type Database = {
           ended_at: string | null
           extension_id: string | null
           freeswitch_uuid: string | null
+          greeting_audio_url: string | null
+          greeting_text: string | null
           hangup_cause: string | null
           hangup_source: string | null
           hold_duration_sec: number | null
@@ -1888,16 +2049,21 @@ export type Database = {
           recording_started_at: string | null
           recording_stopped_at: string | null
           recording_url: string | null
+          result: string | null
           ring_duration_sec: number | null
           ring_time_seconds: number | null
           sip_call_id: string | null
           sip_response_code: number | null
           started_at: string | null
           status: string | null
+          system_prompt: string | null
           talk_duration_sec: number | null
           talk_time_seconds: number | null
+          telnyx_call_control_id: string | null
+          telnyx_call_session_id: string | null
           transfer_count: number | null
           trunk_id: string | null
+          voice_key: string | null
           whatsapp_sent: boolean | null
           whatsapp_sent_at: string | null
         }
@@ -1923,6 +2089,8 @@ export type Database = {
           ended_at?: string | null
           extension_id?: string | null
           freeswitch_uuid?: string | null
+          greeting_audio_url?: string | null
+          greeting_text?: string | null
           hangup_cause?: string | null
           hangup_source?: string | null
           hold_duration_sec?: number | null
@@ -1938,16 +2106,21 @@ export type Database = {
           recording_started_at?: string | null
           recording_stopped_at?: string | null
           recording_url?: string | null
+          result?: string | null
           ring_duration_sec?: number | null
           ring_time_seconds?: number | null
           sip_call_id?: string | null
           sip_response_code?: number | null
           started_at?: string | null
           status?: string | null
+          system_prompt?: string | null
           talk_duration_sec?: number | null
           talk_time_seconds?: number | null
+          telnyx_call_control_id?: string | null
+          telnyx_call_session_id?: string | null
           transfer_count?: number | null
           trunk_id?: string | null
+          voice_key?: string | null
           whatsapp_sent?: boolean | null
           whatsapp_sent_at?: string | null
         }
@@ -1973,6 +2146,8 @@ export type Database = {
           ended_at?: string | null
           extension_id?: string | null
           freeswitch_uuid?: string | null
+          greeting_audio_url?: string | null
+          greeting_text?: string | null
           hangup_cause?: string | null
           hangup_source?: string | null
           hold_duration_sec?: number | null
@@ -1988,16 +2163,21 @@ export type Database = {
           recording_started_at?: string | null
           recording_stopped_at?: string | null
           recording_url?: string | null
+          result?: string | null
           ring_duration_sec?: number | null
           ring_time_seconds?: number | null
           sip_call_id?: string | null
           sip_response_code?: number | null
           started_at?: string | null
           status?: string | null
+          system_prompt?: string | null
           talk_duration_sec?: number | null
           talk_time_seconds?: number | null
+          telnyx_call_control_id?: string | null
+          telnyx_call_session_id?: string | null
           transfer_count?: number | null
           trunk_id?: string | null
+          voice_key?: string | null
           whatsapp_sent?: boolean | null
           whatsapp_sent_at?: string | null
         }
