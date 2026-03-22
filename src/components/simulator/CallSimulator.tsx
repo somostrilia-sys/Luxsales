@@ -393,6 +393,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
           try { audioCtxRef.current?.close(); } catch { /* */ }
         }
         audioCtxRef.current = null;
+        recorderRef.current = null;
 
         const recElapsed = Date.now() - recStartTimeRef.current;
         if (blob.size > 0 && recElapsed >= MIN_RECORDING_MS && phaseRef.current !== "ended") {
