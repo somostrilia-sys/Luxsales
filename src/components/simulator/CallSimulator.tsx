@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -299,8 +299,9 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   }
 
   // ── Recording: uses the persistent mic stream ──
+  // NOTE: No useCallback — these are plain functions that always read fresh refs
 
-  const stopAndSendRecording = useCallback(() => {
+  function stopAndSendRecording() {
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     animFrameRef.current = 0;
     if (recTimerRef.current) clearInterval(recTimerRef.current);
@@ -312,17 +313,21 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setRecDuration(0);
     setVolumeLevel(0);
     setLowVolumeWarn(false);
-  }, []);
+  }
 
-  const monitorAudio = useCallback(() => {
+  function monitorAudio() {
     const analyser = micAnalyserRef.current;
-    if (!analyser) return;
+    if (!analyser) {
+      console.warn("[monitorAudio] No analyser available");
+      return;
+    }
 
     const dataArray = new Float32Array(analyser.fftSize);
 
     const loop = () => {
+      // Always read fresh ref
       if (!micAnalyserRef.current || !recorderRef.current || recorderRef.current.state !== "recording") return;
-      analyser.getFloatTimeDomainData(dataArray);
+      micAnalyserRef.current.getFloatTimeDomainData(dataArray);
 
       let sumSq = 0;
       for (let i = 0; i < dataArray.length; i++) {
@@ -374,19 +379,23 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     };
 
     animFrameRef.current = requestAnimationFrame(loop);
-  }, [stopAndSendRecording]);
+  }
 
-  const startRecording = useCallback(async () => {
+  async function startRecording() {
     const stream = micStreamRef.current;
     const ctx = micCtxRef.current;
     if (!stream || !ctx) {
-      console.warn("[startRecording] No persistent mic stream");
-      return;
+      console.warn("[startRecording] No persistent mic stream, attempting to init...");
+      await initMicStream();
+      if (!micStreamRef.current || !micCtxRef.current) {
+        console.error("[startRecording] Failed to init mic stream");
+        return;
+      }
     }
 
     // Resume AudioContext if suspended (browser policy)
-    if (ctx.state === "suspended") {
-      await ctx.resume();
+    if (micCtxRef.current!.state === "suspended") {
+      await micCtxRef.current!.resume();
     }
 
     // Clean up previous recorder if any
@@ -412,7 +421,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     }
 
     try {
-      const recorder = new MediaRecorder(stream, { mimeType });
+      const recorder = new MediaRecorder(micStreamRef.current!, { mimeType });
       recorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
@@ -427,9 +436,10 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         recorderRef.current = null;
 
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        // NOTE: We do NOT stop the mic stream — it stays open for the entire call
 
         const recElapsed = Date.now() - recStartTimeRef.current;
+        console.log("[recorder.onstop]", { blobSize: blob.size, recElapsed, speech: speechDetectedRef.current, phase: phaseRef.current });
+
         if (blob.size > 0 && recElapsed >= MIN_RECORDING_MS && phaseRef.current !== "ended") {
           sendAudio(blob);
         } else if (!speechDetectedRef.current && recElapsed >= MIN_RECORDING_MS) {
@@ -442,6 +452,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       recorder.start(250);
       setRecording(true);
       setRecDuration(0);
+      console.log("[startRecording] Recording started, stream active:", micStreamRef.current!.active);
 
       recTimerRef.current = setInterval(() => {
         setRecDuration((d) => d + 1);
@@ -452,9 +463,9 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       console.error("[startRecording] MediaRecorder error:", err);
       toast.error("Erro ao iniciar gravação.");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monitorAudio]);
+  }
 
+  // Keep ref always pointing to latest function
   startRecordingRef.current = startRecording;
 
   // ── VAD during AI playback (uses same persistent mic analyser) ──
@@ -502,6 +513,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   // ── Go to listening: auto-starts recording from persistent stream ──
 
   function goListening() {
+    console.log("[goListening] phase:", phaseRef.current, "autoStart:", autoStartRef.current, "streamActive:", micStreamRef.current?.active);
     setPhase("listening");
     setLiveTranscript("");
     setRecording(false);
@@ -519,6 +531,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     // Auto-start recording from persistent stream
     if (autoStartRef.current) {
       setTimeout(() => {
+        console.log("[goListening timeout] phase:", phaseRef.current, "recorder:", !!recorderRef.current);
         if (phaseRef.current === "listening") {
           startRecordingRef.current();
         }
@@ -526,7 +539,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     }
   }
 
-  const toggleRecording = useCallback(() => {
+  function toggleRecording() {
     if (recording) {
       stopAndSendRecording();
     } else {
@@ -538,7 +551,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       setPhase("listening");
       startRecording();
     }
-  }, [recording, stopAndSendRecording, startRecording]);
+  }
 
   // ── Auth header ──
 
