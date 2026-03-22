@@ -195,16 +195,13 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         }
       }
 
+      // Ignore speech while AI is speaking (mic picks up speaker audio)
+      if (phaseRef.current === "ai_speaking") {
+        return;
+      }
+
       // Show live transcript
       setLiveTranscript(interimText || finalText);
-
-      // Interrupt AI audio immediately on any speech detection
-      if ((interimText || finalText) && phaseRef.current === "ai_speaking" && audioRef.current && !audioRef.current.paused) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        audioRef.current.onended = null;
-        setPhase("listening");
-      }
 
       if (finalText.trim().length > 2) {
         // Clear any pending silence timer
@@ -220,12 +217,6 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
           pendingTextRef.current = "";
           if (text.length > 2 && !loadingRef.current && phaseRef.current !== "ended") {
             setLiveTranscript("");
-            // If AI is speaking, interrupt it
-            if (phaseRef.current === "ai_speaking" && audioRef.current) {
-              audioRef.current.pause();
-              audioRef.current.currentTime = 0;
-              audioRef.current.onended = null;
-            }
             sendVoiceText(text);
           }
         }, 1200);
