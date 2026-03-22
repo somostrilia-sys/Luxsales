@@ -317,6 +317,19 @@ export default function VoiceAI() {
   const [testingQuickCall, setTestingQuickCall] = useState(false);
   const [previewingVoiceKey, setPreviewingVoiceKey] = useState<string | null>(null);
 
+  // Script-level training state (ai_call_scripts)
+  const [scriptId, setScriptId] = useState<string | null>(null);
+  const [scriptTone, setScriptTone] = useState<ScriptTone>("natural_confident");
+  const [forbiddenWords, setForbiddenWords] = useState<string[]>([]);
+  const [forbiddenWordInput, setForbiddenWordInput] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [knowledgeBase, setKnowledgeBase] = useState("");
+  const [salesTechniques, setSalesTechniques] = useState("");
+  const [qualifyingQuestions, setQualifyingQuestions] = useState("");
+  const [scriptObjections, setScriptObjections] = useState<ObjectionItem[]>([]);
+  const [conversationExamples, setConversationExamples] = useState<ConversationExample[]>([]);
+  const [savingScript, setSavingScript] = useState(false);
+
   // (Simulator state moved to CallSimulator component)
 
   // Call player state
