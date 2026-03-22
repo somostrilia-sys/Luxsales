@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Loader2, Mic, PhoneCall, RotateCcw, Send, Volume2 } from "lucide-react";
+import { Loader2, Mic, MicOff, PhoneCall, RotateCcw, Send, Volume2 } from "lucide-react";
 
 // ── Types ──
 
@@ -21,20 +21,10 @@ type SimMessage = {
 };
 
 type CallPhase = "idle" | "ringing" | "connected" | "ai_speaking" | "listening" | "processing" | "ended";
-
 type ProcessingStage = "transcribing" | "thinking" | "synthesizing" | "slow" | null;
 
-type VoiceProfile = {
-  id: string;
-  voice_key: string;
-  name: string;
-};
-
-type LLMProvider = {
-  id: string;
-  name: string;
-  available: boolean;
-};
+type VoiceProfile = { id: string; voice_key: string; name: string };
+type LLMProvider = { id: string; name: string; available: boolean };
 
 interface TrainingContext {
   aiSellerName: string;
@@ -53,15 +43,6 @@ interface CallSimulatorProps {
   selectedVoice: string;
   training: TrainingContext;
 }
-
-// ── Constants ──
-
-const SILENCE_THRESHOLD_DB = -50;
-const SILENCE_DURATION_MS = 500;
-const MIN_RECORDING_MS = 800;
-const MAX_RECORDING_MS = 60000;
-const LOW_VOLUME_WARN_MS = 5000;
-const SPEECH_DETECTED_DB = -48;
 
 // ── Helpers ──
 
@@ -93,7 +74,7 @@ function buildSystemPrompt(t: TrainingContext): string {
 }
 
 const STAGE_LABELS: Record<string, string> = {
-  transcribing: "Transcrevendo áudio...",
+  transcribing: "Processando fala...",
   thinking: "Gerando resposta...",
   synthesizing: "Sintetizando voz...",
   slow: "Processamento demorado, aguarde...",
@@ -105,6 +86,9 @@ const DEFAULT_PROVIDERS: LLMProvider[] = [
   { id: "claude", name: "Claude (Sonnet 4) - Inteligente", available: true },
 ];
 
+const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4";
+const API_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/ai-simulator";
+
 // ── Component ──
 
 export default function CallSimulator({ voiceProfiles, selectedVoice, training }: CallSimulatorProps) {
@@ -112,85 +96,41 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   const [messages, setMessages] = useState<SimMessage[]>([]);
   const [phase, setPhase] = useState<CallPhase>("idle");
   const [duration, setDuration] = useState(0);
-  const [recording, setRecording] = useState(false);
   const [loading, setLoading] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [useText, setUseText] = useState(false);
-  const [recDuration, setRecDuration] = useState(0);
-  const [volumeLevel, setVolumeLevel] = useState(0);
-  const [lowVolumeWarn, setLowVolumeWarn] = useState(false);
   const [processingStage, setProcessingStage] = useState<ProcessingStage>(null);
   const [llmProvider, setLlmProvider] = useState<string>("groq");
   const [providers, setProviders] = useState<LLMProvider[]>(DEFAULT_PROVIDERS);
   const [liveTranscript, setLiveTranscript] = useState<string>("");
+  const [micActive, setMicActive] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const messagesRef = useRef<SimMessage[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const phaseRef = useRef<CallPhase>("idle");
+  const loadingRef = useRef(false);
 
-  // ── SINGLE persistent mic stream for the entire call ──
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const micCtxRef = useRef<AudioContext | null>(null);
-  const micAnalyserRef = useRef<AnalyserNode | null>(null);
-  const micGainRef = useRef<GainNode | null>(null);
-
-  // Recording state
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const silenceStartRef = useRef<number | null>(null);
-  const lowVolStartRef = useRef<number | null>(null);
-  const recStartTimeRef = useRef<number>(0);
-  const animFrameRef = useRef<number>(0);
-  const speechDetectedRef = useRef(false);
-
-  // VAD state (uses same mic stream)
-  const vadActiveRef = useRef(false);
-  const vadFrameRef = useRef<number>(0);
-
-  // Live transcription
+  // Speech recognition — THE primary input method
   const recognitionRef = useRef<any>(null);
-
-  // Hands-free mode
-  const autoStartRef = useRef(false);
-  const startRecordingRef = useRef<() => void>(() => {});
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingTextRef = useRef<string>("");
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { loadingRef.current = loading; }, [loading]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading, liveTranscript]);
 
-  // ── AUTO-START recording via useEffect when phase becomes "listening" ──
-  // This handles the normal case (AI finishes speaking). VAD interruption starts recording directly.
-  useEffect(() => {
-    if (phase === "listening" && autoStartRef.current) {
-      const timer = setTimeout(() => {
-        // Only start if not already recording (VAD might have started it already)
-        if (phaseRef.current === "listening" && !recorderRef.current) {
-          console.log("[useEffect auto-start] Starting recording...");
-          startRecordingRef.current();
-        }
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [phase]);
-
-  // Fetch available providers on mount
+  // Fetch providers
   useEffect(() => {
     (async () => {
       try {
-        const session = await supabase.auth.getSession();
-        const headers: Record<string, string> = {
-          apikey: ANON_KEY,
-          "Content-Type": "application/json",
-        };
-        if (session.data.session?.access_token) {
-          headers.Authorization = `Bearer ${session.data.session.access_token}`;
-        }
+        const headers = await getAuthHeaders();
+        headers["Content-Type"] = "application/json";
         const res = await fetch(API_URL, {
           method: "POST",
           headers,
@@ -202,391 +142,17 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         }
       } catch { /* keep defaults */ }
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     return () => {
-      releaseAllMic();
-      stopLiveTranscription();
+      stopRecognition();
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Persistent mic stream: opened once per call ──
-
-  async function initMicStream() {
-    if (micStreamRef.current) return;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
-      });
-      micStreamRef.current = stream;
-
-      const ctx = new AudioContext();
-      if (ctx.state === "suspended") await ctx.resume();
-      micCtxRef.current = ctx;
-
-      const source = ctx.createMediaStreamSource(stream);
-      const gain = ctx.createGain();
-      gain.gain.value = 1.5;
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.3;
-
-      source.connect(gain);
-      gain.connect(analyser);
-
-      micGainRef.current = gain;
-      micAnalyserRef.current = analyser;
-    } catch {
-      toast.error("Não foi possível acessar o microfone.");
-    }
-  }
-
-  function releaseAllMic() {
-    // Stop any active recording
-    if (recorderRef.current?.state === "recording") {
-      try { recorderRef.current.stop(); } catch { /* */ }
-    }
-    recorderRef.current = null;
-
-    // Stop monitoring loops
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
-    if (recTimerRef.current) clearInterval(recTimerRef.current);
-    vadActiveRef.current = false;
-
-    // Close audio context
-    if (micCtxRef.current?.state !== "closed") {
-      try { micCtxRef.current?.close(); } catch { /* */ }
-    }
-    micCtxRef.current = null;
-    micAnalyserRef.current = null;
-    micGainRef.current = null;
-
-    // Stop mic tracks
-    micStreamRef.current?.getTracks().forEach(t => t.stop());
-    micStreamRef.current = null;
-
-    setRecording(false);
-    setRecDuration(0);
-    setVolumeLevel(0);
-    setLowVolumeWarn(false);
-  }
-
-  // ── Live transcription (Web Speech API) ──
-
-  function startLiveTranscription() {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = "pt-BR";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    recognition.onresult = (event: any) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        interim = event.results[i][0].transcript;
-      }
-      setLiveTranscript(interim);
-    };
-
-    recognition.onerror = () => { /* silent */ };
-    recognition.onend = () => {
-      if (phaseRef.current !== "ended" && phaseRef.current !== "idle" && recognitionRef.current) {
-        try { recognitionRef.current.start(); } catch { /* */ }
-      }
-    };
-
-    recognitionRef.current = recognition;
-    try { recognition.start(); } catch { /* */ }
-  }
-
-  function stopLiveTranscription() {
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch { /* */ }
-      recognitionRef.current = null;
-    }
-    setLiveTranscript("");
-  }
-
-  // ── Recording: uses the persistent mic stream ──
-  // NOTE: No useCallback — these are plain functions that always read fresh refs
-
-  function stopAndSendRecording() {
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    animFrameRef.current = 0;
-    if (recTimerRef.current) clearInterval(recTimerRef.current);
-    recTimerRef.current = null;
-    if (recorderRef.current?.state === "recording") {
-      recorderRef.current.stop();
-    }
-    setRecording(false);
-    setRecDuration(0);
-    setVolumeLevel(0);
-    setLowVolumeWarn(false);
-  }
-
-  function monitorAudio() {
-    const analyser = micAnalyserRef.current;
-    if (!analyser) {
-      console.warn("[monitorAudio] No analyser available");
-      return;
-    }
-
-    const dataArray = new Float32Array(analyser.fftSize);
-
-    const loop = () => {
-      // Always read fresh ref
-      if (!micAnalyserRef.current || !recorderRef.current || recorderRef.current.state !== "recording") return;
-      micAnalyserRef.current.getFloatTimeDomainData(dataArray);
-
-      let sumSq = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        sumSq += dataArray[i] * dataArray[i];
-      }
-      const rms = Math.sqrt(sumSq / dataArray.length);
-      const db = rms > 0 ? 20 * Math.log10(rms) : -100;
-
-      const normalized = Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
-      setVolumeLevel(normalized);
-
-      const elapsed = Date.now() - recStartTimeRef.current;
-      const isAboveThreshold = db > SILENCE_THRESHOLD_DB;
-      const isSpeech = db > SPEECH_DETECTED_DB;
-
-      if (isSpeech && !speechDetectedRef.current) {
-        speechDetectedRef.current = true;
-      }
-
-      if (normalized < 5) {
-        if (!lowVolStartRef.current) lowVolStartRef.current = Date.now();
-        if (Date.now() - lowVolStartRef.current > LOW_VOLUME_WARN_MS) {
-          setLowVolumeWarn(true);
-        }
-      } else {
-        lowVolStartRef.current = null;
-        setLowVolumeWarn(false);
-      }
-
-      if (elapsed >= MIN_RECORDING_MS) {
-        if (isAboveThreshold) {
-          silenceStartRef.current = null;
-        } else {
-          if (!silenceStartRef.current) {
-            silenceStartRef.current = Date.now();
-          } else if (Date.now() - silenceStartRef.current >= SILENCE_DURATION_MS && speechDetectedRef.current) {
-            stopAndSendRecording();
-            return;
-          }
-        }
-      }
-
-      if (elapsed >= MAX_RECORDING_MS) {
-        stopAndSendRecording();
-        return;
-      }
-
-      animFrameRef.current = requestAnimationFrame(loop);
-    };
-
-    animFrameRef.current = requestAnimationFrame(loop);
-  }
-
-  async function startRecording() {
-    // Ensure we have a live mic stream
-    if (!micStreamRef.current || !micStreamRef.current.active || !micCtxRef.current) {
-      console.warn("[startRecording] Mic stream dead or missing, re-initializing...");
-      // Clean up dead refs
-      micStreamRef.current = null;
-      if (micCtxRef.current?.state !== "closed") {
-        try { micCtxRef.current?.close(); } catch { /* */ }
-      }
-      micCtxRef.current = null;
-      micAnalyserRef.current = null;
-      micGainRef.current = null;
-      await initMicStream();
-    }
-
-    if (!micStreamRef.current || !micCtxRef.current) {
-      console.error("[startRecording] Failed to get mic stream");
-      return;
-    }
-
-    // Resume AudioContext if suspended (browser policy)
-    if (micCtxRef.current.state === "suspended") {
-      await micCtxRef.current.resume();
-      console.log("[startRecording] AudioContext resumed");
-    }
-
-    // Clean up previous recorder if any
-    if (recorderRef.current) {
-      if (recorderRef.current.state === "recording") {
-        try { recorderRef.current.stop(); } catch { /* */ }
-      }
-      recorderRef.current = null;
-    }
-
-    chunksRef.current = [];
-    silenceStartRef.current = null;
-    lowVolStartRef.current = null;
-    speechDetectedRef.current = false;
-    recStartTimeRef.current = Date.now();
-
-    let mimeType = "audio/webm;codecs=opus";
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
-      mimeType = "audio/webm";
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = "audio/wav";
-      }
-    }
-
-    try {
-      const recorder = new MediaRecorder(micStreamRef.current!, { mimeType });
-      recorderRef.current = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-        animFrameRef.current = 0;
-        if (recTimerRef.current) clearInterval(recTimerRef.current);
-        recTimerRef.current = null;
-        recorderRef.current = null;
-
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-
-        const recElapsed = Date.now() - recStartTimeRef.current;
-        console.log("[recorder.onstop]", { blobSize: blob.size, recElapsed, speech: speechDetectedRef.current, phase: phaseRef.current });
-
-        if (blob.size > 0 && recElapsed >= MIN_RECORDING_MS && phaseRef.current !== "ended") {
-          sendAudio(blob);
-        } else if (!speechDetectedRef.current && recElapsed >= MIN_RECORDING_MS) {
-          if (phaseRef.current !== "ended") goListening();
-        } else if (recElapsed < MIN_RECORDING_MS && !speechDetectedRef.current) {
-          if (phaseRef.current !== "ended") goListening();
-        }
-      };
-
-      recorder.start(250);
-      setRecording(true);
-      setRecDuration(0);
-      console.log("[startRecording] Recording started, stream active:", micStreamRef.current!.active);
-
-      recTimerRef.current = setInterval(() => {
-        setRecDuration((d) => d + 1);
-      }, 1000);
-
-      monitorAudio();
-    } catch (err) {
-      console.error("[startRecording] MediaRecorder error:", err);
-      toast.error("Erro ao iniciar gravação.");
-    }
-  }
-
-  // Keep ref always pointing to latest function
-  startRecordingRef.current = startRecording;
-
-  // ── VAD during AI playback (uses same persistent mic analyser) ──
-
-  function startVADDuringPlayback() {
-    const analyser = micAnalyserRef.current;
-    if (!analyser || vadActiveRef.current) return;
-    vadActiveRef.current = true;
-
-    const data = new Float32Array(analyser.fftSize);
-    let speechFrames = 0;
-
-    const check = () => {
-      if (!vadActiveRef.current || phaseRef.current !== "ai_speaking") {
-        vadActiveRef.current = false;
-        return;
-      }
-      analyser.getFloatTimeDomainData(data);
-      let sum = 0;
-      for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
-      const db = 20 * Math.log10(Math.sqrt(sum / data.length) || 1e-10);
-
-      if (db > -35) {
-        speechFrames++;
-        if (speechFrames > 8) {
-          vadActiveRef.current = false;
-          if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
-          vadFrameRef.current = 0;
-          // Stop AI audio
-          if (audioRef.current && !audioRef.current.paused) {
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
-            audioRef.current.onended = null;
-          }
-          // Start recording IMMEDIATELY — user is already speaking, no delay
-          if (recorderRef.current) {
-            if (recorderRef.current.state === "recording") {
-              try { recorderRef.current.stop(); } catch { /* */ }
-            }
-            recorderRef.current = null;
-          }
-          if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-          animFrameRef.current = 0;
-          setRecording(false);
-          setLiveTranscript("");
-          setPhase("listening");
-          // No delay — start recording right now since user is already talking
-          startRecordingRef.current();
-          return;
-        }
-      } else {
-        speechFrames = Math.max(0, speechFrames - 1);
-      }
-      vadFrameRef.current = requestAnimationFrame(check);
-    };
-    vadFrameRef.current = requestAnimationFrame(check);
-  }
-
-  // ── Go to listening: auto-starts recording from persistent stream ──
-
-  function goListening() {
-    console.log("[goListening] autoStart:", autoStartRef.current, "streamActive:", micStreamRef.current?.active, "ctxState:", micCtxRef.current?.state);
-
-    // Stop any active recorder without stopping the mic stream
-    if (recorderRef.current) {
-      if (recorderRef.current.state === "recording") {
-        try { recorderRef.current.stop(); } catch { /* */ }
-      }
-      recorderRef.current = null;
-    }
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    animFrameRef.current = 0;
-    setRecording(false);
-    setLiveTranscript("");
-
-    // Setting phase triggers useEffect auto-start
-    setPhase("listening");
-  }
-
-  function toggleRecording() {
-    if (recording) {
-      stopAndSendRecording();
-    } else {
-      if (audioRef.current && !audioRef.current.paused) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        audioRef.current.onended = null;
-      }
-      setPhase("listening");
-      startRecording();
-    }
-  }
-
-  // ── Auth header ──
-
-  const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4";
-  const API_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/ai-simulator";
+  // ── Auth ──
 
   async function getAuthHeaders(): Promise<Record<string, string>> {
     const session = await supabase.auth.getSession();
@@ -597,80 +163,126 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     return h;
   }
 
+  // ── Speech Recognition: continuous, handles everything ──
+
+  function startRecognition() {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      toast.error("Seu navegador não suporta reconhecimento de voz. Use Chrome.");
+      return;
+    }
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* */ }
+    }
+
+    const recognition = new SR();
+    recognition.lang = "pt-BR";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event: any) => {
+      let finalText = "";
+      let interimText = "";
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalText += transcript;
+        } else {
+          interimText += transcript;
+        }
+      }
+
+      // Show live transcript
+      setLiveTranscript(interimText || finalText);
+
+      if (finalText.trim().length > 2) {
+        // Clear any pending silence timer
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+        // Accumulate text (user might speak in multiple segments)
+        pendingTextRef.current += (pendingTextRef.current ? " " : "") + finalText.trim();
+
+        // Wait 1.2s of silence after final result before sending
+        // This lets the user finish their full thought
+        silenceTimerRef.current = setTimeout(() => {
+          const text = pendingTextRef.current.trim();
+          pendingTextRef.current = "";
+          if (text.length > 2 && !loadingRef.current && phaseRef.current !== "ended") {
+            setLiveTranscript("");
+            // If AI is speaking, interrupt it
+            if (phaseRef.current === "ai_speaking" && audioRef.current) {
+              audioRef.current.pause();
+              audioRef.current.currentTime = 0;
+              audioRef.current.onended = null;
+            }
+            sendVoiceText(text);
+          }
+        }, 1200);
+      }
+    };
+
+    recognition.onerror = (e: any) => {
+      console.log("[recognition error]", e.error);
+      if (e.error === "not-allowed") {
+        toast.error("Permissão do microfone negada.");
+        setMicActive(false);
+        return;
+      }
+      // Auto-restart on other errors
+      if (phaseRef.current !== "ended" && phaseRef.current !== "idle") {
+        setTimeout(() => {
+          if (phaseRef.current !== "ended" && phaseRef.current !== "idle") {
+            try { recognitionRef.current?.start(); } catch { /* */ }
+          }
+        }, 500);
+      }
+    };
+
+    recognition.onend = () => {
+      // Auto-restart if call is still active
+      if (phaseRef.current !== "ended" && phaseRef.current !== "idle" && recognitionRef.current) {
+        try { recognitionRef.current.start(); } catch { /* */ }
+      } else {
+        setMicActive(false);
+      }
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setMicActive(true);
+    } catch {
+      toast.error("Erro ao iniciar microfone.");
+    }
+  }
+
+  function stopRecognition() {
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    pendingTextRef.current = "";
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* */ }
+      recognitionRef.current = null;
+    }
+    setMicActive(false);
+    setLiveTranscript("");
+  }
+
   // ── Processing stages ──
 
   function startProcessingStages() {
     setProcessingStage("transcribing");
-    const t1 = setTimeout(() => setProcessingStage("thinking"), 2000);
-    const t2 = setTimeout(() => setProcessingStage("synthesizing"), 5000);
+    const t1 = setTimeout(() => setProcessingStage("thinking"), 1500);
+    const t2 = setTimeout(() => setProcessingStage("synthesizing"), 4000);
     const t3 = setTimeout(() => setProcessingStage("slow"), 12000);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }
 
-  // ── Send audio ──
+  // ── Send voice text (from speech recognition) ──
 
-  async function sendAudio(blob: Blob) {
-    setPhase("processing");
-    setLoading(true);
-    const cleanupStages = startProcessingStages();
-
-    try {
-      const formData = new FormData();
-      formData.append("audio", blob, "audio.webm");
-      formData.append("voice_key", voiceKey || selectedVoice || "default");
-      formData.append("system_prompt", buildSystemPrompt(training));
-      formData.append("llm_provider", llmProvider);
-      formData.append("history", JSON.stringify(
-        messagesRef.current.map((m) => ({ role: m.role, text: m.content }))
-      ));
-      formData.append("context", JSON.stringify({
-        vendor_name: training.aiSellerName,
-        product: training.product,
-        tone: training.voiceTone,
-        objective: training.callGoal,
-      }));
-
-      const headers = await getAuthHeaders();
-      const res = await fetch(API_URL, {
-        method: "POST",
-        headers,
-        body: formData,
-      });
-
-      const result = await res.json();
-      if (!res.ok) throw new Error(result?.error || "Erro na simulação");
-
-      if (result.silence === true) {
-        goListening();
-        return;
-      }
-      if (result.hallucination === true || result.error === "No speech detected" || result.no_speech) {
-        if (!autoStartRef.current) {
-          toast.warning("Não consegui entender. Tente falar mais alto e próximo ao microfone.", { duration: 4000 });
-        }
-        goListening();
-        return;
-      }
-
-      setLiveTranscript("");
-      handleAIResponse(result);
-    } catch (err) {
-      console.error(err);
-      toast.error(err instanceof Error ? err.message : "Erro na simulação");
-      goListening();
-    } finally {
-      setLoading(false);
-      setProcessingStage(null);
-      cleanupStages();
-    }
-  }
-
-  // ── Send text ──
-
-  async function sendText() {
-    const text = textInput.trim();
-    if (!text || loading) return;
-
+  async function sendVoiceText(text: string) {
     const userMsg: SimMessage = {
       id: crypto.randomUUID(),
       role: "user",
@@ -678,9 +290,8 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       timestamp: now(),
     };
 
-    const updated = [...messages, userMsg];
+    const updated = [...messagesRef.current, userMsg];
     setMessages(updated);
-    setTextInput("");
     setPhase("processing");
     setLoading(true);
     const cleanupStages = startProcessingStages();
@@ -711,11 +322,11 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       const result = await res.json();
       if (!res.ok) throw new Error(result?.error || "Erro na simulação");
 
-      handleAIResponse(result, true);
+      handleAIResponse(result);
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Erro na simulação");
-      goListening();
+      setPhase("listening");
     } finally {
       setLoading(false);
       setProcessingStage(null);
@@ -723,22 +334,19 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     }
   }
 
+  // ── Send typed text ──
+
+  async function sendText() {
+    const text = textInput.trim();
+    if (!text || loading) return;
+    setTextInput("");
+    await sendVoiceText(text);
+  }
+
   // ── Handle AI response ──
 
-  function handleAIResponse(result: Record<string, string | boolean | null>, skipUserBubble = false) {
+  function handleAIResponse(result: Record<string, string | boolean | null>) {
     const ts = now();
-    const newMsgs: SimMessage[] = [];
-
-    const userText = (result.user_text || result.lead_transcript) as string | undefined;
-    if (userText && !skipUserBubble) {
-      newMsgs.push({
-        id: crypto.randomUUID(),
-        role: "user",
-        content: userText,
-        timestamp: ts,
-      });
-    }
-
     const agentText = (result.text || result.response || "") as string;
     const agentAudio = (result.audioUrl || result.audio_url
       || (result.audio ? `data:audio/mpeg;base64,${result.audio}` : undefined)
@@ -746,37 +354,27 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       || (result.audio_base64 ? `data:audio/mpeg;base64,${result.audio_base64}` : undefined)) as string | undefined;
 
     if (agentText) {
-      newMsgs.push({
+      setMessages((prev) => [...prev, {
         id: crypto.randomUUID(),
         role: "agent",
         content: agentText,
         timestamp: ts,
         audioUrl: agentAudio || undefined,
-      });
+      }]);
     }
-
-    setMessages((prev) => [...prev, ...newMsgs]);
 
     if (agentAudio && audioRef.current) {
       setPhase("ai_speaking");
       audioRef.current.src = agentAudio;
       audioRef.current.onended = () => {
         if (phaseRef.current !== "ended") {
-          goListening();
+          setPhase("listening");
         }
       };
-      audioRef.current.onerror = () => goListening();
-      audioRef.current.play().catch(() => goListening());
-
-      // Start VAD to detect user interruption during AI playback
-      if (autoStartRef.current) {
-        vadActiveRef.current = false;
-        if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
-        vadFrameRef.current = 0;
-        setTimeout(() => startVADDuringPlayback(), 100);
-      }
+      audioRef.current.onerror = () => setPhase("listening");
+      audioRef.current.play().catch(() => setPhase("listening"));
     } else {
-      goListening();
+      setPhase("listening");
     }
   }
 
@@ -791,11 +389,9 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setPhase("ringing");
     setMessages([]);
     setDuration(0);
-    autoStartRef.current = true;
 
-    // Open ONE persistent mic stream for the entire call
-    await initMicStream();
-    startLiveTranscription();
+    // Start speech recognition — this is the mic
+    startRecognition();
 
     await new Promise((r) => setTimeout(r, 500));
     setPhase("connected");
@@ -823,11 +419,12 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
       const result = await res.json();
       if (!res.ok) throw new Error(result?.error || "Erro ao iniciar");
 
-      handleAIResponse(result, true);
+      handleAIResponse(result);
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Erro ao iniciar chamada");
       setPhase("idle");
+      stopRecognition();
     } finally {
       setLoading(false);
     }
@@ -836,11 +433,9 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   // ── End call ──
 
   function endCall() {
-    autoStartRef.current = false;
     setPhase("ended");
     if (timerRef.current) clearInterval(timerRef.current);
-    releaseAllMic();
-    stopLiveTranscription();
+    stopRecognition();
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -876,7 +471,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
             Simulador de Ligação IA
           </CardTitle>
           <CardDescription>
-            Simule uma ligação real com o Agente IA. O microfone fica aberto automaticamente — fale e ouça a resposta em áudio.
+            Simule uma ligação real com o Agente IA. Fale naturalmente — o microfone fica aberto e reconhece sua voz automaticamente.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -941,10 +536,16 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
               {phase === "ringing" && "Chamando..."}
               {phase === "connected" && "Conectado"}
               {phase === "ai_speaking" && `${agentName} falando...`}
-              {phase === "listening" && (recording ? "Ouvindo..." : "Sua vez de falar")}
+              {phase === "listening" && "Fale agora..."}
               {phase === "processing" && (processingStage ? STAGE_LABELS[processingStage] : "Processando...")}
               {phase === "ended" && "Chamada encerrada"}
             </span>
+            {micActive && phase !== "ended" && (
+              <Badge variant="secondary" className="text-[10px] gap-1">
+                <Mic className="h-3 w-3 text-red-500 animate-pulse" />
+                Mic ativo
+              </Badge>
+            )}
             {phase !== "ended" && phase !== "idle" && phase !== "ringing" && (
               <Badge variant="secondary" className="text-[10px]">
                 {providers.find(p => p.id === llmProvider)?.name || llmProvider}
@@ -1006,7 +607,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
           ))}
 
           {/* Live transcription bubble */}
-          {liveTranscript && phase === "listening" && (
+          {liveTranscript && (phase === "listening" || phase === "ai_speaking") && (
             <div className="flex justify-end">
               <div className="max-w-[75%] rounded-2xl px-4 py-2.5 bg-primary/30 text-primary-foreground rounded-br-md border border-primary/40">
                 <div className="flex items-center gap-2 mb-0.5">
@@ -1049,49 +650,24 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
             {!useText ? (
               <div className="flex flex-col items-center gap-3">
                 <p className="text-xs text-muted-foreground">
-                  {recording ? `Ouvindo... ${formatTime(recDuration)}` :
-                   phase === "ai_speaking" ? "Fale para interromper a IA" :
+                  {phase === "ai_speaking" ? "Fale a qualquer momento para interromper" :
                    phase === "processing" ? "Processando..." :
-                   "Microfone aberto — fale quando quiser"}
+                   loading ? "Aguarde..." :
+                   "Microfone aberto — fale naturalmente"}
                 </p>
 
-                {recording && (
-                  <div className="w-48 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-100 ${
-                            volumeLevel > 50 ? "bg-green-500" :
-                            volumeLevel > 20 ? "bg-yellow-500" : "bg-red-500"
-                          }`}
-                          style={{ width: `${volumeLevel}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] text-muted-foreground w-8 text-right font-mono">
-                        {Math.round(volumeLevel)}%
-                      </span>
-                    </div>
-                    {lowVolumeWarn && (
-                      <p className="text-[10px] text-yellow-500 text-center animate-pulse">
-                        Fale mais perto do microfone
-                      </p>
+                <div className="flex items-center gap-3">
+                  <div className={`h-16 w-16 rounded-full flex items-center justify-center transition-all ${
+                    micActive
+                      ? "bg-green-500/20 ring-2 ring-green-500/50"
+                      : "bg-muted"
+                  }`}>
+                    {micActive ? (
+                      <Mic className="h-6 w-6 text-green-500 animate-pulse" />
+                    ) : (
+                      <MicOff className="h-6 w-6 text-muted-foreground" />
                     )}
                   </div>
-                )}
-
-                <div className="flex items-center gap-3">
-                  <Button
-                    size="lg"
-                    variant={recording ? "destructive" : "default"}
-                    className={`h-16 w-16 rounded-full transition-all ${
-                      recording ? "animate-pulse ring-4 ring-destructive/30" :
-                      phase === "listening" ? "ring-2 ring-green-500/50" : ""
-                    }`}
-                    disabled={phase === "processing" || loading}
-                    onClick={toggleRecording}
-                  >
-                    <Mic className={`h-6 w-6 ${recording ? "text-white" : ""}`} />
-                  </Button>
                 </div>
                 <button className="text-xs text-muted-foreground underline" onClick={() => setUseText(true)}>
                   Ou digite texto
