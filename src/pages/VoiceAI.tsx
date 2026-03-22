@@ -38,6 +38,7 @@ import {
   Users,
   Volume2,
   Waves,
+  X,
 } from "lucide-react";
 
 type Produto = "Objetivo" | "Trilia";
