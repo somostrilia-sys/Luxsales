@@ -376,8 +376,29 @@ export default function VoiceAI() {
       const normalizedVoices = (voicesRaw ?? []).map(normalizeVoice).filter((item: VoiceProfile) => item.voice_key);
       const normalizedCampaigns = (campaignsRaw ?? []).map(normalizeCampaign);
       const normalizedLogs = (logsRaw ?? []).map(normalizeLog);
-      // AI call scripts and analytics are available from the new tables
-      console.log(`Loaded: ${(scriptsRaw ?? []).length} AI scripts, ${(analyticsRaw ?? []).length} analytics records`);
+      // Load latest AI call script for training tabs
+      const scripts = scriptsRaw ?? [];
+      console.log(`Loaded: ${scripts.length} AI scripts, ${(analyticsRaw ?? []).length} analytics records`);
+      if (scripts.length > 0) {
+        const latest = scripts.sort((a: any, b: any) => (b.updated_at || b.created_at || "").localeCompare(a.updated_at || a.created_at || ""))[0] as any;
+        setScriptId(latest.id);
+        setScriptTone(latest.tone || "natural_confident");
+        setForbiddenWords(Array.isArray(latest.forbidden_words) ? latest.forbidden_words : []);
+        setSystemPrompt(latest.system_prompt || "");
+        setKnowledgeBase(latest.knowledge_base || "");
+        setSalesTechniques(latest.sales_techniques || "");
+        setQualifyingQuestions(latest.qualifying_questions || "");
+        setScriptObjections(
+          Array.isArray(latest.objection_handlers)
+            ? (latest.objection_handlers as any[]).map((o: any) => ({ id: crypto.randomUUID(), objection: o.objection ?? "", response: o.response ?? "" }))
+            : []
+        );
+        setConversationExamples(
+          Array.isArray(latest.conversation_examples)
+            ? (latest.conversation_examples as any[]).map((e: any) => ({ id: crypto.randomUUID(), lead_says: e.lead_says ?? "", agent_responds: e.agent_responds ?? "" }))
+            : []
+        );
+      }
 
       setVoiceProfiles(normalizedVoices);
       setCampaigns(normalizedCampaigns);
