@@ -164,6 +164,19 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading, liveTranscript]);
 
+  // ── AUTO-START recording via useEffect when phase becomes "listening" ──
+  useEffect(() => {
+    if (phase === "listening" && autoStartRef.current) {
+      const timer = setTimeout(() => {
+        if (phaseRef.current === "listening" && !recorderRef.current) {
+          console.log("[useEffect auto-start] Starting recording...");
+          startRecordingRef.current();
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [phase]);
+
   // Fetch available providers on mount
   useEffect(() => {
     (async () => {
@@ -382,20 +395,29 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   }
 
   async function startRecording() {
-    const stream = micStreamRef.current;
-    const ctx = micCtxRef.current;
-    if (!stream || !ctx) {
-      console.warn("[startRecording] No persistent mic stream, attempting to init...");
-      await initMicStream();
-      if (!micStreamRef.current || !micCtxRef.current) {
-        console.error("[startRecording] Failed to init mic stream");
-        return;
+    // Ensure we have a live mic stream
+    if (!micStreamRef.current || !micStreamRef.current.active || !micCtxRef.current) {
+      console.warn("[startRecording] Mic stream dead or missing, re-initializing...");
+      // Clean up dead refs
+      micStreamRef.current = null;
+      if (micCtxRef.current?.state !== "closed") {
+        try { micCtxRef.current?.close(); } catch { /* */ }
       }
+      micCtxRef.current = null;
+      micAnalyserRef.current = null;
+      micGainRef.current = null;
+      await initMicStream();
+    }
+
+    if (!micStreamRef.current || !micCtxRef.current) {
+      console.error("[startRecording] Failed to get mic stream");
+      return;
     }
 
     // Resume AudioContext if suspended (browser policy)
-    if (micCtxRef.current!.state === "suspended") {
-      await micCtxRef.current!.resume();
+    if (micCtxRef.current.state === "suspended") {
+      await micCtxRef.current.resume();
+      console.log("[startRecording] AudioContext resumed");
     }
 
     // Clean up previous recorder if any
@@ -513,10 +535,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   // ── Go to listening: auto-starts recording from persistent stream ──
 
   function goListening() {
-    console.log("[goListening] phase:", phaseRef.current, "autoStart:", autoStartRef.current, "streamActive:", micStreamRef.current?.active);
-    setPhase("listening");
-    setLiveTranscript("");
-    setRecording(false);
+    console.log("[goListening] autoStart:", autoStartRef.current, "streamActive:", micStreamRef.current?.active, "ctxState:", micCtxRef.current?.state);
 
     // Stop any active recorder without stopping the mic stream
     if (recorderRef.current) {
@@ -527,16 +546,11 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     }
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     animFrameRef.current = 0;
+    setRecording(false);
+    setLiveTranscript("");
 
-    // Auto-start recording from persistent stream
-    if (autoStartRef.current) {
-      setTimeout(() => {
-        console.log("[goListening timeout] phase:", phaseRef.current, "recorder:", !!recorderRef.current);
-        if (phaseRef.current === "listening") {
-          startRecordingRef.current();
-        }
-      }, 300);
-    }
+    // Setting phase triggers useEffect auto-start
+    setPhase("listening");
   }
 
   function toggleRecording() {
