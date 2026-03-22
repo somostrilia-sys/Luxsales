@@ -482,6 +482,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         speechFrames++;
         if (speechFrames > 8) {
           vadActiveRef.current = false;
+          if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
           if (audioRef.current && !audioRef.current.paused) {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
@@ -502,13 +503,30 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   function goListening() {
     setPhase("listening");
     setLiveTranscript("");
+    // Clean up any stale recording state before auto-starting
+    if (recorderRef.current) {
+      if (recorderRef.current.state !== "inactive") {
+        try { recorderRef.current.stop(); } catch { /* */ }
+      }
+      recorderRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    if (audioCtxRef.current?.state !== "closed") {
+      try { audioCtxRef.current?.close(); } catch { /* */ }
+    }
+    audioCtxRef.current = null;
+    analyserRef.current = null;
+    setRecording(false);
     // Always auto-start in hands-free mode
     if (autoStartRef.current) {
       setTimeout(() => {
-        if (phaseRef.current === "listening" && !recorderRef.current) {
+        if (phaseRef.current === "listening") {
           startRecordingRef.current();
         }
-      }, 400);
+      }, 300);
     }
   }
 
