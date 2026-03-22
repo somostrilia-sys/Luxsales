@@ -3,23 +3,59 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { supabase } from "@/lib/supabase";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
-  Plus, Play, Pause, Edit, Loader2, Target, TrendingUp, Activity,
+  Plus, Play, Pause, Edit, Loader2, Target, Activity,
   PhoneCall, Megaphone, Clock,
 } from "lucide-react";
+
+type Campaign = {
+  id: string;
+  name: string;
+  voice_key: string | null;
+  product: string | null;
+  status: string | null;
+  daily_limit: number | null;
+  schedule_start: string | null;
+  schedule_end: string | null;
+  ai_seller_name: string | null;
+  voice_tone: string | null;
+  opening_script: string | null;
+  development_script: string | null;
+  closing_script: string | null;
+  objections: unknown;
+  rules: string | null;
+  call_goal: string | null;
+  created_at: string | null;
+};
+
+type CampaignForm = {
+  name: string;
+  product: string;
+  voice_key: string;
+  daily_limit: string;
+  schedule_start: string;
+  schedule_end: string;
+  status: string;
+};
+
+const initialForm: CampaignForm = {
+  name: "",
+  product: "Objetivo",
+  voice_key: "",
+  daily_limit: "50",
+  schedule_start: "08:00",
+  schedule_end: "18:00",
+  status: "draft",
+};
 
 const statusColor = (s: string) => {
   if (s === "active") return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
@@ -32,161 +68,176 @@ const statusLabel = (s: string) => {
   return m[s] ?? s;
 };
 
-const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const formatDate = (value?: string | null) => {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("pt-BR");
+};
+
+const normalizeCampaign = (item: any): Campaign => ({
+  id: String(item.id),
+  name: item.name ?? "Campanha sem nome",
+  voice_key: item.voice_key ?? null,
+  product: item.product ?? null,
+  status: item.status ?? "draft",
+  daily_limit: typeof item.daily_limit === "number" ? item.daily_limit : Number(item.daily_limit ?? 0),
+  schedule_start: item.schedule_start ?? null,
+  schedule_end: item.schedule_end ?? null,
+  ai_seller_name: item.ai_seller_name ?? null,
+  voice_tone: item.voice_tone ?? null,
+  opening_script: item.opening_script ?? null,
+  development_script: item.development_script ?? null,
+  closing_script: item.closing_script ?? null,
+  objections: item.objections ?? null,
+  rules: item.rules ?? null,
+  call_goal: item.call_goal ?? null,
+  created_at: item.created_at ?? null,
+});
 
 export default function CallCampaigns() {
   const { collaborator } = useCollaborator();
-  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+  const [editForm, setEditForm] = useState<CampaignForm>(initialForm);
 
-  // Form state
-  const [form, setForm] = useState({
-    name: "", dialer_mode: "manual", ai_enabled: false, ai_prompt: "",
-    whatsapp_followup: false, whatsapp_template: "", schedule_start: "08:00",
-    schedule_end: "18:00", max_retry: 3, calls_per_agent: 1,
-    allowed_days: [1, 2, 3, 4, 5] as number[],
-  });
+  // Create form state
+  const [form, setForm] = useState<CampaignForm>(initialForm);
 
   useEffect(() => { loadCampaigns(); }, [collaborator]);
 
   const loadCampaigns = async () => {
     setLoading(true);
-    const companyId = collaborator?.company_id;
-    if (!companyId) { setLoading(false); return; }
     const { data, error } = await supabase
-      .from("campaigns")
+      .from("call_campaigns")
       .select("*")
-      .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     if (error) { console.error(error); toast.error("Erro ao carregar campanhas."); }
-    setCampaigns(data ?? []);
+    setCampaigns((data ?? []).map(normalizeCampaign));
     setLoading(false);
   };
 
   const createCampaign = async () => {
     setSaving(true);
-    const companyId = collaborator?.company_id;
-    if (!companyId) { toast.error("Empresa não encontrada."); setSaving(false); return; }
-    const { error } = await supabase.from("campaigns").insert({
-      company_id: companyId,
-      name: form.name,
-      dialer_mode: form.dialer_mode,
-      ai_enabled: form.ai_enabled,
-      ai_prompt: form.ai_prompt || null,
-      whatsapp_followup: form.whatsapp_followup,
-      whatsapp_template: form.whatsapp_template || null,
-      schedule_start: form.schedule_start,
-      schedule_end: form.schedule_end,
-      max_retry: form.max_retry,
-      calls_per_agent: form.calls_per_agent,
-      allowed_days: form.allowed_days,
-      status: "draft",
-    } as any);
-    if (error) { console.error(error); toast.error("Erro ao criar campanha."); }
-    else {
+    try {
+      const payload = {
+        name: form.name,
+        product: form.product,
+        voice_key: form.voice_key || null,
+        daily_limit: Number(form.daily_limit || 0),
+        schedule_start: form.schedule_start,
+        schedule_end: form.schedule_end,
+        status: "draft",
+      };
+      const { error } = await supabase.from("call_campaigns").insert(payload as never);
+      if (error) throw error;
       toast.success("Campanha criada com sucesso!");
       setCreateOpen(false);
-      setForm({ name: "", dialer_mode: "manual", ai_enabled: false, ai_prompt: "", whatsapp_followup: false, whatsapp_template: "", schedule_start: "08:00", schedule_end: "18:00", max_retry: 3, calls_per_agent: 1, allowed_days: [1, 2, 3, 4, 5] });
+      setForm(initialForm);
       await loadCampaigns();
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao criar campanha.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
+  };
+
+  const updateCampaign = async () => {
+    if (!editingCampaign) return;
+    setSaving(true);
+    try {
+      const payload = {
+        name: editForm.name,
+        product: editForm.product,
+        voice_key: editForm.voice_key || null,
+        daily_limit: Number(editForm.daily_limit || 0),
+        status: editForm.status,
+      };
+      const { error } = await supabase
+        .from("call_campaigns")
+        .update(payload as never)
+        .eq("id", editingCampaign.id);
+      if (error) throw error;
+      toast.success("Campanha atualizada com sucesso!");
+      setEditOpen(false);
+      setEditingCampaign(null);
+      await loadCampaigns();
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao atualizar campanha.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEditDialog = (c: Campaign) => {
+    setEditingCampaign(c);
+    setEditForm({
+      name: c.name,
+      product: c.product ?? "",
+      voice_key: c.voice_key ?? "",
+      daily_limit: String(c.daily_limit ?? 50),
+      schedule_start: c.schedule_start ?? "08:00",
+      schedule_end: c.schedule_end ?? "18:00",
+      status: c.status ?? "draft",
+    });
+    setEditOpen(true);
   };
 
   const toggleStatus = async (id: string, current: string) => {
     const newStatus = current === "active" ? "paused" : "active";
-    const { error } = await supabase.from("campaigns").update({ status: newStatus }).eq("id", id);
+    const { error } = await supabase.from("call_campaigns").update({ status: newStatus } as never).eq("id", id);
     if (error) toast.error("Erro ao atualizar status.");
     else { toast.success(`Campanha ${newStatus === "active" ? "iniciada" : "pausada"}.`); await loadCampaigns(); }
-  };
-
-  const toggleDay = (day: number) => {
-    setForm(f => ({
-      ...f,
-      allowed_days: f.allowed_days.includes(day)
-        ? f.allowed_days.filter(d => d !== day)
-        : [...f.allowed_days, day].sort(),
-    }));
   };
 
   // Stats
   const totalCampaigns = campaigns.length;
   const activeCampaigns = campaigns.filter(c => c.status === "active").length;
-  const totalCalled = campaigns.reduce((s, c) => s + (c.total_called ?? 0), 0);
-  const totalQualified = campaigns.reduce((s, c) => s + (c.total_qualified ?? 0), 0);
+  const draftCampaigns = campaigns.filter(c => c.status === "draft").length;
+  const pausedCampaigns = campaigns.filter(c => c.status === "paused").length;
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <PageHeader title="Campanhas" subtitle="Gerencie campanhas de discagem automática com IA">
+        <PageHeader title="Campanhas" subtitle="Gerencie campanhas de ligação com IA">
+          {/* Create Dialog */}
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
               <Button className="bg-emerald-600 hover:bg-emerald-700 text-white"><Plus className="h-4 w-4 mr-1.5" />Nova Campanha</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Nova Campanha</DialogTitle></DialogHeader>
-              <div className="space-y-5">
+              <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Nome da Campanha</Label>
-                  <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex: Prospecção Março" />
+                  <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex: Reativação Março" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Modo do Discador</Label>
-                  <Select value={form.dialer_mode} onValueChange={v => setForm({ ...form, dialer_mode: v })}>
+                  <Label>Produto</Label>
+                  <Select value={form.product} onValueChange={v => setForm({ ...form, product: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="manual">Manual</SelectItem>
-                      <SelectItem value="power">Power Dialer</SelectItem>
-                      <SelectItem value="predictive">Preditivo</SelectItem>
+                      <SelectItem value="Objetivo">Objetivo</SelectItem>
+                      <SelectItem value="Trilia">Trilia</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg border border-border/60 bg-secondary/10">
-                  <div><p className="text-sm font-medium">Habilitar IA</p><p className="text-xs text-muted-foreground">A IA conduzirá a conversa automaticamente</p></div>
-                  <Switch checked={form.ai_enabled} onCheckedChange={v => setForm({ ...form, ai_enabled: v })} />
+                <div className="space-y-2">
+                  <Label>Voice Key</Label>
+                  <Input value={form.voice_key} onChange={e => setForm({ ...form, voice_key: e.target.value })} placeholder="Ex: lucas-v1" />
                 </div>
-                {form.ai_enabled && (
-                  <div className="space-y-2">
-                    <Label>Prompt da IA</Label>
-                    <Textarea value={form.ai_prompt} onChange={e => setForm({ ...form, ai_prompt: e.target.value })} placeholder="Instruções para a IA durante a ligação..." className="min-h-[100px]" />
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between p-4 rounded-lg border border-border/60 bg-secondary/10">
-                  <div><p className="text-sm font-medium">Follow-up WhatsApp</p><p className="text-xs text-muted-foreground">Enviar WhatsApp após ligação qualificada</p></div>
-                  <Switch checked={form.whatsapp_followup} onCheckedChange={v => setForm({ ...form, whatsapp_followup: v })} />
+                <div className="space-y-2">
+                  <Label>Limite Diário</Label>
+                  <Input type="number" value={form.daily_limit} onChange={e => setForm({ ...form, daily_limit: e.target.value })} />
                 </div>
-                {form.whatsapp_followup && (
-                  <div className="space-y-2">
-                    <Label>Template WhatsApp</Label>
-                    <Textarea value={form.whatsapp_template} onChange={e => setForm({ ...form, whatsapp_template: e.target.value })} placeholder="Mensagem de follow-up..." />
-                  </div>
-                )}
-
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label>Horário Início</Label><Input type="time" value={form.schedule_start} onChange={e => setForm({ ...form, schedule_start: e.target.value })} /></div>
                   <div className="space-y-2"><Label>Horário Fim</Label><Input type="time" value={form.schedule_end} onChange={e => setForm({ ...form, schedule_end: e.target.value })} /></div>
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Dias da Semana</Label>
-                  <div className="flex gap-2">
-                    {WEEKDAYS.map((d, i) => (
-                      <label key={i} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${form.allowed_days.includes(i) ? "border-primary bg-primary/10 text-foreground" : "border-border/60 text-muted-foreground"}`}>
-                        <Checkbox checked={form.allowed_days.includes(i)} onCheckedChange={() => toggleDay(i)} />
-                        <span className="text-xs">{d}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>Máx. Tentativas</Label><Input type="number" value={form.max_retry} onChange={e => setForm({ ...form, max_retry: Number(e.target.value) })} /></div>
-                  <div className="space-y-2"><Label>Ligações/Agente</Label><Input type="number" value={form.calls_per_agent} onChange={e => setForm({ ...form, calls_per_agent: Number(e.target.value) })} /></div>
-                </div>
-
                 <Button onClick={createCampaign} disabled={saving || !form.name} className="w-full">
                   {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
                   Criar Campanha
@@ -196,13 +247,60 @@ export default function CallCampaigns() {
           </Dialog>
         </PageHeader>
 
+        {/* Edit Dialog */}
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>Editar Campanha</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Nome</Label>
+                <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Produto</Label>
+                <Select value={editForm.product} onValueChange={v => setEditForm({ ...editForm, product: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Objetivo">Objetivo</SelectItem>
+                    <SelectItem value="Trilia">Trilia</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Voice Key</Label>
+                <Input value={editForm.voice_key} onChange={e => setEditForm({ ...editForm, voice_key: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Limite Diário</Label>
+                <Input type="number" value={editForm.daily_limit} onChange={e => setEditForm({ ...editForm, daily_limit: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={editForm.status} onValueChange={v => setEditForm({ ...editForm, status: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Rascunho</SelectItem>
+                    <SelectItem value="active">Ativa</SelectItem>
+                    <SelectItem value="paused">Pausada</SelectItem>
+                    <SelectItem value="completed">Finalizada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={updateCampaign} disabled={saving || !editForm.name} className="w-full">
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Edit className="h-4 w-4 mr-2" />}
+                Salvar Alterações
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: "Total Campanhas", value: totalCampaigns, icon: Megaphone, color: "text-primary" },
             { label: "Ativas", value: activeCampaigns, icon: Activity, color: "text-emerald-400" },
-            { label: "Ligações Feitas", value: totalCalled, icon: PhoneCall, color: "text-blue-400" },
-            { label: "Qualificados", value: totalQualified, icon: Target, color: "text-red-400" },
+            { label: "Pausadas", value: pausedCampaigns, icon: Pause, color: "text-yellow-400" },
+            { label: "Rascunhos", value: draftCampaigns, icon: Clock, color: "text-blue-400" },
           ].map(s => (
             <Card key={s.label} className="bg-card border-border/60">
               <CardContent className="p-5">
@@ -233,46 +331,50 @@ export default function CallCampaigns() {
           </Card>
         ) : (
           <div className="grid md:grid-cols-2 gap-4">
-            {campaigns.map(c => {
-              const progress = c.total_leads > 0 ? Math.round((c.total_called / c.total_leads) * 100) : 0;
-              return (
-                <Card key={c.id} className="bg-card border-border/60 hover:border-border transition-colors">
-                  <CardContent className="p-6 space-y-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="text-base font-semibold text-foreground">{c.name}</h3>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {c.dialer_mode === "power" ? "Power Dialer" : c.dialer_mode === "predictive" ? "Preditivo" : "Manual"}
-                          {c.ai_enabled && " • IA ativa"}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className={statusColor(c.status)}>{statusLabel(c.status)}</Badge>
+            {campaigns.map(c => (
+              <Card key={c.id} className="bg-card border-border/60 hover:border-border transition-colors">
+                <CardContent className="p-6 space-y-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-base font-semibold text-foreground">{c.name}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {c.product ?? "Sem produto"}
+                        {c.voice_key && ` • Voz: ${c.voice_key}`}
+                      </p>
                     </div>
+                    <Badge variant="outline" className={statusColor(c.status ?? "draft")}>{statusLabel(c.status ?? "draft")}</Badge>
+                  </div>
 
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{c.total_called ?? 0} / {c.total_leads ?? 0} leads</span>
-                        <span>{progress}%</span>
-                      </div>
-                      <Progress value={progress} className="h-2" />
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                      <p className="text-lg font-bold text-foreground">{c.daily_limit ?? 0}</p>
+                      <p className="text-[10px] text-muted-foreground">Limite/dia</p>
                     </div>
+                    <div>
+                      <p className="text-lg font-bold text-blue-400">{c.schedule_start ?? "—"}</p>
+                      <p className="text-[10px] text-muted-foreground">Início</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-emerald-400">{c.schedule_end ?? "—"}</p>
+                      <p className="text-[10px] text-muted-foreground">Fim</p>
+                    </div>
+                  </div>
 
-                    <div className="grid grid-cols-3 gap-3 text-center">
-                      <div><p className="text-lg font-bold text-foreground">{c.total_called ?? 0}</p><p className="text-[10px] text-muted-foreground">Ligadas</p></div>
-                      <div><p className="text-lg font-bold text-emerald-400">{c.total_answered ?? 0}</p><p className="text-[10px] text-muted-foreground">Atendidas</p></div>
-                      <div><p className="text-lg font-bold text-red-400">{c.total_qualified ?? 0}</p><p className="text-[10px] text-muted-foreground">Qualificados</p></div>
-                    </div>
+                  {c.call_goal && (
+                    <p className="text-xs text-muted-foreground"><Target className="inline h-3 w-3 mr-1" />Objetivo: {c.call_goal}</p>
+                  )}
 
-                    <div className="flex gap-2">
-                      <Button size="sm" variant={c.status === "active" ? "outline" : "default"} className={c.status === "active" ? "" : "bg-emerald-600 hover:bg-emerald-700 text-white"} onClick={() => toggleStatus(c.id, c.status)}>
-                        {c.status === "active" ? <><Pause className="h-4 w-4 mr-1" />Pausar</> : <><Play className="h-4 w-4 mr-1" />Iniciar</>}
-                      </Button>
-                      <Button size="sm" variant="outline"><Edit className="h-4 w-4 mr-1" />Editar</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                  <p className="text-[10px] text-muted-foreground">Criada em {formatDate(c.created_at)}</p>
+
+                  <div className="flex gap-2">
+                    <Button size="sm" variant={c.status === "active" ? "outline" : "default"} className={c.status === "active" ? "" : "bg-emerald-600 hover:bg-emerald-700 text-white"} onClick={() => toggleStatus(c.id, c.status ?? "draft")}>
+                      {c.status === "active" ? <><Pause className="h-4 w-4 mr-1" />Pausar</> : <><Play className="h-4 w-4 mr-1" />Iniciar</>}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => openEditDialog(c)}><Edit className="h-4 w-4 mr-1" />Editar</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         )}
       </div>

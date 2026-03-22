@@ -286,6 +286,11 @@ export default function WhatsAppMeta() {
   const [builderSaving, setBuilderSaving] = useState(false);
   const [templateForm, setTemplateForm] = useState<TemplateFormData>({ ...DEFAULT_FORM });
 
+  // AI Generate state
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+
   // Preview Dialog state
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
@@ -441,7 +446,8 @@ export default function WhatsAppMeta() {
       if (error || data?.error) {
         toast.error(data?.error || "Erro ao sincronizar templates");
       } else {
-        toast.success(`Templates sincronizados: ${data.synced} (${data.created} novos, ${data.updated} atualizados)`);
+        toast.success(`Templates sincronizados: ${data.synced || 0} de ${data.total || 0}`);
+        if (data.errors && data.errors.length > 0) toast.error(`Erros: ${data.errors.join(", ")}`);
         loadMetaData();
       }
     } catch (e: any) {
@@ -494,7 +500,7 @@ export default function WhatsAppMeta() {
       const { data, error } = await supabase.functions.invoke("whatsapp-meta-templates", {
         body: {
           company_id: companyId,
-          action: "create",
+          action: builderMode === "edit" ? "update" : "create",
           name: templateForm.name,
           language: templateForm.language,
           category: templateForm.category,
@@ -542,6 +548,50 @@ export default function WhatsAppMeta() {
     setBuilderMode("create");
     setBuilderOpen(true);
     toast.info(`Duplicando "${template.name}" como "${form.name}"`);
+  };
+
+  const generateWithAI = async () => {
+    if (!companyId || !aiPrompt.trim()) {
+      toast.error("Descreva o produto/objetivo para gerar o template");
+      return;
+    }
+    setAiGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-template", {
+        body: {
+          company_id: companyId,
+          action: "generate",
+          prompt: aiPrompt.trim(),
+          category: templateForm.category,
+          language: templateForm.language,
+        },
+      });
+      if (error || data?.error) {
+        toast.error(data?.error || error?.message || "Erro ao gerar template com IA");
+      } else {
+        // Apply generated content to form
+        if (data.name) updateForm("name", data.name);
+        if (data.body) updateForm("body", data.body);
+        if (data.header) {
+          updateForm("headerType", "TEXT");
+          updateForm("headerContent", data.header);
+        }
+        if (data.footer) updateForm("footer", data.footer);
+        if (data.buttons && Array.isArray(data.buttons)) {
+          updateForm("buttons", data.buttons.map((btn: any) => ({
+            type: btn.type || "QUICK_REPLY",
+            text: btn.text || "",
+            value: btn.url || btn.phone_number || "",
+          })));
+        }
+        toast.success("Template gerado com IA! Revise e ajuste antes de criar.");
+        setAiDialogOpen(false);
+        setAiPrompt("");
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao gerar template");
+    }
+    setAiGenerating(false);
   };
 
   const openPreview = (template: any) => {
@@ -626,6 +676,7 @@ export default function WhatsAppMeta() {
         setNewConvPhone("");
         setNewConvTemplate("");
         // Reload conversations
+        loadConversations();
         loadMetaData();
       }
     } catch (e: any) {
@@ -1055,6 +1106,15 @@ export default function WhatsAppMeta() {
 
               <Separator />
 
+              {/* AI Generate Button */}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setAiDialogOpen(true)} className="text-violet-400 border-violet-500/30 hover:bg-violet-500/10">
+                  <Zap className="h-3.5 w-3.5 mr-1" />
+                  Gerar com IA
+                </Button>
+                <span className="text-xs text-muted-foreground">Descreva seu produto/objetivo e a IA gera o template</span>
+              </div>
+
               {/* Header */}
               <div className="space-y-2">
                 <Label>Header (opcional)</Label>
@@ -1375,6 +1435,40 @@ export default function WhatsAppMeta() {
             >
               {newConvSending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
               Enviar Template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* AI GENERATE TEMPLATE DIALOG                               */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Zap className="h-4 w-4 text-violet-400" />Gerar Template com IA</DialogTitle>
+            <DialogDescription>
+              Descreva seu produto ou objetivo e a IA vai gerar um template otimizado para WhatsApp Business.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label>Produto / Objetivo</Label>
+              <Textarea
+                placeholder="Ex: Promoção de 20% em tênis esportivos para clientes que compraram nos últimos 30 dias"
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                rows={4}
+                className="mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Quanto mais detalhes, melhor o resultado.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAiDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={generateWithAI} disabled={aiGenerating || !aiPrompt.trim()} className="bg-violet-600 hover:bg-violet-700">
+              {aiGenerating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />}
+              Gerar Template
             </Button>
           </DialogFooter>
         </DialogContent>
