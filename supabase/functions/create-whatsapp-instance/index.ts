@@ -99,20 +99,100 @@ async function getInstanceStatus(accountAUrl: string, instanceToken: string): Pr
   }
 }
 
-async function recreateAndGetQr(
+// Check if instance exists on UAZAPI by name using admin token
+async function findInstanceOnUazapi(accountAUrl: string, accountAToken: string, instanceName: string): Promise<{ exists: boolean; token?: string; connected?: boolean }> {
+  try {
+    const res = await fetch(`${accountAUrl}/instance/list`, {
+      headers: { "AdminToken": accountAToken },
+    });
+    if (!res.ok) return { exists: false };
+    const data = await res.json();
+    const instances = data?.instances || data || [];
+    if (!Array.isArray(instances)) return { exists: false };
+    const found = instances.find((i: any) => i.name === instanceName || i.instance?.name === instanceName);
+    if (!found) return { exists: false };
+    const token = found.token || found.instance?.token || "";
+    const connected = found.status === "connected" || found.instance?.status === "connected";
+    return { exists: true, token: token || undefined, connected };
+  } catch (e) {
+    console.error("findInstanceOnUazapi error:", e);
+    return { exists: false };
+  }
+}
+
+// Delete an orphaned instance on UAZAPI before creating a new one
+async function deleteInstanceOnUazapi(accountAUrl: string, accountAToken: string, instanceName: string): Promise<void> {
+  try {
+    console.log("deleteInstance:", accountAUrl, "name:", instanceName);
+    await fetch(`${accountAUrl}/instance/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "AdminToken": accountAToken },
+      body: JSON.stringify({ name: instanceName }),
+    });
+  } catch (e) {
+    console.error("deleteInstanceOnUazapi error:", e);
+  }
+}
+
+async function reconnectOrRecreate(
   supabase: any,
   accountAUrl: string,
   accountAToken: string,
   collaborator_id: string,
   existingInstanceId?: string,
+  existingInstanceName?: string,
+  existingInstanceToken?: string,
 ): Promise<Response> {
   if (!accountAToken) {
     return json({ error: "Token admin UAZAPI não configurado" }, 500);
   }
 
-  const instanceName = `wa_${collaborator_id.slice(0, 8)}_fixo`;
-  let instanceToken = "";
+  const instanceName = existingInstanceName || `wa_${collaborator_id.slice(0, 8)}_fixo`;
 
+  // Step 1: Check if the instance already exists on UAZAPI
+  const existing = await findInstanceOnUazapi(accountAUrl, accountAToken, instanceName);
+
+  if (existing.exists && existing.token) {
+    console.log("reconnect: instance found on UAZAPI, reusing token for:", instanceName);
+
+    // Update local DB with the correct token from UAZAPI
+    const updateData = {
+      instance_name: instanceName,
+      instance_token: existing.token,
+      uazapi_server_url: accountAUrl,
+      status: "disconnected",
+      updated_at: new Date().toISOString(),
+    };
+
+    if (existingInstanceId) {
+      await supabase.from("whatsapp_instances").update(updateData).eq("id", existingInstanceId);
+    } else {
+      await supabase.from("whatsapp_instances").insert({
+        collaborator_id,
+        ...updateData,
+        chip_type: "fixo",
+      });
+    }
+
+    // Try to connect and get QR
+    const qrCode = await connectAndGetQrWithRetry(accountAUrl, existing.token, 3);
+    if (qrCode) {
+      await supabase.from("whatsapp_instances")
+        .update({ qr_code: qrCode, status: "connecting", updated_at: new Date().toISOString() })
+        .eq("collaborator_id", collaborator_id)
+        .eq("chip_type", "fixo");
+      return json({ qr_code: qrCode, connected: false });
+    }
+
+    // Instance exists but QR failed — delete and recreate
+    console.log("reconnect: QR failed for existing instance, deleting and recreating:", instanceName);
+    await deleteInstanceOnUazapi(accountAUrl, accountAToken, instanceName);
+  } else {
+    console.log("reconnect: instance not found on UAZAPI, creating new:", instanceName);
+  }
+
+  // Step 2: Create a new instance on UAZAPI
+  let instanceToken = "";
   try {
     instanceToken = await createInstanceOnUazapi(accountAUrl, accountAToken, instanceName);
   } catch (e) {
@@ -246,8 +326,8 @@ Deno.serve(async (req) => {
       }
 
       if (!instance.instance_token) {
-        console.log("qrcode: no instance_token, auto-recreating...");
-        return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id, instance.id);
+        console.log("qrcode: no instance_token, reconnecting...");
+        return await reconnectOrRecreate(supabase, accountAUrl, accountAToken, collaborator_id, instance.id, instance.instance_name);
       }
 
       const qrCode = await connectAndGetQrWithRetry(serverUrl, instance.instance_token, 2);
@@ -261,9 +341,9 @@ Deno.serve(async (req) => {
         return json({ qr_code: qrCode });
       }
 
-      // QR failed — token may be invalid, auto-recreate
-      console.log("qrcode: connect failed, auto-recreating...");
-      return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id, instance.id);
+      // QR failed — token may be invalid, try to reconnect existing instance
+      console.log("qrcode: connect failed, reconnecting...");
+      return await reconnectOrRecreate(supabase, accountAUrl, accountAToken, collaborator_id, instance.id, instance.instance_name, instance.instance_token);
     }
 
     // ── CREATE (default action — create instance if not exists, return QR) ──
@@ -294,13 +374,13 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Token invalid or no QR — recreate
-      console.log("create: existing instance failed, recreating...");
-      return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id, instance.id);
+      // Token invalid or no QR — try to reconnect existing instance on UAZAPI
+      console.log("create: existing instance failed, reconnecting...");
+      return await reconnectOrRecreate(supabase, accountAUrl, accountAToken, collaborator_id, instance.id, instance.instance_name, instance.instance_token);
     }
 
     // No instance yet — create one
-    return await recreateAndGetQr(supabase, accountAUrl, accountAToken, collaborator_id);
+    return await reconnectOrRecreate(supabase, accountAUrl, accountAToken, collaborator_id);
 
   } catch (e) {
     console.error("Edge function error:", e);
