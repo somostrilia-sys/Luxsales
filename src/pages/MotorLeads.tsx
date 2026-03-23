@@ -1713,10 +1713,12 @@ function ConsultorView() {
 
   return (
     <>
-      {/* Motor de Disparo — Bug #006 fix: pass selected IDs so BlastSection can use them */}
+      {/* Motor de Disparo */}
       <BlastSection selectedLeadIds={Array.from(selected)} />
 
-      {/* Stats cards */}
+      {/* Importar Planilha */}
+      <ConsultorImportSection collaboratorId={collaborator?.id || null} onImported={fetchLeads} />
+
       <div className="grid grid-cols-2 gap-3">
         <SummaryCard icon={<Package className="h-5 w-5" />} label="Leads Pendentes" value={totalCount} color="warning" />
         <Card>
