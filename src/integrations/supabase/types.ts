@@ -3850,8 +3850,10 @@ export type Database = {
           id: string
           instance_name: string | null
           instance_token: string | null
+          label: string | null
           last_reset_at: string | null
           phone: string | null
+          phone_number: string | null
           proxy_enabled: boolean
           proxy_host: string | null
           proxy_last_tested_at: string | null
@@ -3875,8 +3877,10 @@ export type Database = {
           id?: string
           instance_name?: string | null
           instance_token?: string | null
+          label?: string | null
           last_reset_at?: string | null
           phone?: string | null
+          phone_number?: string | null
           proxy_enabled?: boolean
           proxy_host?: string | null
           proxy_last_tested_at?: string | null
@@ -3900,8 +3904,10 @@ export type Database = {
           id?: string
           instance_name?: string | null
           instance_token?: string | null
+          label?: string | null
           last_reset_at?: string | null
           phone?: string | null
+          phone_number?: string | null
           proxy_enabled?: boolean
           proxy_host?: string | null
           proxy_last_tested_at?: string | null
