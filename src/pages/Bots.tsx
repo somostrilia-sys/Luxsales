@@ -908,9 +908,7 @@ function AdminChipsOverview() {
   );
 }
 
-// ── Blast Messages Section ──
 
-function BlastMessagesSection({ collaboratorId }: { collaboratorId: string | null }) {
   const [messages, setMessages] = useState<string[]>(["", "", "", "", ""]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
