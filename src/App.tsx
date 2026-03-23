@@ -41,6 +41,9 @@ const MeuTime = lazy(() => import("./pages/MeuTime"));
 const Venda = lazy(() => import("./pages/Venda"));
 const Empresas = lazy(() => import("./pages/Empresas"));
 const MinhaEmpresa = lazy(() => import("./pages/MinhaEmpresa"));
+const MeusChips = lazy(() => import("./pages/MeusChips"));
+const Disparos = lazy(() => import("./pages/Disparos"));
+const AtendimentoChat = lazy(() => import("./pages/AtendimentoChat"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function PageLoader() {
