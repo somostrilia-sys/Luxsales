@@ -1531,9 +1531,13 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
           </div>
         )}
         <div className="space-y-3">
-          <div>
-            <Label className="text-sm font-medium">Templates de mensagem</Label>
-            <p className="text-xs text-muted-foreground mt-0.5">O sistema alterna automaticamente entre os templates a cada envio. Use {"{nome}"} para o nome do lead.</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm font-medium">Templates de mensagem</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">O sistema alterna automaticamente entre os templates a cada envio. Use {"{nome}"} para o nome do lead.</p>
+            </div>
+            {autoSaving && <span className="text-xs text-muted-foreground animate-pulse">Salvando...</span>}
+            {!autoSaving && messagesLoaded && <span className="text-xs text-emerald-400">✓ Salvo</span>}
           </div>
           {messageTemplates.map((tmpl, idx) => (
             <div key={idx} className="space-y-1">
