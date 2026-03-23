@@ -41,6 +41,9 @@ const MeuTime = lazy(() => import("./pages/MeuTime"));
 const Venda = lazy(() => import("./pages/Venda"));
 const Empresas = lazy(() => import("./pages/Empresas"));
 const MinhaEmpresa = lazy(() => import("./pages/MinhaEmpresa"));
+const MeusChips = lazy(() => import("./pages/MeusChips"));
+const Disparos = lazy(() => import("./pages/Disparos"));
+const AtendimentoChat = lazy(() => import("./pages/AtendimentoChat"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function PageLoader() {
@@ -82,6 +85,9 @@ const App = () => (
           <Route path="/identidade-visual" element={<ProtectedRoute minLevel={0}><IdentidadeVisual /></ProtectedRoute>} />
           <Route path="/ceo" element={<ProtectedRoute minLevel={0}><CeoBolt /></ProtectedRoute>} />
           <Route path="/motor-leads" element={<ProtectedRoute><MotorLeads /></ProtectedRoute>} />
+          <Route path="/meus-chips" element={<ProtectedRoute><MeusChips /></ProtectedRoute>} />
+          <Route path="/disparos" element={<ProtectedRoute><Disparos /></ProtectedRoute>} />
+          <Route path="/atendimento-chat" element={<ProtectedRoute><AtendimentoChat /></ProtectedRoute>} />
           <Route path="/voice-ai" element={<ProtectedRoute minLevel={0}><VoiceAI /></ProtectedRoute>} />
           <Route path="/call-campaigns" element={<ProtectedRoute minLevel={1}><CallCampaigns /></ProtectedRoute>} />
           <Route path="/atendimento" element={<ProtectedRoute><AtendimentoLeads /></ProtectedRoute>} />

@@ -2284,6 +2284,172 @@ export type Database = {
           },
         ]
       }
+      campaign_jobs: {
+        Row: {
+          auto_refill_enabled: boolean | null
+          batch_id: string | null
+          campaign_tag: string | null
+          category_filter: string | null
+          chip_rotation: boolean | null
+          collaborator_id: string
+          company_id: string | null
+          created_at: string | null
+          daily_limit: number | null
+          ddd_filter: string | null
+          end_hour: number | null
+          error_count: number | null
+          id: string
+          interval_max_sec: number | null
+          interval_min_sec: number | null
+          last_sent_at: string | null
+          lead_ids: Json | null
+          message_template: string
+          message_templates: Json | null
+          messages: Json | null
+          name: string
+          next_send_at: string | null
+          pause_max: number | null
+          pause_min: number | null
+          refill_count: number | null
+          refill_threshold: number | null
+          reply_count: number | null
+          sent_count: number | null
+          start_hour: number | null
+          started_at: string | null
+          status: string | null
+          total_leads: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          auto_refill_enabled?: boolean | null
+          batch_id?: string | null
+          campaign_tag?: string | null
+          category_filter?: string | null
+          chip_rotation?: boolean | null
+          collaborator_id: string
+          company_id?: string | null
+          created_at?: string | null
+          daily_limit?: number | null
+          ddd_filter?: string | null
+          end_hour?: number | null
+          error_count?: number | null
+          id?: string
+          interval_max_sec?: number | null
+          interval_min_sec?: number | null
+          last_sent_at?: string | null
+          lead_ids?: Json | null
+          message_template?: string
+          message_templates?: Json | null
+          messages?: Json | null
+          name?: string
+          next_send_at?: string | null
+          pause_max?: number | null
+          pause_min?: number | null
+          refill_count?: number | null
+          refill_threshold?: number | null
+          reply_count?: number | null
+          sent_count?: number | null
+          start_hour?: number | null
+          started_at?: string | null
+          status?: string | null
+          total_leads?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          auto_refill_enabled?: boolean | null
+          batch_id?: string | null
+          campaign_tag?: string | null
+          category_filter?: string | null
+          chip_rotation?: boolean | null
+          collaborator_id?: string
+          company_id?: string | null
+          created_at?: string | null
+          daily_limit?: number | null
+          ddd_filter?: string | null
+          end_hour?: number | null
+          error_count?: number | null
+          id?: string
+          interval_max_sec?: number | null
+          interval_min_sec?: number | null
+          last_sent_at?: string | null
+          lead_ids?: Json | null
+          message_template?: string
+          message_templates?: Json | null
+          messages?: Json | null
+          name?: string
+          next_send_at?: string | null
+          pause_max?: number | null
+          pause_min?: number | null
+          refill_count?: number | null
+          refill_threshold?: number | null
+          reply_count?: number | null
+          sent_count?: number | null
+          start_hour?: number | null
+          started_at?: string | null
+          status?: string | null
+          total_leads?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_jobs_collaborator_id_fkey"
+            columns: ["collaborator_id"]
+            isOneToOne: false
+            referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_logs: {
+        Row: {
+          chip_id: string | null
+          collaborator_id: string
+          created_at: string | null
+          error_message: string | null
+          id: string
+          job_id: string
+          lead_id: string | null
+          phone_normalized: string | null
+          phone_raw: string | null
+          sent_at: string | null
+          status: string | null
+        }
+        Insert: {
+          chip_id?: string | null
+          collaborator_id: string
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          job_id: string
+          lead_id?: string | null
+          phone_normalized?: string | null
+          phone_raw?: string | null
+          sent_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          chip_id?: string | null
+          collaborator_id?: string
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          job_id?: string
+          lead_id?: string | null
+          phone_normalized?: string | null
+          phone_raw?: string | null
+          sent_at?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_logs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaigns: {
         Row: {
           ai_enabled: boolean | null
@@ -2607,6 +2773,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      chip_monitor_logs: {
+        Row: {
+          duration_ms: number | null
+          id: string
+          logs: Json | null
+          ran_at: string | null
+          stats: Json | null
+        }
+        Insert: {
+          duration_ms?: number | null
+          id?: string
+          logs?: Json | null
+          ran_at?: string | null
+          stats?: Json | null
+        }
+        Update: {
+          duration_ms?: number | null
+          id?: string
+          logs?: Json | null
+          ran_at?: string | null
+          stats?: Json | null
+        }
+        Relationships: []
       }
       city_analysis: {
         Row: {
@@ -3370,6 +3560,50 @@ export type Database = {
           {
             foreignKeyName: "contact_leads_assigned_to_fkey"
             columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contacted_phones: {
+        Row: {
+          campaign_tag: string | null
+          chip_used: string | null
+          collaborator_id: string | null
+          contacted_at: string | null
+          created_at: string | null
+          id: string
+          phone: string
+          response_received: boolean | null
+          response_text: string | null
+        }
+        Insert: {
+          campaign_tag?: string | null
+          chip_used?: string | null
+          collaborator_id?: string | null
+          contacted_at?: string | null
+          created_at?: string | null
+          id?: string
+          phone: string
+          response_received?: boolean | null
+          response_text?: string | null
+        }
+        Update: {
+          campaign_tag?: string | null
+          chip_used?: string | null
+          collaborator_id?: string | null
+          contacted_at?: string | null
+          created_at?: string | null
+          id?: string
+          phone?: string
+          response_received?: boolean | null
+          response_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacted_phones_collaborator_id_fkey"
+            columns: ["collaborator_id"]
             isOneToOne: false
             referencedRelation: "collaborators"
             referencedColumns: ["id"]
@@ -5632,6 +5866,69 @@ export type Database = {
           },
         ]
       }
+      rotation_channels: {
+        Row: {
+          chip_id: string | null
+          collaborator_id: string
+          created_at: string | null
+          daily_limit: number | null
+          id: string
+          instance_name: string | null
+          instance_token: string | null
+          last_message_at: string | null
+          messages_sent_today: number | null
+          phone: string | null
+          status: string | null
+          uazapi_server_url: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          chip_id?: string | null
+          collaborator_id: string
+          created_at?: string | null
+          daily_limit?: number | null
+          id?: string
+          instance_name?: string | null
+          instance_token?: string | null
+          last_message_at?: string | null
+          messages_sent_today?: number | null
+          phone?: string | null
+          status?: string | null
+          uazapi_server_url?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          chip_id?: string | null
+          collaborator_id?: string
+          created_at?: string | null
+          daily_limit?: number | null
+          id?: string
+          instance_name?: string | null
+          instance_token?: string | null
+          last_message_at?: string | null
+          messages_sent_today?: number | null
+          phone?: string | null
+          status?: string | null
+          uazapi_server_url?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rotation_channels_chip_id_fkey"
+            columns: ["chip_id"]
+            isOneToOne: false
+            referencedRelation: "disposable_chips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rotation_channels_collaborator_id_fkey"
+            columns: ["collaborator_id"]
+            isOneToOne: false
+            referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sectors: {
         Row: {
           active: boolean | null
@@ -6657,6 +6954,173 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      trilho_custos_operacionais: {
+        Row: {
+          categoria: string
+          comprovante_url: string | null
+          created_at: string | null
+          data: string
+          descricao: string | null
+          id: string
+          service_order_id: string | null
+          technician_id: string | null
+          valor: number
+        }
+        Insert: {
+          categoria: string
+          comprovante_url?: string | null
+          created_at?: string | null
+          data: string
+          descricao?: string | null
+          id?: string
+          service_order_id?: string | null
+          technician_id?: string | null
+          valor: number
+        }
+        Update: {
+          categoria?: string
+          comprovante_url?: string | null
+          created_at?: string | null
+          data?: string
+          descricao?: string | null
+          id?: string
+          service_order_id?: string | null
+          technician_id?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trilho_custos_operacionais_service_order_id_fkey"
+            columns: ["service_order_id"]
+            isOneToOne: false
+            referencedRelation: "service_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trilho_custos_operacionais_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "technicians"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trilho_fechamento_items: {
+        Row: {
+          created_at: string | null
+          descricao: string
+          fechamento_id: string
+          id: string
+          service_order_id: string | null
+          tipo: string | null
+          valor: number
+        }
+        Insert: {
+          created_at?: string | null
+          descricao: string
+          fechamento_id: string
+          id?: string
+          service_order_id?: string | null
+          tipo?: string | null
+          valor: number
+        }
+        Update: {
+          created_at?: string | null
+          descricao?: string
+          fechamento_id?: string
+          id?: string
+          service_order_id?: string | null
+          tipo?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trilho_fechamento_items_fechamento_id_fkey"
+            columns: ["fechamento_id"]
+            isOneToOne: false
+            referencedRelation: "trilho_fechamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trilho_fechamento_items_service_order_id_fkey"
+            columns: ["service_order_id"]
+            isOneToOne: false
+            referencedRelation: "service_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trilho_fechamentos: {
+        Row: {
+          acrescimos: number | null
+          aprovado_em: string | null
+          aprovado_por: string | null
+          comprovante_url: string | null
+          created_at: string | null
+          date_from: string
+          date_to: string
+          descontos: number | null
+          id: string
+          mes_referencia: string
+          observacoes: string | null
+          pago_em: string | null
+          status: string | null
+          technician_id: string
+          total_atendimentos: number | null
+          updated_at: string | null
+          valor_liquido: number | null
+          valor_total: number | null
+        }
+        Insert: {
+          acrescimos?: number | null
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          comprovante_url?: string | null
+          created_at?: string | null
+          date_from: string
+          date_to: string
+          descontos?: number | null
+          id?: string
+          mes_referencia: string
+          observacoes?: string | null
+          pago_em?: string | null
+          status?: string | null
+          technician_id: string
+          total_atendimentos?: number | null
+          updated_at?: string | null
+          valor_liquido?: number | null
+          valor_total?: number | null
+        }
+        Update: {
+          acrescimos?: number | null
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          comprovante_url?: string | null
+          created_at?: string | null
+          date_from?: string
+          date_to?: string
+          descontos?: number | null
+          id?: string
+          mes_referencia?: string
+          observacoes?: string | null
+          pago_em?: string | null
+          status?: string | null
+          technician_id?: string
+          total_atendimentos?: number | null
+          updated_at?: string | null
+          valor_liquido?: number | null
+          valor_total?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trilho_fechamentos_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "technicians"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       uazapi_accounts: {
         Row: {
