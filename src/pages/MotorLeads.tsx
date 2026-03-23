@@ -1005,6 +1005,30 @@ function HistoryTab() {
 // BLAST SECTION — Motor de Disparo (Consultor)
 // ═══════════════════════════════════════════
 import { EDGE_BASE } from "@/lib/constants";
+import * as XLSX from "xlsx";
+
+// Helper to get auth token outside of hooks
+const getTokenStatic = async () => {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token || "";
+};
+
+// Normalize Brazilian phone numbers
+function normalizeBRPhone(raw: string): string {
+  let digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("55")) digits = digits.slice(2);
+  // Remove leading 0 if present
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  if (digits.length < 10) return ""; // too short
+  const ddd = digits.slice(0, 2);
+  let number = digits.slice(2);
+  // If 8-digit number (landline or missing 9), add 9 for mobile
+  if (number.length === 8 && Number(number[0]) >= 6) {
+    number = "9" + number;
+  }
+  if (number.length !== 8 && number.length !== 9) return ""; // invalid
+  return `+55${ddd}${number}`;
+}
 
 // Bug #006 fix: accept selectedLeadIds from ConsultorView
 function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) {
