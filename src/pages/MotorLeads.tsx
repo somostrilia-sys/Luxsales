@@ -1005,12 +1005,36 @@ function HistoryTab() {
 // BLAST SECTION — Motor de Disparo (Consultor)
 // ═══════════════════════════════════════════
 import { EDGE_BASE } from "@/lib/constants";
+import * as XLSX from "xlsx";
+
+// Helper to get auth token outside of hooks
+const getTokenStatic = async () => {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token || "";
+};
+
+// Normalize Brazilian phone numbers
+function normalizeBRPhone(raw: string): string {
+  let digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("55")) digits = digits.slice(2);
+  // Remove leading 0 if present
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  if (digits.length < 10) return ""; // too short
+  const ddd = digits.slice(0, 2);
+  let number = digits.slice(2);
+  // If 8-digit number (landline or missing 9), add 9 for mobile
+  if (number.length === 8 && Number(number[0]) >= 6) {
+    number = "9" + number;
+  }
+  if (number.length !== 8 && number.length !== 9) return ""; // invalid
+  return `+55${ddd}${number}`;
+}
 
 // Bug #006 fix: accept selectedLeadIds from ConsultorView
 function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) {
   const { collaborator } = useCollaborator();
 
-  // Persistir templates no localStorage para não perder ao trocar de página
+  // Persistir templates no Supabase + localStorage como fallback
   const defaultTemplate = "Olá {nome}! Vi que você atua nessa área e quero apresentar uma solução que pode proteger seus veículos com muito mais segurança e custo acessível. Posso te mostrar em 5 minutos?";
   const [messageTemplates, setMessageTemplates] = useState(() => {
     try {
@@ -1029,10 +1053,59 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
     } catch { /* ignore */ }
     return 100;
   });
-  // Salvar templates e limite no localStorage ao alterar
+  const [messagesLoaded, setMessagesLoaded] = useState(false);
+
+  // Load messages from Supabase on mount
+  useEffect(() => {
+    if (!collaborator?.id) return;
+    (async () => {
+      try {
+        const token = await getTokenStatic();
+        const resp = await fetch(`${EDGE_BASE}/blast-messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: "load", collaborator_id: collaborator.id }),
+        });
+        const result = await resp.json();
+        if (result?.messages && Array.isArray(result.messages)) {
+          const msgs = result.messages.slice(0, 5);
+          while (msgs.length < 5) msgs.push("");
+          // Only load from Supabase if at least one message has content
+          if (msgs.some((m: string) => m && m.trim().length > 0)) {
+            setMessageTemplates(msgs);
+          }
+        }
+      } catch { /* ignore */ }
+      setMessagesLoaded(true);
+    })();
+  }, [collaborator?.id]);
+
+  // Debounced auto-save to Supabase (1s after last edit)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [autoSaving, setAutoSaving] = useState(false);
+
+  const autoSaveMessages = useCallback((msgs: string[]) => {
+    if (!collaborator?.id || !messagesLoaded) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      setAutoSaving(true);
+      try {
+        const token = await getTokenStatic();
+        await fetch(`${EDGE_BASE}/blast-messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: "save", collaborator_id: collaborator.id, messages: msgs }),
+        });
+      } catch { /* silent */ }
+      setAutoSaving(false);
+    }, 1000);
+  }, [collaborator?.id, messagesLoaded]);
+
+  // Save to localStorage + trigger auto-save on change
   useEffect(() => {
     try { localStorage.setItem("blast_templates", JSON.stringify(messageTemplates)); } catch { /* */ }
-  }, [messageTemplates]);
+    autoSaveMessages(messageTemplates);
+  }, [messageTemplates, autoSaveMessages]);
   useEffect(() => {
     try { localStorage.setItem("blast_daily_limit", String(dailyLimit)); } catch { /* */ }
   }, [dailyLimit]);
@@ -1458,9 +1531,13 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
           </div>
         )}
         <div className="space-y-3">
-          <div>
-            <Label className="text-sm font-medium">Templates de mensagem</Label>
-            <p className="text-xs text-muted-foreground mt-0.5">O sistema alterna automaticamente entre os templates a cada envio. Use {"{nome}"} para o nome do lead.</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm font-medium">Templates de mensagem</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">O sistema alterna automaticamente entre os templates a cada envio. Use {"{nome}"} para o nome do lead.</p>
+            </div>
+            {autoSaving && <span className="text-xs text-muted-foreground animate-pulse">Salvando...</span>}
+            {!autoSaving && messagesLoaded && <span className="text-xs text-emerald-400">✓ Salvo</span>}
           </div>
           {messageTemplates.map((tmpl, idx) => (
             <div key={idx} className="space-y-1">
@@ -1496,6 +1573,164 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
             ? `Iniciar Disparo (${selectedLeadIds.length.toLocaleString("pt-BR")} leads)`
             : "Iniciar Disparo"}
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════
+// CONSULTOR IMPORT SECTION — Importar planilha direto para consultant_lead_pool
+// ═══════════════════════════════════════════
+const PHONE_HEADERS = ["telefone", "phone", "celular", "whatsapp", "fone", "tel"];
+const NAME_HEADERS = ["nome", "name", "cliente", "razao_social", "razão social"];
+const detectCol = (headers: string[], candidates: string[]) =>
+  headers.find(h => candidates.some(c => h.toLowerCase().includes(c))) || null;
+
+function ConsultorImportSection({ collaboratorId, onImported }: { collaboratorId: string | null; onImported: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<any[]>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [allRows, setAllRows] = useState<any[]>([]);
+  const [phoneCol, setPhoneCol] = useState<string | null>(null);
+  const [nameCol, setNameCol] = useState<string | null>(null);
+  const [cityCol, setCityCol] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setResult(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target?.result, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json<any>(ws, { defval: "" });
+        if (json.length === 0) { toast.error("Arquivo vazio"); return; }
+        const hdrs = Object.keys(json[0]);
+        setHeaders(hdrs);
+        setPhoneCol(detectCol(hdrs, PHONE_HEADERS));
+        setNameCol(detectCol(hdrs, NAME_HEADERS));
+        setCityCol(detectCol(hdrs, ["cidade", "city", "municipio"]));
+        setAllRows(json);
+        setPreview(json.slice(0, 5));
+      } catch {
+        toast.error("Erro ao ler arquivo");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["nome", "telefone", "cidade", "categoria"],
+      ["João Silva", "31987654321", "Belo Horizonte", "transporte"],
+      ["Maria Santos", "(11) 98765-4321", "São Paulo", "geral"],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Leads");
+    XLSX.writeFile(wb, "modelo_leads.xlsx");
+    toast.success("Modelo baixado!");
+  };
+
+  const handleUpload = async () => {
+    if (!collaboratorId || !phoneCol) { toast.error("Coluna de telefone não detectada"); return; }
+    setUploading(true);
+    try {
+      const contacts = allRows
+        .map(r => {
+          const rawPhone = String(r[phoneCol!] || "").trim();
+          const phone = normalizeBRPhone(rawPhone);
+          return {
+            collaborator_id: collaboratorId,
+            phone,
+            lead_name: nameCol ? String(r[nameCol] || "Sem nome").trim() : "Sem nome",
+            lead_city: cityCol ? String(r[cityCol] || "").trim() : null,
+            status: "pending",
+            assigned_at: new Date().toISOString(),
+          };
+        })
+        .filter(c => c.phone.length >= 13); // +55XXXXXXXXXXX = 14 chars min
+
+      if (contacts.length === 0) { toast.error("Nenhum telefone válido encontrado"); setUploading(false); return; }
+
+      let imported = 0;
+      let skipped = 0;
+      for (let i = 0; i < contacts.length; i += 500) {
+        const chunk = contacts.slice(i, i + 500);
+        const { error, count } = await supabase.from("consultant_lead_pool").upsert(chunk, { onConflict: "collaborator_id,phone", ignoreDuplicates: true, count: "exact" });
+        if (error) throw error;
+        imported += count ?? chunk.length;
+      }
+      skipped = contacts.length - imported;
+      setResult({ imported, skipped });
+      toast.success(`${imported} leads importados e prontos para disparo!`);
+      setPreview([]); setAllRows([]); setHeaders([]);
+      if (fileRef.current) fileRef.current.value = "";
+      onImported();
+    } catch (e: any) { toast.error("Erro: " + e.message); }
+    setUploading(false);
+  };
+
+  return (
+    <Card className="border-border">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Upload className="h-5 w-5 text-primary" /> Importar Planilha
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Importe contatos (.xlsx, .csv) — os leads vão direto para disparo. Mínimo: Nome + Telefone.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap gap-3 items-center">
+          <input ref={fileRef} type="file" accept=".xlsx,.csv,.xls" onChange={handleFile} className="hidden" />
+          <Button onClick={() => fileRef.current?.click()} disabled={uploading} variant="outline" className="gap-2">
+            <Upload className="h-4 w-4" /> Selecionar Arquivo
+          </Button>
+          <Button onClick={downloadTemplate} variant="ghost" className="gap-2 text-xs">
+            📄 Baixar Modelo
+          </Button>
+        </div>
+
+        {preview.length > 0 && (
+          <>
+            <div className="flex gap-2 flex-wrap text-xs text-muted-foreground">
+              <span>📞 Telefone: <Badge variant="secondary">{phoneCol || "Não detectado"}</Badge></span>
+              <span>👤 Nome: <Badge variant="secondary">{nameCol || "Não detectado"}</Badge></span>
+              <span>📍 Cidade: <Badge variant="secondary">{cityCol || "—"}</Badge></span>
+              <span>Total: <Badge variant="secondary">{allRows.length} linhas</Badge></span>
+            </div>
+            <div className="overflow-auto max-h-48 rounded border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>{headers.slice(0, 5).map(h => <TableHead key={h} className="text-xs whitespace-nowrap">{h}</TableHead>)}</TableRow>
+                </TableHeader>
+                <TableBody>
+                  {preview.map((row, i) => (
+                    <TableRow key={i}>{headers.slice(0, 5).map(h => <TableCell key={h} className="text-xs py-1">{String(row[h]).slice(0, 30)}</TableCell>)}</TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="flex items-center gap-2 p-2 rounded-md bg-primary/10 text-xs text-primary">
+              <Phone className="h-3.5 w-3.5" />
+              Telefones serão normalizados automaticamente (+55, DDD, 9° dígito)
+            </div>
+            <Button onClick={handleUpload} disabled={uploading || !phoneCol} className="gap-2">
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+              Importar {allRows.length} leads para disparo
+            </Button>
+          </>
+        )}
+
+        {result && (
+          <div className="flex gap-4 text-sm">
+            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">✅ {result.imported} importados</Badge>
+            {result.skipped > 0 && <Badge variant="outline" className="text-amber-400 border-amber-500/30">⚠️ {result.skipped} duplicados</Badge>}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1636,10 +1871,12 @@ function ConsultorView() {
 
   return (
     <>
-      {/* Motor de Disparo — Bug #006 fix: pass selected IDs so BlastSection can use them */}
+      {/* Motor de Disparo */}
       <BlastSection selectedLeadIds={Array.from(selected)} />
 
-      {/* Stats cards */}
+      {/* Importar Planilha */}
+      <ConsultorImportSection collaboratorId={collaborator?.id || null} onImported={fetchLeads} />
+
       <div className="grid grid-cols-2 gap-3">
         <SummaryCard icon={<Package className="h-5 w-5" />} label="Leads Pendentes" value={totalCount} color="warning" />
         <Card>
