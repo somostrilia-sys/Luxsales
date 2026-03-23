@@ -55,23 +55,51 @@ export default function MeusChips() {
 
   useEffect(() => { fetchChips(); }, [fetchChips]);
 
-  const callEdge = async (chipId: string, action: string) => {
+  const callEdge = async (chipId: string, action: string, retryCount = 0) => {
     setActionLoading(p => ({ ...p, [chipId + action]: true }));
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || SUPABASE_ANON_KEY;
       const res = await fetch(`${EDGE_BASE}/manage-disposable-chip`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ action, chip_id: chipId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro");
+      let data: any = null;
+      try { data = await res.json(); } catch { data = null; }
 
-      if (action === "connect" && data.qr_code) {
-        setQrCode(data.qr_code);
-        setQrChipName(chips.find(c => c.id === chipId)?.name || "Chip");
+      if (action === "connect") {
+        if (data?.error && !data?.qr_code) {
+          if (retryCount < 2) {
+            toast.info("Preparando instância, aguarde...");
+            await new Promise(r => setTimeout(r, 2500));
+            setActionLoading(p => ({ ...p, [chipId + action]: true }));
+            return callEdge(chipId, action, retryCount + 1);
+          }
+          throw new Error(data.error);
+        }
+        const qr = data?.qr_code;
+        if (qr) {
+          setQrCode(qr);
+          setQrChipName(chips.find(c => c.id === chipId)?.name || "Chip");
+          fetchChips();
+        } else if (retryCount < 2) {
+          await new Promise(r => setTimeout(r, 2000));
+          setActionLoading(p => ({ ...p, [chipId + action]: true }));
+          return callEdge(chipId, action, retryCount + 1);
+        } else {
+          toast.warning("QR não retornado. Tente novamente.");
+        }
       } else if (action === "status") {
-        toast.success(`Status: ${data.status || "desconhecido"}`);
+        if (!res.ok) throw new Error(data?.error || "Erro");
+        toast.success(`Status: ${data?.status || "desconhecido"}`);
+        if (data?.qr_code) {
+          setQrCode(data.qr_code);
+          setQrChipName(chips.find(c => c.id === chipId)?.name || "Chip");
+        }
         fetchChips();
+      } else {
+        if (!res.ok) throw new Error(data?.error || "Erro");
       }
     } catch (e: any) { toast.error(e.message); }
     setActionLoading(p => ({ ...p, [chipId + action]: false }));
