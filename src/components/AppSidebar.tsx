@@ -41,7 +41,9 @@ const managementItems: MenuItem[] = [
 ];
 
 const consultantItems: MenuItem[] = [
-  { title: "Atendimento", url: "/atendimento", icon: Phone, levels: [0, 1, 2, 3] },
+  { title: "Meus Chips", url: "/meus-chips", icon: Smartphone, levels: [0, 1, 2, 3] },
+  { title: "Disparos", url: "/disparos", icon: Zap, levels: [0, 1, 2, 3] },
+  { title: "Atendimento", url: "/atendimento-chat", icon: Phone, levels: [0, 1, 2, 3] },
   { title: "Conversas IA", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
   { title: "Meu Bot", url: "/meu-bot", icon: Bot, levels: [0, 1, 2, 3] },
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
