@@ -1579,6 +1579,164 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
 }
 
 // ═══════════════════════════════════════════
+// CONSULTOR IMPORT SECTION — Importar planilha direto para consultant_lead_pool
+// ═══════════════════════════════════════════
+const PHONE_HEADERS = ["telefone", "phone", "celular", "whatsapp", "fone", "tel"];
+const NAME_HEADERS = ["nome", "name", "cliente", "razao_social", "razão social"];
+const detectCol = (headers: string[], candidates: string[]) =>
+  headers.find(h => candidates.some(c => h.toLowerCase().includes(c))) || null;
+
+function ConsultorImportSection({ collaboratorId, onImported }: { collaboratorId: string | null; onImported: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<any[]>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [allRows, setAllRows] = useState<any[]>([]);
+  const [phoneCol, setPhoneCol] = useState<string | null>(null);
+  const [nameCol, setNameCol] = useState<string | null>(null);
+  const [cityCol, setCityCol] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setResult(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target?.result, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json<any>(ws, { defval: "" });
+        if (json.length === 0) { toast.error("Arquivo vazio"); return; }
+        const hdrs = Object.keys(json[0]);
+        setHeaders(hdrs);
+        setPhoneCol(detectCol(hdrs, PHONE_HEADERS));
+        setNameCol(detectCol(hdrs, NAME_HEADERS));
+        setCityCol(detectCol(hdrs, ["cidade", "city", "municipio"]));
+        setAllRows(json);
+        setPreview(json.slice(0, 5));
+      } catch {
+        toast.error("Erro ao ler arquivo");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["nome", "telefone", "cidade", "categoria"],
+      ["João Silva", "31987654321", "Belo Horizonte", "transporte"],
+      ["Maria Santos", "(11) 98765-4321", "São Paulo", "geral"],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Leads");
+    XLSX.writeFile(wb, "modelo_leads.xlsx");
+    toast.success("Modelo baixado!");
+  };
+
+  const handleUpload = async () => {
+    if (!collaboratorId || !phoneCol) { toast.error("Coluna de telefone não detectada"); return; }
+    setUploading(true);
+    try {
+      const contacts = allRows
+        .map(r => {
+          const rawPhone = String(r[phoneCol!] || "").trim();
+          const phone = normalizeBRPhone(rawPhone);
+          return {
+            collaborator_id: collaboratorId,
+            phone,
+            lead_name: nameCol ? String(r[nameCol] || "Sem nome").trim() : "Sem nome",
+            lead_city: cityCol ? String(r[cityCol] || "").trim() : null,
+            status: "pending",
+            assigned_at: new Date().toISOString(),
+          };
+        })
+        .filter(c => c.phone.length >= 13); // +55XXXXXXXXXXX = 14 chars min
+
+      if (contacts.length === 0) { toast.error("Nenhum telefone válido encontrado"); setUploading(false); return; }
+
+      let imported = 0;
+      let skipped = 0;
+      for (let i = 0; i < contacts.length; i += 500) {
+        const chunk = contacts.slice(i, i + 500);
+        const { error, count } = await supabase.from("consultant_lead_pool").upsert(chunk, { onConflict: "collaborator_id,phone", ignoreDuplicates: true, count: "exact" });
+        if (error) throw error;
+        imported += count ?? chunk.length;
+      }
+      skipped = contacts.length - imported;
+      setResult({ imported, skipped });
+      toast.success(`${imported} leads importados e prontos para disparo!`);
+      setPreview([]); setAllRows([]); setHeaders([]);
+      if (fileRef.current) fileRef.current.value = "";
+      onImported();
+    } catch (e: any) { toast.error("Erro: " + e.message); }
+    setUploading(false);
+  };
+
+  return (
+    <Card className="border-border">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Upload className="h-5 w-5 text-primary" /> Importar Planilha
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Importe contatos (.xlsx, .csv) — os leads vão direto para disparo. Mínimo: Nome + Telefone.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap gap-3 items-center">
+          <input ref={fileRef} type="file" accept=".xlsx,.csv,.xls" onChange={handleFile} className="hidden" />
+          <Button onClick={() => fileRef.current?.click()} disabled={uploading} variant="outline" className="gap-2">
+            <Upload className="h-4 w-4" /> Selecionar Arquivo
+          </Button>
+          <Button onClick={downloadTemplate} variant="ghost" className="gap-2 text-xs">
+            📄 Baixar Modelo
+          </Button>
+        </div>
+
+        {preview.length > 0 && (
+          <>
+            <div className="flex gap-2 flex-wrap text-xs text-muted-foreground">
+              <span>📞 Telefone: <Badge variant="secondary">{phoneCol || "Não detectado"}</Badge></span>
+              <span>👤 Nome: <Badge variant="secondary">{nameCol || "Não detectado"}</Badge></span>
+              <span>📍 Cidade: <Badge variant="secondary">{cityCol || "—"}</Badge></span>
+              <span>Total: <Badge variant="secondary">{allRows.length} linhas</Badge></span>
+            </div>
+            <div className="overflow-auto max-h-48 rounded border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>{headers.slice(0, 5).map(h => <TableHead key={h} className="text-xs whitespace-nowrap">{h}</TableHead>)}</TableRow>
+                </TableHeader>
+                <TableBody>
+                  {preview.map((row, i) => (
+                    <TableRow key={i}>{headers.slice(0, 5).map(h => <TableCell key={h} className="text-xs py-1">{String(row[h]).slice(0, 30)}</TableCell>)}</TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="flex items-center gap-2 p-2 rounded-md bg-primary/10 text-xs text-primary">
+              <Phone className="h-3.5 w-3.5" />
+              Telefones serão normalizados automaticamente (+55, DDD, 9° dígito)
+            </div>
+            <Button onClick={handleUpload} disabled={uploading || !phoneCol} className="gap-2">
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+              Importar {allRows.length} leads para disparo
+            </Button>
+          </>
+        )}
+
+        {result && (
+          <div className="flex gap-4 text-sm">
+            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">✅ {result.imported} importados</Badge>
+            {result.skipped > 0 && <Badge variant="outline" className="text-amber-400 border-amber-500/30">⚠️ {result.skipped} duplicados</Badge>}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════
 // CONSULTOR VIEW — Meus Leads (consultant_lead_pool + Realtime)
 // ═══════════════════════════════════════════
 function ConsultorView() {
