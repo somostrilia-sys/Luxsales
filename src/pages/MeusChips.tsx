@@ -147,7 +147,7 @@ export default function MeusChips() {
           <DialogHeader><DialogTitle>Conectar {qrChipName}</DialogTitle></DialogHeader>
           <div className="flex flex-col items-center gap-4 py-4">
             <p className="text-sm text-muted-foreground text-center">Escaneie o QR Code no WhatsApp</p>
-            {qrCode && <img src={`data:image/png;base64,${qrCode}`} alt="QR Code" className="w-64 h-64 rounded-lg border" />}
+            {qrCode && <img src={qrCode.startsWith("data:") ? qrCode : `data:image/png;base64,${qrCode}`} alt="QR Code" className="w-64 h-64 rounded-lg border" />}
           </div>
         </DialogContent>
       </Dialog>
