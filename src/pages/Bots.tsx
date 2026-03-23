@@ -1452,9 +1452,13 @@ export default function Bots() {
         </Card>
 
         {/* ════════════════════ CHIPS DESCARTÁVEIS ════════════════════ */}
-        {roleLevel === 0 && (
         <DisposableChipsSection collaboratorId={collaborator?.id || null} />
-        )}
+
+        {/* ════════════════════ MENSAGENS DE DISPARO ════════════════════ */}
+        <BlastMessagesSection collaboratorId={collaborator?.id || null} />
+
+        {/* ════════════════════ UPLOAD DE CONTATOS ════════════════════ */}
+        <UploadContactsSection collaboratorId={collaborator?.id || null} />
 
         {/* ════════════════════ TREINAR MEU BOT ════════════════════ */}
         <BotTrainingSection collaboratorId={collaborator?.id || null} />
