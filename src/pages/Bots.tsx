@@ -17,7 +17,8 @@ import { EDGE_BASE } from "@/lib/constants";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Plus, Search, Bot, Pencil, Power, QrCode, Eye, EyeOff, Loader2, Key, Trash2, Smartphone, RefreshCw, BookOpen, MessageCircle, Users, ChevronDown, ChevronUp, Activity, ShieldCheck, TriangleAlert, Timer, Network } from "lucide-react";
+import { Plus, Search, Bot, Pencil, Power, QrCode, Eye, EyeOff, Loader2, Key, Trash2, Smartphone, RefreshCw, BookOpen, MessageCircle, Users, ChevronDown, ChevronUp, Activity, ShieldCheck, TriangleAlert, Timer, Network, Upload, Send } from "lucide-react";
+import Papa from "papaparse";
 
 // ── Types ──
 
