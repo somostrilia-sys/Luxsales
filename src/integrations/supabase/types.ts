@@ -1302,6 +1302,50 @@ export type Database = {
           },
         ]
       }
+      blast_messages: {
+        Row: {
+          collaborator_id: string
+          created_at: string | null
+          id: string
+          message_1: string | null
+          message_2: string | null
+          message_3: string | null
+          message_4: string | null
+          message_5: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          collaborator_id: string
+          created_at?: string | null
+          id?: string
+          message_1?: string | null
+          message_2?: string | null
+          message_3?: string | null
+          message_4?: string | null
+          message_5?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          collaborator_id?: string
+          created_at?: string | null
+          id?: string
+          message_1?: string | null
+          message_2?: string | null
+          message_3?: string | null
+          message_4?: string | null
+          message_5?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blast_messages_collaborator_id_fkey"
+            columns: ["collaborator_id"]
+            isOneToOne: true
+            referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blasted_phones: {
         Row: {
           blast_job_id: string | null
