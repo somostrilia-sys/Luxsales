@@ -1010,7 +1010,7 @@ import { EDGE_BASE } from "@/lib/constants";
 function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) {
   const { collaborator } = useCollaborator();
 
-  // Persistir templates no localStorage para não perder ao trocar de página
+  // Persistir templates no Supabase + localStorage como fallback
   const defaultTemplate = "Olá {nome}! Vi que você atua nessa área e quero apresentar uma solução que pode proteger seus veículos com muito mais segurança e custo acessível. Posso te mostrar em 5 minutos?";
   const [messageTemplates, setMessageTemplates] = useState(() => {
     try {
@@ -1029,10 +1029,59 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
     } catch { /* ignore */ }
     return 100;
   });
-  // Salvar templates e limite no localStorage ao alterar
+  const [messagesLoaded, setMessagesLoaded] = useState(false);
+
+  // Load messages from Supabase on mount
+  useEffect(() => {
+    if (!collaborator?.id) return;
+    (async () => {
+      try {
+        const token = await getTokenStatic();
+        const resp = await fetch(`${EDGE_BASE}/blast-messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: "load", collaborator_id: collaborator.id }),
+        });
+        const result = await resp.json();
+        if (result?.messages && Array.isArray(result.messages)) {
+          const msgs = result.messages.slice(0, 5);
+          while (msgs.length < 5) msgs.push("");
+          // Only load from Supabase if at least one message has content
+          if (msgs.some((m: string) => m && m.trim().length > 0)) {
+            setMessageTemplates(msgs);
+          }
+        }
+      } catch { /* ignore */ }
+      setMessagesLoaded(true);
+    })();
+  }, [collaborator?.id]);
+
+  // Debounced auto-save to Supabase (1s after last edit)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [autoSaving, setAutoSaving] = useState(false);
+
+  const autoSaveMessages = useCallback((msgs: string[]) => {
+    if (!collaborator?.id || !messagesLoaded) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      setAutoSaving(true);
+      try {
+        const token = await getTokenStatic();
+        await fetch(`${EDGE_BASE}/blast-messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: "save", collaborator_id: collaborator.id, messages: msgs }),
+        });
+      } catch { /* silent */ }
+      setAutoSaving(false);
+    }, 1000);
+  }, [collaborator?.id, messagesLoaded]);
+
+  // Save to localStorage + trigger auto-save on change
   useEffect(() => {
     try { localStorage.setItem("blast_templates", JSON.stringify(messageTemplates)); } catch { /* */ }
-  }, [messageTemplates]);
+    autoSaveMessages(messageTemplates);
+  }, [messageTemplates, autoSaveMessages]);
   useEffect(() => {
     try { localStorage.setItem("blast_daily_limit", String(dailyLimit)); } catch { /* */ }
   }, [dailyLimit]);
