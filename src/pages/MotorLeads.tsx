@@ -529,7 +529,7 @@ function DistributeTab() {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
       const { EDGE_BASE: EB } = await import("@/lib/constants");
-      const res = await fetch(`${EB}/blast-engine`, {
+      const res = await fetch(`${EB}/campaign-engine`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ action: "force_refill", refill_count: 500 }),
@@ -1126,7 +1126,7 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
 
   const callBlast = async (body: Record<string, any>) => {
     const token = await getToken();
-    const res = await fetch(`${EDGE_BASE}/blast-engine`, {
+    const res = await fetch(`${EDGE_BASE}/campaign-engine`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
@@ -1188,7 +1188,7 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
     return () => { clearInterval(refreshIv); if (timeoutRef.current) clearTimeout(timeoutRef.current); };
   }, [fetchJob]);
 
-  // Bug #002 fix: recursive timeout using next_delay_ms from blast-engine response
+  // Bug #002 fix: recursive timeout using next_delay_ms from campaign-engine response
   // Stops only when remaining=0, daily_limit reached, or 3 consecutive errors
   const startAutoSend = useCallback((jobId: string) => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -1239,7 +1239,7 @@ function BlastSection({ selectedLeadIds = [] }: { selectedLeadIds?: string[] }) 
             return;
           }
 
-          // Schedule next send using blast-engine recommended delay
+          // Schedule next send using campaign-engine recommended delay
           scheduleSend(nextDelay);
 
         } catch (e: any) {
