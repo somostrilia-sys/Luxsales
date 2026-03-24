@@ -26,9 +26,12 @@ interface Conversation {
 
 interface Message {
   id: string;
-  role: string;
+  sender: string;
   content: string;
   created_at: string;
+  media_url?: string | null;
+  media_type?: string | null;
+  media_mimetype?: string | null;
 }
 
 export default function AtendimentoChat() {
@@ -64,7 +67,7 @@ export default function AtendimentoChat() {
     try {
       const { data } = await supabase
         .from("messages")
-        .select("id, role, content, created_at")
+        .select("id, sender, content, created_at, media_url, media_type, media_mimetype")
         .eq("conversation_id", conv.id)
         .order("created_at", { ascending: true })
         .limit(200);
@@ -94,7 +97,7 @@ export default function AtendimentoChat() {
           text: reply,
         }),
       });
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: "assistant", content: reply, created_at: new Date().toISOString() }]);
+      setMessages(prev => [...prev, { id: Date.now().toString(), sender: "consultant", content: reply, created_at: new Date().toISOString() }]);
       setReply("");
       setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (e: any) { toast.error(e.message || "Erro ao enviar"); }
@@ -179,14 +182,29 @@ export default function AtendimentoChat() {
                   <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
                 ) : (
                   <div className="space-y-3">
-                    {messages.map(msg => (
-                      <div key={msg.id} className={`flex ${msg.role === "assistant" ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${msg.role === "assistant" ? "bg-primary text-primary-foreground rounded-br-md" : "bg-secondary text-secondary-foreground rounded-bl-md"}`}>
-                          <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-                          <p className={`text-[9px] mt-1 ${msg.role === "assistant" ? "text-primary-foreground/60" : "text-muted-foreground"}`}>{formatTime(msg.created_at)}</p>
+                    {messages.map(msg => {
+                      const isOutbound = msg.sender === "consultant";
+                      return (
+                        <div key={msg.id} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
+                          <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${isOutbound ? "bg-primary text-primary-foreground rounded-br-md" : "bg-secondary text-secondary-foreground rounded-bl-md"}`}>
+                            {msg.media_url && msg.media_type === "image" && (
+                              <img src={msg.media_url} alt="mídia" className="rounded-lg max-w-full mb-1" />
+                            )}
+                            {msg.media_url && msg.media_type === "audio" && (
+                              <audio controls src={msg.media_url} className="max-w-full mb-1" />
+                            )}
+                            {msg.media_url && msg.media_type === "video" && (
+                              <video controls src={msg.media_url} className="rounded-lg max-w-full mb-1" />
+                            )}
+                            {msg.media_url && msg.media_type === "document" && (
+                              <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="text-xs underline mb-1 block">📎 Documento</a>
+                            )}
+                            {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
+                            <p className={`text-[9px] mt-1 ${isOutbound ? "text-primary-foreground/60" : "text-muted-foreground"}`}>{formatTime(msg.created_at)}</p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div ref={scrollRef} />
                   </div>
                 )}
