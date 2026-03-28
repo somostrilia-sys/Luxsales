@@ -44,6 +44,26 @@ export default function Discador() {
   const [campaigns, setCampaigns] = useState<{ id: string; name: string }[]>([]);
   const [agentStatus, setAgentStatus] = useState<"online" | "paused" | "offline">("offline");
   const [agentStats, setAgentStats] = useState({ calls: 0, qualified: 0, talkTime: 0 });
+  const [testPhone, setTestPhone] = useState("+5531997441277");
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{success:boolean; message:string}|null>(null);
+
+  const handleTestCall = async () => {
+    setTestLoading(true); setTestResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${EDGE_BASE}/initiate-call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ company_id: collaborator?.company_id, test_mode: true, test_phone: testPhone }),
+      });
+      const data = await res.json();
+      setTestResult(res.ok
+        ? { success: true, message: `✅ Ligação iniciada! UUID: ${data.freeswitch_uuid?.slice(0,8)}...` }
+        : { success: false, message: `❌ ${data.error || "falha"}` });
+    } catch(e:any) { setTestResult({ success: false, message: `❌ ${e.message}` }); }
+    finally { setTestLoading(false); }
+  };
 
   // Timer
   useEffect(() => {
