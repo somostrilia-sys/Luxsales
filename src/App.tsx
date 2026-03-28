@@ -16,8 +16,6 @@ const Agentes = lazy(() => import("./pages/Agentes"));
 const Metricas = lazy(() => import("./pages/Metricas"));
 const Conversas = lazy(() => import("./pages/Conversas"));
 const MeuBot = lazy(() => import("./pages/MeuBot"));
-const Bots = lazy(() => import("./pages/Bots"));
-const Proxy = lazy(() => import("./pages/Proxy"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
 const IdentidadeVisual = lazy(() => import("./pages/IdentidadeVisual"));
 const CeoBolt = lazy(() => import("./pages/CeoBolt"));
@@ -41,7 +39,7 @@ const MeuTime = lazy(() => import("./pages/MeuTime"));
 const Venda = lazy(() => import("./pages/Venda"));
 const Empresas = lazy(() => import("./pages/Empresas"));
 const MinhaEmpresa = lazy(() => import("./pages/MinhaEmpresa"));
-const MeusChips = lazy(() => import("./pages/MeusChips"));
+
 const Disparos = lazy(() => import("./pages/Disparos"));
 const AtendimentoChat = lazy(() => import("./pages/AtendimentoChat"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -81,8 +79,6 @@ const App = () => (
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="/extracao" element={<ProtectedRoute minLevel={1}><Extracao /></ProtectedRoute>} />
           <Route path="/agentes" element={<ProtectedRoute minLevel={1}><Agentes /></ProtectedRoute>} />
-          <Route path="/bots" element={<ProtectedRoute><Bots /></ProtectedRoute>} />
-          <Route path="/proxy" element={<ProtectedRoute minLevel={0}><Proxy /></ProtectedRoute>} />
           <Route path="/base-dados" element={<ProtectedRoute minLevel={2}><BaseDados /></ProtectedRoute>} />
           <Route path="/conversas" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
           <Route path="/meu-bot" element={<ProtectedRoute><MeuBot /></ProtectedRoute>} />
@@ -94,7 +90,7 @@ const App = () => (
           <Route path="/identidade-visual" element={<ProtectedRoute minLevel={0}><IdentidadeVisual /></ProtectedRoute>} />
           <Route path="/ceo" element={<ProtectedRoute minLevel={0}><CeoBolt /></ProtectedRoute>} />
           <Route path="/motor-leads" element={<ProtectedRoute><MotorLeads /></ProtectedRoute>} />
-          <Route path="/meus-chips" element={<ProtectedRoute><MeusChips /></ProtectedRoute>} />
+          
           <Route path="/disparos" element={<ProtectedRoute><Disparos /></ProtectedRoute>} />
           <Route path="/atendimento-chat" element={<ProtectedRoute><AtendimentoChat /></ProtectedRoute>} />
           <Route path="/voice-ai" element={<ProtectedRoute minLevel={0}><VoiceAI /></ProtectedRoute>} />
