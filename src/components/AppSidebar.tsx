@@ -77,6 +77,7 @@ export function AppSidebar() {
   const visibleManagement = managementItems.filter(i => i.levels.includes(roleLevel));
   const visibleVoice = voiceItems.filter(i => i.levels.includes(roleLevel));
   const visibleConsultant = consultantItems.filter(i => i.levels.includes(roleLevel));
+  const visibleWB = whatsappBusinessItems.filter(i => i.levels.includes(roleLevel));
 
   const renderItems = (items: MenuItem[]) =>
     items.map((item) => (
@@ -122,6 +123,15 @@ export function AppSidebar() {
             <SectionLabel>Gestão</SectionLabel>
             <SidebarGroupContent>
               <SidebarMenu className="space-y-0.5">{renderItems(visibleManagement)}</SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {visibleWB.length > 0 && (
+          <SidebarGroup>
+            <SectionLabel>WhatsApp Business</SectionLabel>
+            <SidebarGroupContent>
+              <SidebarMenu className="space-y-0.5">{renderItems(visibleWB)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}

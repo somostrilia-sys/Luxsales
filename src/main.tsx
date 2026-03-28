@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CollaboratorProvider } from "@/contexts/CollaboratorContext";
 import { CompanyFilterProvider } from "@/contexts/CompanyFilterContext";
+import { DispatchProvider } from "@/contexts/DispatchContext";
 import App from "./App.tsx";
 import "./index.css";
 
@@ -18,7 +19,9 @@ createRoot(document.getElementById("root")!).render(
       <AuthProvider>
         <CollaboratorProvider>
           <CompanyFilterProvider>
-            <App />
+            <DispatchProvider>
+              <App />
+            </DispatchProvider>
           </CompanyFilterProvider>
         </CollaboratorProvider>
       </AuthProvider>
