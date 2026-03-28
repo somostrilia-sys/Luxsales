@@ -28,6 +28,7 @@ const CompanySetup = lazy(() => import("./pages/CompanySetup"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
 
 // Voice / VoIP
+const DashboardCalls = lazy(() => import("./pages/DashboardCalls"));
 const DashboardVoip = lazy(() => import("./pages/DashboardVoip"));
 const Discador = lazy(() => import("./pages/Discador"));
 const CallCampaigns = lazy(() => import("./pages/CallCampaigns"));
@@ -81,6 +82,7 @@ const App = () => (
           <Route path="/conversations/:phone" element={<ProtectedRoute><ConversationDetail /></ProtectedRoute>} />
 
           {/* VoIP */}
+          <Route path="/calls" element={<ProtectedRoute minLevel={0}><DashboardCalls /></ProtectedRoute>} />
           <Route path="/dashboard-voip" element={<ProtectedRoute minLevel={1}><DashboardVoip /></ProtectedRoute>} />
           <Route path="/discador" element={<ProtectedRoute minLevel={2}><Discador /></ProtectedRoute>} />
           <Route path="/call-campaigns" element={<ProtectedRoute minLevel={1}><CallCampaigns /></ProtectedRoute>} />
