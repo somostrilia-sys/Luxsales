@@ -257,7 +257,7 @@ export default function Discador() {
           </Card>
         )}
 
-          {/* Left Column */}
+          <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
           <div className="space-y-4">
             <Card className="border-border/60 bg-card">
               <CardContent className="p-6">
