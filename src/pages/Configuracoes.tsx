@@ -34,9 +34,9 @@ const DEFAULTS: Config = {
 };
 
 const DB_KEYS: Record<keyof Config, string> = {
-  horarioInicio: "blast_schedule_start",
-  horarioFim: "blast_schedule_end",
-  intervalo: "blast_interval_hours",
+  horarioInicio: "dispatch_schedule_start",
+  horarioFim: "dispatch_schedule_end",
+  intervalo: "dispatch_interval_hours",
   emailNotif: "notif_email",
   whatsappNotif: "notif_whatsapp",
   alertaErro: "notif_alert_error",
@@ -119,11 +119,11 @@ export default function Configuracoes() {
       <div className="space-y-6 max-w-2xl">
         <PageHeader
           title="Configurações"
-          subtitle="Horários de execução do Motor de Disparo e notificações"
+          subtitle="Horários de envio e notificações"
         />
 
         <Card className="shadow-sm bg-card/80 backdrop-blur-sm">
-          <CardHeader><CardTitle className="text-lg">Motor de Disparo — Horários</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-lg">Horários de Envio</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
