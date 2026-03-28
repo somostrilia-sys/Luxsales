@@ -53,7 +53,9 @@ const whatsappBusinessItems: MenuItem[] = [
   { title: "Dashboard WB", url: "/dashboard-wb", icon: BarChart3, levels: [0] },
   { title: "Meus Leads", url: "/my-leads", icon: ClipboardList, levels: [0, 1, 2, 3] },
   { title: "Templates", url: "/templates", icon: FileText, levels: [0] },
+  { title: "Distribuição", url: "/lead-distribution", icon: Send, levels: [0] },
   { title: "Equipe WB", url: "/team", icon: UserCog, levels: [0] },
+  { title: "Opt-ins", url: "/opt-ins", icon: ShieldCheck, levels: [0] },
 ];
 
 const voiceItems: MenuItem[] = [
