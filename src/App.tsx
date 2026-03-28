@@ -41,7 +41,6 @@ const Empresas = lazy(() => import("./pages/Empresas"));
 const MinhaEmpresa = lazy(() => import("./pages/MinhaEmpresa"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
-const NotFound = lazy(() => import("./pages/NotFound"));
 
 // New WhatsApp Business pages
 const MyLeads = lazy(() => import("./pages/MyLeads"));
