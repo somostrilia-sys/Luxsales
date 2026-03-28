@@ -14,7 +14,10 @@ import {
   Phone, PhoneOff, Clock, User, MessageSquare,
   Flame, Snowflake, Sun, ThumbsDown,
   ShieldAlert, SkipForward, Pause, Play,
+  TestTube, Loader2,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { EDGE_BASE } from "@/lib/constants";
 
 type CallStatus = "idle" | "dialing" | "ringing" | "in_call" | "ended";
 type Qualification = "hot" | "warm" | "cold" | "not_qualified";
@@ -41,6 +44,26 @@ export default function Discador() {
   const [campaigns, setCampaigns] = useState<{ id: string; name: string }[]>([]);
   const [agentStatus, setAgentStatus] = useState<"online" | "paused" | "offline">("offline");
   const [agentStats, setAgentStats] = useState({ calls: 0, qualified: 0, talkTime: 0 });
+  const [testPhone, setTestPhone] = useState("+5531997441277");
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{success:boolean; message:string}|null>(null);
+
+  const handleTestCall = async () => {
+    setTestLoading(true); setTestResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${EDGE_BASE}/initiate-call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ company_id: collaborator?.company_id, test_mode: true, test_phone: testPhone }),
+      });
+      const data = await res.json();
+      setTestResult(res.ok
+        ? { success: true, message: `✅ Ligação iniciada! UUID: ${data.freeswitch_uuid?.slice(0,8)}...` }
+        : { success: false, message: `❌ ${data.error || "falha"}` });
+    } catch(e:any) { setTestResult({ success: false, message: `❌ ${e.message}` }); }
+    finally { setTestLoading(false); }
+  };
 
   // Timer
   useEffect(() => {
@@ -213,8 +236,28 @@ export default function Discador() {
           </div>
         </PageHeader>
 
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-          {/* Left Column */}
+        {roleLevel <= 1 && (
+          <Card className="border-yellow-500/30 bg-yellow-500/5 mb-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-yellow-400">
+                <TestTube className="h-4 w-4" /> Teste de Ligação
+              </CardTitle>
+              <CardDescription className="text-xs">Testa o pipeline de voz IA</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2">
+                <Input placeholder="+5531997441277" value={testPhone} onChange={e => setTestPhone(e.target.value)} className="h-8 text-sm" />
+                <Button size="sm" variant="outline" className="border-yellow-500/50 text-yellow-400" onClick={handleTestCall} disabled={testLoading || !testPhone}>
+                  {testLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Phone className="h-3 w-3" />}
+                  <span className="ml-1">{testLoading ? "Ligando..." : "Testar"}</span>
+                </Button>
+              </div>
+              {testResult && <p className={`text-xs mt-2 ${testResult.success ? "text-green-400" : "text-red-400"}`}>{testResult.message}</p>}
+            </CardContent>
+          </Card>
+        )}
+
+          <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
           <div className="space-y-4">
             <Card className="border-border/60 bg-card">
               <CardContent className="p-6">
