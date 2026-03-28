@@ -152,15 +152,32 @@ export default function Conversas() {
 
     setMessages((data || []) as ChatMessage[]);
 
-    // Load lifecycle
-    const { data: lc } = await supabase
-      .from("lead_whatsapp_lifecycle")
-      .select("stage, sentiment, window_open, window_expires_at, interests, objections, messages_sent, messages_received")
-      .eq("company_id", companyId)
-      .eq("phone_number", phone)
-      .maybeSingle();
+    // Load lifecycle — try exact phone, then variations
+    console.log("Buscando lifecycle para phone:", phone);
+    let lc: LifecycleData | null = null;
 
-    setLifecycle(lc as LifecycleData | null);
+    const phonesToTry = [phone];
+    if (phone.startsWith("+")) phonesToTry.push(phone.slice(1));
+    else {
+      phonesToTry.push("+" + phone);
+      if (phone.startsWith("55")) phonesToTry.push("+55" + phone.slice(2), "+" + phone);
+    }
+
+    for (const tryPhone of phonesToTry) {
+      const { data } = await supabase
+        .from("lead_whatsapp_lifecycle")
+        .select("stage, sentiment, window_open, window_expires_at, interests, objections, messages_sent, messages_received")
+        .eq("phone_number", tryPhone)
+        .maybeSingle();
+      if (data) {
+        lc = data as LifecycleData;
+        console.log("Resultado lifecycle (match:", tryPhone, "):", lc);
+        break;
+      }
+    }
+    if (!lc) console.log("Resultado lifecycle: null (nenhuma variação encontrada)");
+
+    setLifecycle(lc);
     setLoadingChat(false);
   }, [companyId]);
 
