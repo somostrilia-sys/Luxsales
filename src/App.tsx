@@ -23,6 +23,7 @@ const Conversas = lazy(() => import("./pages/Conversas"));
 const Templates = lazy(() => import("./pages/Templates"));
 const TeamManagement = lazy(() => import("./pages/TeamManagement"));
 const LeadDistribution = lazy(() => import("./pages/LeadDistribution"));
+const LeadsMaster = lazy(() => import("./pages/LeadsMaster"));
 const OptIns = lazy(() => import("./pages/OptIns"));
 const CompanySetup = lazy(() => import("./pages/CompanySetup"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
