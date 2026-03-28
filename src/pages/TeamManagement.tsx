@@ -11,23 +11,32 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useCollaborator } from "@/contexts/CollaboratorContext";
-import { EDGE_BASE } from "@/lib/constants";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useCompany } from "@/contexts/CompanyContext";
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { Plus, Loader2, Edit, Search, UserX, Users, Inbox } from "lucide-react";
+import { Plus, Loader2, Edit, Search, UserX, Users } from "lucide-react";
 
 interface TeamMember {
   id: string;
   collaborator_id: string;
   role: string;
-  daily_limit: number;
-  dispatches_today: number;
-  active: boolean;
+  daily_dispatch_limit: number;
+  daily_dispatches_used: number;
+  is_active: boolean;
+  can_dispatch: boolean;
+  allowed_templates: string[];
   user_email?: string;
   user_name?: string;
-  templates_count?: number;
 }
+
+const roleBadgeClass: Record<string, string> = {
+  ceo: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  director: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  manager: "bg-green-500/20 text-green-400 border-green-500/30",
+  collaborator: "bg-muted text-muted-foreground border-border",
+};
 
 const roleLabels: Record<string, string> = {
   ceo: "CEO",
@@ -36,25 +45,58 @@ const roleLabels: Record<string, string> = {
   collaborator: "Colaborador",
 };
 
+async function getAuthHeaders() {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token || SUPABASE_ANON_KEY}`,
+    apikey: SUPABASE_ANON_KEY,
+  };
+}
+
+async function callEdge(fn: string, body: Record<string, unknown>) {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${EDGE_BASE}/${fn}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg =
+      res.status === 403 ? "Sem permissão" :
+      res.status === 404 ? "Colaborador não encontrado" :
+      res.status >= 500 ? "Erro no servidor" :
+      json?.error || "Erro desconhecido";
+    throw new Error(msg);
+  }
+  return json;
+}
+
 export default function TeamManagement() {
-  const { collaborator } = useCollaborator();
+  const { company_id, user_role } = useCompany();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+
+  // Templates aprovados
+  const [approvedTemplates, setApprovedTemplates] = useState<string[]>([]);
 
   // Edit modal
   const [editMember, setEditMember] = useState<TeamMember | null>(null);
   const [editRole, setEditRole] = useState("collaborator");
   const [editLimit, setEditLimit] = useState(30);
   const [editActive, setEditActive] = useState(true);
+  const [editTemplates, setEditTemplates] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Add modal
   const [addOpen, setAddOpen] = useState(false);
   const [addEmail, setAddEmail] = useState("");
-  const [addName, setAddName] = useState("");
   const [addRole, setAddRole] = useState("collaborator");
   const [addLimit, setAddLimit] = useState(30);
+  const [addTemplates, setAddTemplates] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
 
   // Deactivate confirm
@@ -62,106 +104,147 @@ export default function TeamManagement() {
   const [deactivateSaving, setDeactivateSaving] = useState(false);
 
   const fetchMembers = useCallback(async () => {
+    if (!company_id) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from("dispatch_permissions")
-      .select("id, collaborator_id, role, daily_limit, dispatches_today, active")
-      .order("role");
-
-    if (error) {
-      toast.error("Erro ao carregar equipe");
-    } else {
-      setMembers((data || []) as TeamMember[]);
+    try {
+      const json = await callEdge("dispatch-permissions", {
+        action: "list",
+        company_id,
+        requester_role: "ceo",
+      });
+      const perms = json?.permissions || json?.data || [];
+      setMembers(Array.isArray(perms) ? perms : []);
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao carregar equipe");
+      setMembers([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, []);
+  }, [company_id]);
+
+  const fetchTemplates = useCallback(async () => {
+    if (!company_id) return;
+    try {
+      const json = await callEdge("template-intelligence", {
+        action: "list-approved",
+        company_id,
+      });
+      const tpls = json?.templates || json?.data || [];
+      setApprovedTemplates(Array.isArray(tpls) ? tpls.map((t: any) => typeof t === "string" ? t : t.name || t.template_name) : []);
+    } catch {
+      // Templates may not exist yet
+    }
+  }, [company_id]);
 
   useEffect(() => {
     fetchMembers();
-  }, [fetchMembers]);
+    fetchTemplates();
+  }, [fetchMembers, fetchTemplates]);
 
   const openEdit = (m: TeamMember) => {
     setEditMember(m);
     setEditRole(m.role);
-    setEditLimit(m.daily_limit);
-    setEditActive(m.active);
+    setEditLimit(m.daily_dispatch_limit || 30);
+    setEditActive(m.is_active !== false);
+    setEditTemplates(m.allowed_templates || []);
   };
 
   const saveEdit = async () => {
-    if (!editMember) return;
+    if (!editMember || !company_id) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("dispatch_permissions")
-      .update({ role: editRole, daily_limit: editLimit, active: editActive })
-      .eq("id", editMember.id);
-
-    if (error) toast.error("Erro ao salvar");
-    else {
+    try {
+      await callEdge("dispatch-permissions", {
+        action: "set",
+        company_id,
+        collaborator_id: editMember.collaborator_id,
+        role: editRole,
+        daily_dispatch_limit: editLimit,
+        allowed_templates: editTemplates,
+        is_active: editActive,
+        requester_role: "ceo",
+      });
       toast.success("Permissão atualizada!");
       setEditMember(null);
       fetchMembers();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const handleDeactivate = async () => {
-    if (!deactivating) return;
+    if (!deactivating || !company_id) return;
     setDeactivateSaving(true);
-    const { error } = await supabase
-      .from("dispatch_permissions")
-      .update({ active: false })
-      .eq("id", deactivating.id);
-
-    if (error) toast.error("Erro ao desativar");
-    else {
+    try {
+      await callEdge("dispatch-permissions", {
+        action: "deactivate",
+        company_id,
+        collaborator_id: deactivating.collaborator_id,
+        requester_role: "ceo",
+      });
       toast.success("Membro desativado");
       setDeactivating(null);
       fetchMembers();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setDeactivateSaving(false);
     }
-    setDeactivateSaving(false);
   };
 
   const addMember = async () => {
-    if (!addEmail || !collaborator) return;
+    if (!addEmail || !company_id) return;
     setAdding(true);
+    try {
+      // Lookup collaborator by email
+      const { data: collab } = await supabase
+        .from("collaborators")
+        .select("id")
+        .eq("email", addEmail.trim().toLowerCase())
+        .maybeSingle();
 
-    const { data: collab } = await supabase
-      .from("collaborators")
-      .select("auth_user_id")
-      .eq("email", addEmail)
-      .maybeSingle();
+      if (!collab?.id) {
+        toast.error("Colaborador não encontrado com este email");
+        setAdding(false);
+        return;
+      }
 
-    if (!collab?.auth_user_id) {
-      toast.error("Colaborador não encontrado com este email");
-      setAdding(false);
-      return;
-    }
-
-    const { error } = await supabase
-      .from("dispatch_permissions")
-      .insert({
-        collaborator_id: collab.auth_user_id,
-        company_id: collaborator.company_id,
+      await callEdge("dispatch-permissions", {
+        action: "set",
+        company_id,
+        collaborator_id: collab.id,
         role: addRole,
-        daily_limit: addLimit,
+        daily_dispatch_limit: addLimit,
+        allowed_templates: addTemplates,
+        requester_role: "ceo",
       });
 
-    if (error) {
-      if (error.code === "23505") toast.error("Este colaborador já possui permissão");
-      else toast.error(error.message);
-    } else {
       toast.success("Membro adicionado!");
       setAddOpen(false);
       setAddEmail("");
-      setAddName("");
+      setAddRole("collaborator");
+      setAddLimit(30);
+      setAddTemplates([]);
       fetchMembers();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setAdding(false);
     }
-    setAdding(false);
   };
 
   const filtered = members.filter(
-    (m) => !search || m.collaborator_id.includes(search) || m.user_name?.toLowerCase().includes(search.toLowerCase()) || m.user_email?.toLowerCase().includes(search.toLowerCase())
+    (m) =>
+      !search ||
+      m.collaborator_id?.includes(search) ||
+      m.user_name?.toLowerCase().includes(search.toLowerCase()) ||
+      m.user_email?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const toggleTemplate = (list: string[], setList: (v: string[]) => void, tpl: string) => {
+    setList(list.includes(tpl) ? list.filter((t) => t !== tpl) : [...list, tpl]);
+  };
 
   return (
     <DashboardLayout>
@@ -181,11 +264,21 @@ export default function TeamManagement() {
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : filtered.length === 0 && !search ? (
         <Card>
           <CardContent className="py-16 text-center">
-            <Inbox className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
-            <p className="text-muted-foreground">Nenhum membro encontrado</p>
+            <Users className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+            <p className="text-muted-foreground font-medium">Nenhum colaborador cadastrado</p>
+            <p className="text-sm text-muted-foreground mt-1 mb-4">Adicione colaboradores para gerenciar sua equipe</p>
+            <Button onClick={() => setAddOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Adicionar primeiro colaborador
+            </Button>
+          </CardContent>
+        </Card>
+      ) : filtered.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground">Nenhum resultado para "{search}"</p>
           </CardContent>
         </Card>
       ) : (
@@ -199,32 +292,42 @@ export default function TeamManagement() {
                     <th className="text-left p-3">Role</th>
                     <th className="text-left p-3">Limite</th>
                     <th className="text-left p-3 min-w-[150px]">Usado hoje</th>
+                    <th className="text-left p-3">Templates</th>
                     <th className="text-left p-3">Status</th>
                     <th className="text-right p-3">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((m) => {
-                    const pct = m.daily_limit > 0 ? (m.dispatches_today / m.daily_limit) * 100 : 0;
+                    const limit = m.daily_dispatch_limit || 0;
+                    const used = m.daily_dispatches_used || 0;
+                    const pct = limit > 0 ? (used / limit) * 100 : 0;
+                    const active = m.is_active !== false;
+                    const tplCount = m.allowed_templates?.length || 0;
                     return (
-                      <tr key={m.id} className={`border-b border-border/50 hover:bg-muted/20 ${!m.active ? "opacity-50" : ""}`}>
+                      <tr key={m.id || m.collaborator_id} className={`border-b border-border/50 hover:bg-muted/20 ${!active ? "opacity-50" : ""}`}>
                         <td className="p-3">
-                          <p className="font-medium">{m.user_name || m.collaborator_id.slice(0, 8) + "..."}</p>
+                          <p className="font-medium">{m.user_name || m.collaborator_id?.slice(0, 8) + "..."}</p>
                           {m.user_email && <p className="text-xs text-muted-foreground">{m.user_email}</p>}
                         </td>
                         <td className="p-3">
-                          <Badge variant="secondary" className="text-xs">{roleLabels[m.role] || m.role}</Badge>
+                          <Badge variant="outline" className={`text-xs ${roleBadgeClass[m.role] || roleBadgeClass.collaborator}`}>
+                            {roleLabels[m.role] || m.role}
+                          </Badge>
                         </td>
-                        <td className="p-3 text-xs">{m.daily_limit}/dia</td>
+                        <td className="p-3 text-xs">{limit}/dia</td>
                         <td className="p-3">
                           <div className="flex items-center gap-2">
-                            <Progress value={pct} className="flex-1 h-2" />
-                            <span className="text-xs text-muted-foreground w-14 text-right">{m.dispatches_today}/{m.daily_limit}</span>
+                            <Progress value={Math.min(pct, 100)} className="flex-1 h-2" />
+                            <span className="text-xs text-muted-foreground w-14 text-right">{used}/{limit}</span>
                           </div>
                         </td>
+                        <td className="p-3 text-xs text-muted-foreground">
+                          {tplCount > 0 ? `${tplCount} aprovado${tplCount > 1 ? "s" : ""}` : "—"}
+                        </td>
                         <td className="p-3">
-                          {m.active ? (
-                            <Badge variant="outline" className="text-green-400 text-xs">Ativo</Badge>
+                          {active ? (
+                            <Badge variant="outline" className="text-xs text-green-400 border-green-500/30">🟢 Ativo</Badge>
                           ) : (
                             <Badge variant="destructive" className="text-xs">Inativo</Badge>
                           )}
@@ -234,8 +337,8 @@ export default function TeamManagement() {
                             <Button size="sm" variant="ghost" onClick={() => openEdit(m)}>
                               <Edit className="h-3.5 w-3.5" />
                             </Button>
-                            {m.active && (
-                              <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300" onClick={() => setDeactivating(m)}>
+                            {active && (
+                              <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeactivating(m)}>
                                 <UserX className="h-3.5 w-3.5" />
                               </Button>
                             )}
@@ -271,17 +374,33 @@ export default function TeamManagement() {
             </div>
             <div>
               <Label>Limite diário</Label>
-              <Input type="number" value={editLimit} onChange={(e) => setEditLimit(Number(e.target.value))} />
+              <Input type="number" value={editLimit} onChange={(e) => setEditLimit(Number(e.target.value))} min={1} />
             </div>
             <div className="flex items-center gap-3">
               <Label>Ativo</Label>
               <Switch checked={editActive} onCheckedChange={setEditActive} />
             </div>
+            {approvedTemplates.length > 0 && (
+              <div>
+                <Label>Templates autorizados</Label>
+                <div className="mt-2 space-y-2 max-h-40 overflow-y-auto">
+                  {approvedTemplates.map((tpl) => (
+                    <div key={tpl} className="flex items-center gap-2">
+                      <Checkbox
+                        checked={editTemplates.includes(tpl)}
+                        onCheckedChange={() => toggleTemplate(editTemplates, setEditTemplates, tpl)}
+                      />
+                      <span className="text-sm">{tpl}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditMember(null)}>Cancelar</Button>
             <Button onClick={saveEdit} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
               Salvar
             </Button>
           </DialogFooter>
@@ -300,7 +419,7 @@ export default function TeamManagement() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeactivating(null)}>Cancelar</Button>
             <Button variant="destructive" onClick={handleDeactivate} disabled={deactivateSaving}>
-              {deactivateSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              {deactivateSaving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
               Desativar
             </Button>
           </DialogFooter>
@@ -316,11 +435,7 @@ export default function TeamManagement() {
           <div className="space-y-4">
             <div>
               <Label>Email do colaborador</Label>
-              <Input placeholder="email@empresa.com" value={addEmail} onChange={(e) => setAddEmail(e.target.value)} />
-            </div>
-            <div>
-              <Label>Nome</Label>
-              <Input placeholder="Nome completo" value={addName} onChange={(e) => setAddName(e.target.value)} />
+              <Input placeholder="email@empresa.com" type="email" value={addEmail} onChange={(e) => setAddEmail(e.target.value)} />
             </div>
             <div>
               <Label>Role</Label>
@@ -335,13 +450,29 @@ export default function TeamManagement() {
             </div>
             <div>
               <Label>Limite diário</Label>
-              <Input type="number" value={addLimit} onChange={(e) => setAddLimit(Number(e.target.value))} />
+              <Input type="number" value={addLimit} onChange={(e) => setAddLimit(Number(e.target.value))} min={1} />
             </div>
+            {approvedTemplates.length > 0 && (
+              <div>
+                <Label>Templates autorizados</Label>
+                <div className="mt-2 space-y-2 max-h-40 overflow-y-auto">
+                  {approvedTemplates.map((tpl) => (
+                    <div key={tpl} className="flex items-center gap-2">
+                      <Checkbox
+                        checked={addTemplates.includes(tpl)}
+                        onCheckedChange={() => toggleTemplate(addTemplates, setAddTemplates, tpl)}
+                      />
+                      <span className="text-sm">{tpl}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancelar</Button>
-            <Button onClick={addMember} disabled={adding || !addEmail}>
-              {adding ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+            <Button onClick={addMember} disabled={adding || !addEmail.trim()}>
+              {adding && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
               Adicionar
             </Button>
           </DialogFooter>
