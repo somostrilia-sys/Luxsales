@@ -10,13 +10,25 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
-  Search, Loader2, ArrowLeft, Bot, User, Info, Check, CheckCheck,
-  X, Phone, MessageSquare,
+  Search,
+  Loader2,
+  ArrowLeft,
+  Bot,
+  User,
+  Info,
+  Check,
+  CheckCheck,
+  X,
+  Phone,
+  MessageSquare,
+  SendHorizontal,
 } from "lucide-react";
-import { format, isToday, isYesterday } from "date-fns";
+import { format, formatDistanceToNowStrict, isToday, isYesterday } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 const FALLBACK_COMPANY_ID = "d33b6a84-8f72-4441-b2eb-dd151a31ac12";
 
@@ -67,7 +79,6 @@ export default function Conversas() {
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "window" | "waiting">("all");
 
   // Right panel
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
@@ -78,14 +89,22 @@ export default function Conversas() {
   const [sending, setSending] = useState(false);
   const [windowOpen, setWindowOpen] = useState<boolean>(false);
   const [windowExpires, setWindowExpires] = useState<string | null>(null);
+
+  const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const selectedPhoneRef = useRef<string | null>(null);
 
   // Template modal
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
 
+  useEffect(() => {
+    selectedPhoneRef.current = selectedPhone;
+  }, [selectedPhone]);
+
   // ── Load conversation list ──
   const loadConversations = useCallback(async () => {
+    setLoadingList(true);
     const { data: msgs } = await supabase
       .from("whatsapp_meta_messages")
       .select("phone_from, body, created_at, status")
@@ -154,42 +173,58 @@ export default function Conversas() {
 
     setMessages((data || []) as ChatMessage[]);
 
-    // Load lifecycle — try exact phone, then variations
+    // Load lifecycle context — keep phone exactly as selected, then fallback variations
     console.log("Buscando lifecycle para phone:", phone);
-    let lc: LifecycleData | null = null;
+    let lifecycleData: LifecycleData | null = null;
 
     const phonesToTry = [phone];
     if (phone.startsWith("+")) phonesToTry.push(phone.slice(1));
-    else {
-      phonesToTry.push("+" + phone);
-      if (phone.startsWith("55")) phonesToTry.push("+55" + phone.slice(2), "+" + phone);
-    }
+    if (!phone.startsWith("+")) phonesToTry.push(`+${phone}`);
+    if (phone.startsWith("55")) phonesToTry.push(`+${phone}`);
 
-    for (const tryPhone of phonesToTry) {
-      const { data } = await supabase
+    for (const tryPhone of Array.from(new Set(phonesToTry))) {
+      const { data: lc } = await supabase
         .from("lead_whatsapp_lifecycle")
         .select("stage, sentiment, window_open, window_expires_at, interests, objections, messages_sent, messages_received")
         .eq("phone_number", tryPhone)
         .maybeSingle();
-      if (data) {
-        lc = data as LifecycleData;
-        console.log("Resultado lifecycle (match:", tryPhone, "):", lc);
+
+      if (lc) {
+        lifecycleData = lc as LifecycleData;
         break;
       }
     }
-    if (!lc) console.log("Resultado lifecycle: null (nenhuma variação encontrada)");
 
-    setLifecycle(lc);
+    console.log("Resultado lifecycle:", lifecycleData);
+    setLifecycle(lifecycleData);
     setLoadingChat(false);
   }, [companyId]);
 
   // When a phone is selected, load its messages
   const handleSelectPhone = useCallback((phone: string) => {
     setSelectedPhone(phone);
+    setMessageText("");
     loadMessages(phone);
   }, [loadMessages]);
 
   // ── Window state (24h) ──
+  const fetchWindow = useCallback(async (phone: string) => {
+    const { data } = await supabase
+      .from("lead_whatsapp_lifecycle")
+      .select("window_open, window_expires_at")
+      .eq("phone_number", phone.replace("+", ""))
+      .maybeSingle();
+
+    if (data) {
+      const isOpen = data.window_open === true && new Date(data.window_expires_at) > new Date();
+      setWindowOpen(isOpen);
+      setWindowExpires(data.window_expires_at);
+    } else {
+      setWindowOpen(false);
+      setWindowExpires(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (!selectedPhone) {
       setWindowOpen(false);
@@ -197,30 +232,17 @@ export default function Conversas() {
       return;
     }
 
-    const fetchWindow = async () => {
-      const { data } = await supabase
-        .from("lead_whatsapp_lifecycle")
-        .select("window_open, window_expires_at")
-        .eq("phone_number", selectedPhone.replace("+", ""))
-        .maybeSingle();
+    fetchWindow(selectedPhone);
+  }, [selectedPhone, fetchWindow]);
 
-      if (data) {
-        const isOpen = data.window_open === true && new Date(data.window_expires_at) > new Date();
-        setWindowOpen(isOpen);
-        setWindowExpires(data.window_expires_at);
-      } else {
-        setWindowOpen(false);
-        setWindowExpires(null);
-      }
-    };
-
-    fetchWindow();
-  }, [selectedPhone]);
-
-  // Scroll to bottom on new messages
+  // Scroll + keep input focus stable on message updates
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+
+    if (windowOpen) {
+      inputRef.current?.focus();
+    }
+  }, [messages, selectedPhone, windowOpen]);
 
   // ── Realtime subscription ──
   useEffect(() => {
@@ -232,24 +254,28 @@ export default function Conversas() {
         table: "whatsapp_meta_messages",
       }, (payload) => {
         const msg = payload.new as ChatMessage;
-        // Only care about our company
-        if ((msg as any).company_id !== companyId) return;
+        if ((msg as { company_id?: string }).company_id !== companyId) return;
 
-        // If this message belongs to the selected conversation, append it
-        if (selectedPhone && (msg.phone_from === selectedPhone || msg.phone_to === selectedPhone)) {
+        const currentPhone = selectedPhoneRef.current;
+        const belongsToCurrent = currentPhone && (msg.phone_from === currentPhone || msg.phone_to === currentPhone);
+
+        if (belongsToCurrent) {
           setMessages((prev) => {
-            // Dedupe by id
             if (prev.some((m) => m.id === msg.id)) return prev;
             return [...prev, msg];
           });
+
+          if (currentPhone) {
+            fetchWindow(currentPhone);
+          }
         }
-        // Refresh the conversation list
+
         loadConversations();
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [companyId, selectedPhone, loadConversations]);
+  }, [companyId, loadConversations, fetchWindow]);
 
   // ── Send message ──
   const getHeaders = useCallback(async () => {
@@ -262,7 +288,7 @@ export default function Conversas() {
   }, []);
 
   const sendMessage = async () => {
-    if (!messageText.trim() || !selectedPhone || sending) return;
+    if (!messageText.trim() || !selectedPhone || sending || !windowOpen) return;
     setSending(true);
     try {
       const res = await fetch("https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/send-meta-message", {
@@ -276,6 +302,7 @@ export default function Conversas() {
       });
       if (res.ok) {
         setMessageText("");
+        inputRef.current?.focus();
       } else {
         const d = await res.json().catch(() => ({}));
         toast.error(d.error || "Erro ao enviar mensagem");
@@ -326,8 +353,46 @@ export default function Conversas() {
     return format(d, "dd/MM HH:mm");
   };
 
+  const formatRelativeListTs = (ts: string) => {
+    const d = new Date(ts);
+    if (isToday(d)) {
+      return formatDistanceToNowStrict(d, { addSuffix: true, locale: ptBR });
+    }
+    if (isYesterday(d)) return "Ontem";
+    return format(d, "dd/MM/yy");
+  };
+
+  const formatPhone = (phone: string) => {
+    const onlyDigits = phone.replace(/\D/g, "");
+    if (onlyDigits.length >= 12) {
+      return `+${onlyDigits.slice(0, 2)} ${onlyDigits.slice(2, 4)} ${onlyDigits.slice(4, 9)}-${onlyDigits.slice(9, 13)}`;
+    }
+    if (onlyDigits.length >= 11) {
+      return `(${onlyDigits.slice(0, 2)}) ${onlyDigits.slice(2, 7)}-${onlyDigits.slice(7, 11)}`;
+    }
+    return phone;
+  };
+
+  const getAvatarTone = (seed: string) => {
+    const options = [
+      "bg-primary/20 text-primary",
+      "bg-accent/20 text-accent",
+      "bg-secondary text-secondary-foreground",
+      "bg-muted text-foreground",
+    ];
+    const index = seed.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) % options.length;
+    return options[index];
+  };
+
+  const getDateSeparatorLabel = (ts: string) => {
+    const d = new Date(ts);
+    if (isToday(d)) return "Hoje";
+    if (isYesterday(d)) return "Ontem";
+    return format(d, "dd/MM/yyyy");
+  };
+
   const StatusIcon = ({ status }: { status?: string | null }) => {
-    if (status === "read") return <CheckCheck className="h-3 w-3 text-blue-400" />;
+    if (status === "read") return <CheckCheck className="h-3 w-3 wa-read-receipt" />;
     if (status === "delivered") return <CheckCheck className="h-3 w-3 text-muted-foreground" />;
     if (status === "failed") return <X className="h-3 w-3 text-destructive" />;
     return <Check className="h-3 w-3 text-muted-foreground" />;
@@ -335,8 +400,6 @@ export default function Conversas() {
 
   // ── Filter conversations ──
   const filtered = conversations.filter((c) => {
-    if (filter === "window" && !c.window_open) return false;
-    if (filter === "waiting" && c.ai_status === "ia") return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return (c.lead_name?.toLowerCase().includes(q) || c.phone_from.includes(q));
@@ -398,31 +461,18 @@ export default function Conversas() {
   );
 
   // ── Conversation List Panel ──
-  const ConversationList = () => (
-    <div className="flex flex-col h-full border-r border-border">
-      <div className="p-3 border-b border-border space-y-2">
-        <h2 className="font-semibold text-lg">Conversas</h2>
+  const renderConversationList = () => (
+    <div className="flex h-full flex-col border-r border-border/50 wa-surface">
+      <div className="border-b border-border/50 px-3 py-3">
+        <h2 className="mb-2 text-lg font-semibold wa-text-main">Conversas</h2>
         <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 wa-text-muted" />
           <Input
             placeholder="Buscar nome ou telefone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9"
+            className="h-9 rounded-full border-border/50 bg-background pl-9"
           />
-        </div>
-        <div className="flex gap-1">
-          {(["all", "window", "waiting"] as const).map((f) => (
-            <Button
-              key={f}
-              size="sm"
-              variant={filter === f ? "default" : "ghost"}
-              className="text-xs h-7"
-              onClick={() => setFilter(f)}
-            >
-              {f === "all" ? "Todos" : f === "window" ? "Janela aberta" : "Aguardando"}
-            </Button>
-          ))}
         </div>
       </div>
 
@@ -440,7 +490,7 @@ export default function Conversas() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">
+          <div className="p-8 text-center wa-text-muted">
             <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-40" />
             <p className="text-sm">Nenhuma conversa ainda.</p>
             <p className="text-xs mt-1">Quando leads mandarem mensagem no WhatsApp, aparecerão aqui.</p>
@@ -451,23 +501,25 @@ export default function Conversas() {
               <button
                 key={c.phone_from}
                 onClick={() => handleSelectPhone(c.phone_from)}
-                className={`w-full flex items-center gap-3 p-3 text-left transition-colors hover:bg-accent/50 ${
-                  selectedPhone === c.phone_from ? "bg-accent" : ""
-                }`}
+                className={cn(
+                  "wa-row-hover flex w-full items-center gap-3 border-b border-border/40 px-3 py-3 text-left transition-colors",
+                  selectedPhone === c.phone_from && "wa-row-selected",
+                )}
               >
-                <div className="relative h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
-                  <User className="h-5 w-5 text-muted-foreground" />
+                <div className={cn("relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold", getAvatarTone(c.phone_from))}>
+                  {(c.lead_name || c.phone_from).slice(0, 1).toUpperCase()}
                   {c.window_open && (
-                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-green-500 rounded-full border-2 border-background" />
+                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background wa-window-dot" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-sm truncate">{c.lead_name || c.phone_from}</p>
-                    <span className="text-[10px] text-muted-foreground shrink-0">{formatTs(c.created_at)}</span>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate text-sm font-semibold wa-text-main">{c.lead_name || formatPhone(c.phone_from)}</p>
+                    <span className="shrink-0 text-[11px] wa-text-muted">{formatRelativeListTs(c.created_at)}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">{c.body || "..."}</p>
-                  <div className="flex gap-1 mt-0.5">
+                  <p className="truncate text-xs wa-text-muted">{c.body || "..."}</p>
+                  <div className="mt-1 flex items-center gap-1">
+                    {c.window_open && <span className="h-2 w-2 rounded-full wa-window-dot" />}
                     {c.ai_status === "ia" && (
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4"><Bot className="h-2.5 w-2.5 mr-0.5" />IA</Badge>
                     )}
@@ -482,39 +534,48 @@ export default function Conversas() {
   );
 
   // ── Chat Panel ──
-  const ChatPanel = () => {
+  const renderEmptyState = () => (
+    <div className="wa-chat-pattern flex h-full flex-1 items-center justify-center">
+      <div className="text-center wa-text-muted">
+        <MessageSquare className="mx-auto mb-4 h-16 w-16 opacity-25" />
+        <p className="text-base font-medium">Selecione uma conversa</p>
+      </div>
+    </div>
+  );
+
+  const renderChatPanel = () => {
     if (!selectedPhone) {
-      return (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground">
-          <div className="text-center">
-            <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-20" />
-            <p className="text-sm">Selecione uma conversa</p>
-          </div>
-        </div>
-      );
+      return renderEmptyState();
     }
 
     const selected = conversations.find((c) => c.phone_from === selectedPhone);
+    const title = selected?.lead_name || formatPhone(selectedPhone);
 
     return (
-      <div className="flex-1 flex flex-col h-full">
+      <div className="flex h-full flex-1 flex-col">
         {/* Chat header */}
-        <div className="h-14 border-b border-border flex items-center justify-between px-4 shrink-0">
+        <div className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between border-b border-border/50 bg-card px-4 shadow-sm">
           <div className="flex items-center gap-3">
             {isMobile && (
               <Button variant="ghost" size="icon" onClick={() => setSelectedPhone(null)}>
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             )}
+            <div className={cn("flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold", getAvatarTone(selectedPhone))}>
+              {title.slice(0, 1).toUpperCase()}
+            </div>
             <div>
-              <p className="font-semibold text-sm">{selected?.lead_name || selectedPhone}</p>
-              <p className="text-xs text-muted-foreground">{selectedPhone}</p>
+              <p className="text-sm font-semibold wa-text-main">{title}</p>
+              <p className="text-xs wa-text-muted">{formatPhone(selectedPhone)}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {lifecycle?.stage && (
-              <Badge variant="secondary" className="text-xs">{lifecycle.stage}</Badge>
+              <Badge variant="secondary" className="text-xs capitalize">{lifecycle.stage.replace("_", " ")}</Badge>
             )}
+            <Badge className={cn("text-xs", windowOpen ? "wa-window-open" : "wa-window-closed")}>
+              {windowOpen ? "Aberta" : "Fechada"}
+            </Badge>
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon"><Info className="h-4 w-4" /></Button>
@@ -528,33 +589,40 @@ export default function Conversas() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        <div className="wa-chat-pattern flex-1 overflow-y-auto px-4 py-3">
           {loadingChat ? (
             <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : messages.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-12">Nenhuma mensagem</p>
+            <p className="py-12 text-center text-sm wa-text-muted">Nenhuma mensagem</p>
           ) : (
-            messages.map((msg) => {
+            messages.map((msg, index) => {
               const isOutbound = msg.direction === "outbound";
+              const previous = messages[index - 1];
+              const showDateSeparator = !previous || new Date(previous.created_at).toDateString() !== new Date(msg.created_at).toDateString();
+
               return (
-                <div key={msg.id} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[75%] rounded-2xl px-3 py-2 ${
-                      isOutbound
-                        ? "bg-primary text-primary-foreground rounded-br-sm"
-                        : "bg-muted text-foreground rounded-bl-sm"
-                    }`}
-                  >
-                    {msg.is_ai_generated && isOutbound && (
-                      <div className="flex items-center gap-1 mb-0.5">
-                        <Bot className="h-3 w-3" />
-                        <span className="text-[10px] opacity-70">IA</span>
+                <div key={msg.id} className="space-y-1.5">
+                  {showDateSeparator && (
+                    <div className="flex justify-center py-1">
+                      <span className="rounded-full bg-card px-3 py-1 text-[11px] wa-text-muted shadow-sm">
+                        {getDateSeparatorLabel(msg.created_at)}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className={cn("flex", isOutbound ? "justify-end" : "justify-start")}>
+                    <div className={cn("max-w-[65%] rounded-lg px-3 py-2 shadow-sm", isOutbound ? "wa-bubble-outbound" : "wa-bubble-inbound")}>
+                      {msg.is_ai_generated && isOutbound && (
+                        <div className="mb-0.5 flex items-center gap-1">
+                          <Bot className="h-3 w-3" />
+                          <span className="text-[10px] opacity-70">IA</span>
+                        </div>
+                      )}
+                      <p className="whitespace-pre-wrap text-sm wa-text-main">{msg.body}</p>
+                      <div className="mt-1 flex items-center justify-end gap-1">
+                        <span className="text-[10px] wa-text-muted">{format(msg.created_at, "HH:mm")}</span>
+                        {isOutbound && <StatusIcon status={msg.status} />}
                       </div>
-                    )}
-                    <p className="text-sm whitespace-pre-wrap">{msg.body}</p>
-                    <div className="flex items-center justify-end gap-1 mt-1">
-                      <span className="text-[10px] opacity-60">{formatTs(msg.created_at)}</span>
-                      {isOutbound && <StatusIcon status={msg.status} />}
                     </div>
                   </div>
                 </div>
@@ -565,43 +633,49 @@ export default function Conversas() {
         </div>
 
         {/* Input area */}
-        <div className="border-t border-border p-3">
+        <div className="sticky bottom-0 border-t border-border/50 bg-card p-3">
           {windowOpen ? (
             <div>
-              <div className="mb-2 flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs text-primary">
-                <span className="h-2 w-2 rounded-full bg-primary"></span>
+              <div className="wa-window-open mb-2 flex items-center gap-1 rounded-md px-2 py-1 text-xs">
+                <span className="h-2 w-2 rounded-full wa-window-dot"></span>
                 Janela aberta — expira {windowExpires ? new Date(windowExpires).toLocaleString("pt-BR") : ""}
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <input
+                  ref={inputRef}
                   type="text"
                   placeholder="Digite sua mensagem..."
-                  className="flex-1 rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-10 flex-1 rounded-full border border-border/60 bg-background px-4 py-2 text-sm wa-text-main placeholder:wa-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void sendMessage();
+                    }
+                  }}
                   disabled={sending}
                 />
-                <button
+                <Button
                   onClick={sendMessage}
                   disabled={sending || !messageText.trim()}
-                  className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  className="wa-send-btn h-10 w-10 rounded-full p-0"
                 >
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar"}
-                </button>
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
+                </Button>
               </div>
             </div>
           ) : (
             <div>
-              <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs text-destructive">
-                Janela fechada — apenas templates
+              <div className="wa-window-closed mb-2 rounded-md px-2 py-1 text-xs">
+                Janela de 24h expirada
               </div>
-              <button
-                className="w-full rounded-lg bg-secondary px-4 py-2 text-sm text-secondary-foreground hover:bg-secondary/90"
+              <Button
+                className="wa-template-btn w-full rounded-lg px-4 py-2 text-sm"
                 onClick={loadTemplates}
               >
                 Enviar Template
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -610,7 +684,7 @@ export default function Conversas() {
   };
 
   // ── Template Modal ──
-  const TemplateModal = () => (
+  const renderTemplateModal = () => (
     <Dialog open={templateOpen} onOpenChange={setTemplateOpen}>
       <DialogContent>
         <DialogHeader>
@@ -642,23 +716,23 @@ export default function Conversas() {
   if (isMobile) {
     return (
       <DashboardLayout>
-        <div className="h-[calc(100vh-8rem)] flex flex-col">
-          {selectedPhone ? <ChatPanel /> : <ConversationList />}
+        <div className="flex h-[calc(100vh-64px)] flex-col overflow-hidden rounded-lg border border-border/50">
+          {selectedPhone ? renderChatPanel() : renderConversationList()}
         </div>
-        <TemplateModal />
+        {renderTemplateModal()}
       </DashboardLayout>
     );
   }
 
   return (
     <DashboardLayout>
-      <div className="h-[calc(100vh-6rem)] flex border border-border rounded-lg overflow-hidden">
-        <div className="w-[360px] shrink-0">
-          <ConversationList />
+      <div className="flex h-[calc(100vh-64px)] overflow-hidden rounded-lg border border-border/50">
+        <div className="w-[350px] shrink-0">
+          {renderConversationList()}
         </div>
-        <ChatPanel />
+        {renderChatPanel()}
       </div>
-      <TemplateModal />
+      {renderTemplateModal()}
     </DashboardLayout>
   );
 }
