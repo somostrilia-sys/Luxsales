@@ -15,6 +15,7 @@ const CriarConta = lazy(() => import("./pages/CriarConta"));
 const Venda = lazy(() => import("./pages/Venda"));
 
 // Dashboard & WB
+const DashboardGeral = lazy(() => import("./pages/DashboardGeral"));
 const DashboardWB = lazy(() => import("./pages/DashboardWB"));
 const MyLeads = lazy(() => import("./pages/MyLeads"));
 const ConversationDetail = lazy(() => import("./pages/ConversationDetail"));
@@ -64,7 +65,8 @@ const App = () => (
           <Route path="/venda" element={<Venda />} />
 
           {/* WB Core — CEO */}
-          <Route path="/" element={<ProtectedRoute><DashboardWB /></ProtectedRoute>} />
+          <Route path="/" element={<ProtectedRoute><DashboardGeral /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><DashboardGeral /></ProtectedRoute>} />
           <Route path="/dashboard-wb" element={<ProtectedRoute minLevel={0}><DashboardWB /></ProtectedRoute>} />
           <Route path="/templates" element={<ProtectedRoute minLevel={0}><Templates /></ProtectedRoute>} />
           <Route path="/team" element={<ProtectedRoute minLevel={0}><TeamManagement /></ProtectedRoute>} />

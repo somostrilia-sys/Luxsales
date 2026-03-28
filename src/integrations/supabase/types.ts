@@ -1387,6 +1387,27 @@ export type Database = {
           },
         ]
       }
+      blocked_numbers: {
+        Row: {
+          created_at: string | null
+          id: string
+          phone: string
+          reason: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          phone: string
+          reason?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          phone?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
       bot_instances: {
         Row: {
           active: boolean | null
@@ -2976,7 +2997,9 @@ export type Database = {
       }
       cnpj_leads: {
         Row: {
+          attempts: number | null
           bairro: string | null
+          call_id: string | null
           cep: string | null
           cnae_descricao: string | null
           cnae_fiscal: string | null
@@ -2984,19 +3007,26 @@ export type Database = {
           email: string | null
           id: string
           imported_at: string | null
+          is_blocked: boolean | null
+          last_attempt_at: string | null
           logradouro: string | null
           municipio: string | null
           nome_fantasia: string | null
           numero: string | null
           porte_empresa: string | null
+          priority: number | null
           razao_social: string | null
           situacao_cadastral: string | null
+          status: string | null
           telefone1: string | null
           telefone2: string | null
           uf: string | null
+          whatsapp_opt_in: boolean | null
         }
         Insert: {
+          attempts?: number | null
           bairro?: string | null
+          call_id?: string | null
           cep?: string | null
           cnae_descricao?: string | null
           cnae_fiscal?: string | null
@@ -3004,19 +3034,26 @@ export type Database = {
           email?: string | null
           id?: string
           imported_at?: string | null
+          is_blocked?: boolean | null
+          last_attempt_at?: string | null
           logradouro?: string | null
           municipio?: string | null
           nome_fantasia?: string | null
           numero?: string | null
           porte_empresa?: string | null
+          priority?: number | null
           razao_social?: string | null
           situacao_cadastral?: string | null
+          status?: string | null
           telefone1?: string | null
           telefone2?: string | null
           uf?: string | null
+          whatsapp_opt_in?: boolean | null
         }
         Update: {
+          attempts?: number | null
           bairro?: string | null
+          call_id?: string | null
           cep?: string | null
           cnae_descricao?: string | null
           cnae_fiscal?: string | null
@@ -3024,16 +3061,21 @@ export type Database = {
           email?: string | null
           id?: string
           imported_at?: string | null
+          is_blocked?: boolean | null
+          last_attempt_at?: string | null
           logradouro?: string | null
           municipio?: string | null
           nome_fantasia?: string | null
           numero?: string | null
           porte_empresa?: string | null
+          priority?: number | null
           razao_social?: string | null
           situacao_cadastral?: string | null
+          status?: string | null
           telefone1?: string | null
           telefone2?: string | null
           uf?: string | null
+          whatsapp_opt_in?: boolean | null
         }
         Relationships: []
       }
