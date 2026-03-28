@@ -29,6 +29,7 @@ const Configuracoes = lazy(() => import("./pages/Configuracoes"));
 
 // Voice / VoIP
 const DashboardCalls = lazy(() => import("./pages/DashboardCalls"));
+const DashboardMeta = lazy(() => import("./pages/DashboardMeta"));
 const DashboardVoip = lazy(() => import("./pages/DashboardVoip"));
 const Discador = lazy(() => import("./pages/Discador"));
 const CallCampaigns = lazy(() => import("./pages/CallCampaigns"));
