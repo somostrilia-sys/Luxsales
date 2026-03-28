@@ -3876,6 +3876,60 @@ export type Database = {
           },
         ]
       }
+      dispatch_permissions: {
+        Row: {
+          active: boolean
+          collaborator_id: string
+          company_id: string | null
+          created_at: string
+          daily_limit: number
+          dispatches_today: number
+          id: string
+          last_reset_at: string | null
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          collaborator_id: string
+          company_id?: string | null
+          created_at?: string
+          daily_limit?: number
+          dispatches_today?: number
+          id?: string
+          last_reset_at?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          collaborator_id?: string
+          company_id?: string | null
+          created_at?: string
+          daily_limit?: number
+          dispatches_today?: number
+          id?: string
+          last_reset_at?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatch_permissions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dispatch_permissions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_company_whatsapp_health"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
       disposable_chips: {
         Row: {
           chip_index: number

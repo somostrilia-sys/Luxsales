@@ -2,6 +2,7 @@ import {
   LayoutDashboard, Users, FileSearch, Database,
   BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone, Mic, PhoneCall, Network, Building2, Building,
   Headphones, Contact, MessageCircle, FileBarChart, ShieldCheck, Wrench, Megaphone, FileText, Smartphone, Zap,
+  Send, ClipboardList, UserCog,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -48,6 +49,13 @@ const consultantItems: MenuItem[] = [
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
 ];
 
+const whatsappBusinessItems: MenuItem[] = [
+  { title: "Dashboard WB", url: "/dashboard-wb", icon: BarChart3, levels: [0] },
+  { title: "Meus Leads", url: "/my-leads", icon: ClipboardList, levels: [0, 1, 2, 3] },
+  { title: "Templates", url: "/templates", icon: FileText, levels: [0] },
+  { title: "Equipe WB", url: "/team", icon: UserCog, levels: [0] },
+];
+
 const voiceItems: MenuItem[] = [
   { title: "Dashboard VoIP", url: "/dashboard-voip", icon: BarChart3, levels: [0, 1] },
   { title: "Discador", url: "/discador", icon: Phone, levels: [0, 1, 2] },
@@ -69,6 +77,7 @@ export function AppSidebar() {
   const visibleManagement = managementItems.filter(i => i.levels.includes(roleLevel));
   const visibleVoice = voiceItems.filter(i => i.levels.includes(roleLevel));
   const visibleConsultant = consultantItems.filter(i => i.levels.includes(roleLevel));
+  const visibleWB = whatsappBusinessItems.filter(i => i.levels.includes(roleLevel));
 
   const renderItems = (items: MenuItem[]) =>
     items.map((item) => (
@@ -114,6 +123,15 @@ export function AppSidebar() {
             <SectionLabel>Gestão</SectionLabel>
             <SidebarGroupContent>
               <SidebarMenu className="space-y-0.5">{renderItems(visibleManagement)}</SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {visibleWB.length > 0 && (
+          <SidebarGroup>
+            <SectionLabel>WhatsApp Business</SectionLabel>
+            <SidebarGroupContent>
+              <SidebarMenu className="space-y-0.5">{renderItems(visibleWB)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}

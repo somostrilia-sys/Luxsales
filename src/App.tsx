@@ -46,6 +46,13 @@ const Disparos = lazy(() => import("./pages/Disparos"));
 const AtendimentoChat = lazy(() => import("./pages/AtendimentoChat"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
+// New WhatsApp Business pages
+const MyLeads = lazy(() => import("./pages/MyLeads"));
+const ConversationDetail = lazy(() => import("./pages/ConversationDetail"));
+const DashboardWB = lazy(() => import("./pages/DashboardWB"));
+const Templates = lazy(() => import("./pages/Templates"));
+const TeamManagement = lazy(() => import("./pages/TeamManagement"));
+
 function PageLoader() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -101,6 +108,13 @@ const App = () => (
           <Route path="/empresas" element={<ProtectedRoute minLevel={0}><Empresas /></ProtectedRoute>} />
           <Route path="/minha-empresa" element={<ProtectedRoute minLevel={1}><MinhaEmpresa /></ProtectedRoute>} />
           <Route path="/configuracoes-voz" element={<ProtectedRoute minLevel={0}><ConfiguracoesVoz /></ProtectedRoute>} />
+
+          {/* WhatsApp Business routes */}
+          <Route path="/dashboard-wb" element={<ProtectedRoute minLevel={0}><DashboardWB /></ProtectedRoute>} />
+          <Route path="/my-leads" element={<ProtectedRoute><MyLeads /></ProtectedRoute>} />
+          <Route path="/conversations/:phone" element={<ProtectedRoute><ConversationDetail /></ProtectedRoute>} />
+          <Route path="/templates" element={<ProtectedRoute minLevel={0}><Templates /></ProtectedRoute>} />
+          <Route path="/team" element={<ProtectedRoute minLevel={0}><TeamManagement /></ProtectedRoute>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
