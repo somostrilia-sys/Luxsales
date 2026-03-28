@@ -5,6 +5,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { CollaboratorProvider } from "@/contexts/CollaboratorContext";
 import { CompanyFilterProvider } from "@/contexts/CompanyFilterContext";
 import { DispatchProvider } from "@/contexts/DispatchContext";
+import { CompanyProvider } from "@/contexts/CompanyContext";
 import App from "./App.tsx";
 import "./index.css";
 
