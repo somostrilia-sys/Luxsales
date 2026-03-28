@@ -519,7 +519,7 @@ export default function Conversas() {
                     className="relative flex h-[49px] w-[49px] shrink-0 items-center justify-center rounded-full text-base font-medium"
                     style={{ background: avatar.bg, color: avatar.fg }}
                   >
-                    {(c.lead_name || c.phone_from).slice(0, 1).toUpperCase()}
+                    {c.lead_name ? c.lead_name.slice(0, 1).toUpperCase() : "👤"}
                     {c.window_open && (
                       <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full wa-window-dot" style={{ border: "2px solid #fff" }} />
                     )}
