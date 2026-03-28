@@ -373,14 +373,16 @@ export default function Conversas() {
   };
 
   const getAvatarTone = (seed: string) => {
-    const options = [
-      "bg-primary/20 text-primary",
-      "bg-accent/20 text-accent",
-      "bg-secondary text-secondary-foreground",
-      "bg-muted text-foreground",
+    const colors = [
+      { bg: "#00a884", fg: "#fff" },
+      { bg: "#53bdeb", fg: "#fff" },
+      { bg: "#f7a72c", fg: "#fff" },
+      { bg: "#d94f6b", fg: "#fff" },
+      { bg: "#7c5cfc", fg: "#fff" },
+      { bg: "#00acc1", fg: "#fff" },
     ];
-    const index = seed.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) % options.length;
-    return options[index];
+    const index = seed.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+    return colors[index];
   };
 
   const getDateSeparatorLabel = (ts: string) => {
@@ -461,26 +463,31 @@ export default function Conversas() {
 
   // ── Conversation List Panel ──
   const renderConversationList = () => (
-    <div className="flex h-full flex-col border-r border-border/50 wa-surface">
-      <div className="border-b border-border/50 px-3 py-3">
-        <h2 className="mb-2 text-lg font-semibold wa-text-main">Conversas</h2>
+    <div className="flex h-full flex-col wa-surface" style={{ borderRight: "1px solid #e9edef" }}>
+      {/* Green header */}
+      <div className="wa-header-green flex h-14 items-center px-4">
+        <h2 className="text-base font-semibold text-white">Conversas</h2>
+      </div>
+      {/* Search */}
+      <div className="px-2 py-1.5" style={{ background: "#f0f2f5" }}>
         <div className="relative">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 wa-text-muted" />
-          <Input
-            placeholder="Buscar nome ou telefone..."
+          <Search className="absolute left-3 top-2.5 h-4 w-4" style={{ color: "#54656f" }} />
+          <input
+            placeholder="Buscar ou começar uma nova conversa"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-9 rounded-full border-border/50 bg-background pl-9"
+            className="h-9 w-full rounded-lg border-none pl-9 pr-3 text-[13px] outline-none"
+            style={{ background: "#ffffff", color: "#111b21" }}
           />
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto wa-chat-scrollbar">
         {loadingList ? (
           <div className="p-3 space-y-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex gap-3 items-center">
-                <Skeleton className="h-10 w-10 rounded-full" />
+                <Skeleton className="h-[49px] w-[49px] rounded-full" />
                 <div className="flex-1 space-y-1">
                   <Skeleton className="h-4 w-24" />
                   <Skeleton className="h-3 w-40" />
@@ -489,55 +496,64 @@ export default function Conversas() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-8 text-center wa-text-muted">
+          <div className="p-8 text-center" style={{ color: "#667781" }}>
             <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-40" />
             <p className="text-sm">Nenhuma conversa ainda.</p>
             <p className="text-xs mt-1">Quando leads mandarem mensagem no WhatsApp, aparecerão aqui.</p>
           </div>
         ) : (
           <div>
-            {filtered.map((c) => (
-              <button
-                key={c.phone_from}
-                onClick={() => handleSelectPhone(c.phone_from)}
-                className={cn(
-                  "wa-row-hover flex w-full items-center gap-3 border-b border-border/40 px-3 py-3 text-left transition-colors",
-                  selectedPhone === c.phone_from && "wa-row-selected",
-                )}
-              >
-                <div className={cn("relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold", getAvatarTone(c.phone_from))}>
-                  {(c.lead_name || c.phone_from).slice(0, 1).toUpperCase()}
-                  {c.window_open && (
-                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background wa-window-dot" />
+            {filtered.map((c) => {
+              const avatar = getAvatarTone(c.phone_from);
+              return (
+                <button
+                  key={c.phone_from}
+                  onClick={() => handleSelectPhone(c.phone_from)}
+                  className={cn(
+                    "wa-row-hover flex w-full items-center gap-3 px-3 py-[10px] text-left transition-colors",
+                    selectedPhone === c.phone_from && "wa-row-selected",
                   )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="truncate text-sm font-semibold wa-text-main">{c.lead_name || formatPhone(c.phone_from)}</p>
-                    <span className="shrink-0 text-[11px] wa-text-muted">{formatRelativeListTs(c.created_at)}</span>
-                  </div>
-                  <p className="truncate text-xs wa-text-muted">{c.body || "..."}</p>
-                  <div className="mt-1 flex items-center gap-1">
-                    {c.window_open && <span className="h-2 w-2 rounded-full wa-window-dot" />}
-                    {c.ai_status === "ia" && (
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4"><Bot className="h-2.5 w-2.5 mr-0.5" />IA</Badge>
+                  style={{ borderBottom: "1px solid #e9edef" }}
+                >
+                  <div
+                    className="relative flex h-[49px] w-[49px] shrink-0 items-center justify-center rounded-full text-base font-medium"
+                    style={{ background: avatar.bg, color: avatar.fg }}
+                  >
+                    {(c.lead_name || c.phone_from).slice(0, 1).toUpperCase()}
+                    {c.window_open && (
+                      <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full wa-window-dot" style={{ border: "2px solid #fff" }} />
                     )}
                   </div>
-                </div>
-              </button>
-            ))}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate text-[15px] wa-text-main" style={{ fontWeight: 500 }}>{c.lead_name || formatPhone(c.phone_from)}</p>
+                      <span className="shrink-0 text-[12px] wa-text-muted">{formatRelativeListTs(c.created_at)}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <p className="truncate text-[13px] wa-text-muted flex-1">{c.body || "..."}</p>
+                      {c.ai_status === "ia" && (
+                        <span className="shrink-0 flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ background: "#e1f2fb", color: "#008069" }}>
+                          <Bot className="h-2.5 w-2.5" />IA
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
-      </ScrollArea>
+      </div>
     </div>
   );
 
   // ── Chat Panel ──
   const renderEmptyState = () => (
     <div className="wa-chat-pattern flex h-full flex-1 items-center justify-center">
-      <div className="text-center wa-text-muted">
+      <div className="text-center" style={{ color: "#667781" }}>
         <MessageSquare className="mx-auto mb-4 h-16 w-16 opacity-25" />
-        <p className="text-base font-medium">Selecione uma conversa</p>
+        <p className="text-lg font-light">Selecione uma conversa</p>
+        <p className="text-sm mt-1 opacity-60">para começar a atender</p>
       </div>
     </div>
   );
@@ -549,35 +565,46 @@ export default function Conversas() {
 
     const selected = conversations.find((c) => c.phone_from === selectedPhone);
     const title = selected?.lead_name || formatPhone(selectedPhone);
+    const avatar = getAvatarTone(selectedPhone);
 
     return (
       <div className="flex h-full flex-1 flex-col">
         {/* Chat header */}
-        <div className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between border-b border-border/50 bg-card px-4 shadow-sm">
+        <div className="sticky top-0 z-10 flex h-[60px] shrink-0 items-center justify-between px-4" style={{ background: "#f0f2f5", borderBottom: "1px solid #e0e0e0" }}>
           <div className="flex items-center gap-3">
             {isMobile && (
-              <Button variant="ghost" size="icon" onClick={() => setSelectedPhone(null)}>
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
+              <button onClick={() => setSelectedPhone(null)} className="mr-1">
+                <ArrowLeft className="h-5 w-5" style={{ color: "#54656f" }} />
+              </button>
             )}
-            <div className={cn("flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold", getAvatarTone(selectedPhone))}>
+            <div
+              className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-medium"
+              style={{ background: avatar.bg, color: avatar.fg }}
+            >
               {title.slice(0, 1).toUpperCase()}
             </div>
             <div>
-              <p className="text-sm font-semibold wa-text-main">{title}</p>
-              <p className="text-xs wa-text-muted">{formatPhone(selectedPhone)}</p>
+              <p className="text-[16px] wa-text-main" style={{ fontWeight: 500 }}>{title}</p>
+              <p className="text-[12px] wa-text-muted">{formatPhone(selectedPhone)}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {lifecycle?.stage && (
-              <Badge variant="secondary" className="text-xs capitalize">{lifecycle.stage.replace("_", " ")}</Badge>
+              <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize" style={{ background: "#e1f2fb", color: "#008069" }}>
+                {lifecycle.stage.replace("_", " ")}
+              </span>
             )}
-            <Badge className={cn("text-xs", windowOpen ? "wa-window-open" : "wa-window-closed")}>
+            <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", windowOpen ? "wa-window-open" : "wa-window-closed")}>
               {windowOpen ? "Aberta" : "Fechada"}
-            </Badge>
+            </span>
+            <button onClick={() => {}} style={{ color: "#54656f" }}>
+              <Phone className="h-[18px] w-[18px]" />
+            </button>
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon"><Info className="h-4 w-4" /></Button>
+                <button style={{ color: "#54656f" }}>
+                  <Info className="h-[18px] w-[18px]" />
+                </button>
               </SheetTrigger>
               <SheetContent side="right" className="w-[320px] overflow-y-auto">
                 <SheetTitle>Detalhes do Lead</SheetTitle>
@@ -588,11 +615,11 @@ export default function Conversas() {
         </div>
 
         {/* Messages */}
-        <div className="wa-chat-pattern flex-1 overflow-y-auto px-4 py-3">
+        <div className="wa-chat-pattern wa-chat-scrollbar flex-1 overflow-y-auto px-[4%] py-3" style={{ paddingBottom: "8px" }}>
           {loadingChat ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" style={{ color: "#008069" }} /></div>
           ) : messages.length === 0 ? (
-            <p className="py-12 text-center text-sm wa-text-muted">Nenhuma mensagem</p>
+            <p className="py-12 text-center text-sm" style={{ color: "#667781" }}>Nenhuma mensagem</p>
           ) : (
             messages.map((msg, index) => {
               const isOutbound = msg.direction === "outbound";
@@ -600,26 +627,24 @@ export default function Conversas() {
               const showDateSeparator = !previous || new Date(previous.created_at).toDateString() !== new Date(msg.created_at).toDateString();
 
               return (
-                <div key={msg.id} className="space-y-1.5">
+                <div key={msg.id} className="mb-1">
                   {showDateSeparator && (
-                    <div className="flex justify-center py-1">
-                      <span className="rounded-full bg-card px-3 py-1 text-[11px] wa-text-muted shadow-sm">
-                        {getDateSeparatorLabel(msg.created_at)}
-                      </span>
+                    <div className="flex justify-center py-2 mb-1">
+                      <span className="wa-date-sep">{getDateSeparatorLabel(msg.created_at)}</span>
                     </div>
                   )}
 
                   <div className={cn("flex", isOutbound ? "justify-end" : "justify-start")}>
-                    <div className={cn("max-w-[65%] rounded-lg px-3 py-2 shadow-sm", isOutbound ? "wa-bubble-outbound" : "wa-bubble-inbound")}>
+                    <div className={cn("max-w-[65%]", isOutbound ? "wa-bubble-outbound" : "wa-bubble-inbound")} style={{ padding: "6px 7px 8px 9px" }}>
                       {msg.is_ai_generated && isOutbound && (
                         <div className="mb-0.5 flex items-center gap-1">
-                          <Bot className="h-3 w-3" />
-                          <span className="text-[10px] opacity-70">IA</span>
+                          <Bot className="h-3 w-3" style={{ color: "#667781" }} />
+                          <span className="text-[10px]" style={{ color: "#667781" }}>IA</span>
                         </div>
                       )}
-                      <p className="whitespace-pre-wrap text-sm wa-text-main">{msg.body}</p>
-                      <div className="mt-1 flex items-center justify-end gap-1">
-                        <span className="text-[10px] wa-text-muted">{format(msg.created_at, "HH:mm")}</span>
+                      <p className="whitespace-pre-wrap" style={{ fontSize: "14.2px", color: "#111b21", lineHeight: 1.4 }}>{msg.body}</p>
+                      <div className="flex items-center justify-end gap-1 -mb-1" style={{ marginLeft: "8px", float: "right", marginTop: "2px" }}>
+                        <span style={{ fontSize: "11px", color: "#667781" }}>{format(msg.created_at, "HH:mm")}</span>
                         {isOutbound && <StatusIcon status={msg.status} />}
                       </div>
                     </div>
@@ -632,10 +657,10 @@ export default function Conversas() {
         </div>
 
         {/* Input area */}
-        <div className="sticky bottom-0 border-t border-border/50 bg-card p-3">
+        <div className="sticky bottom-0" style={{ background: "#f0f2f5", padding: "5px 10px", borderTop: "1px solid #e0e0e0" }}>
           {windowOpen ? (
             <div>
-              <div className="wa-window-open mb-2 flex items-center gap-1 rounded-md px-2 py-1 text-xs">
+              <div className="wa-window-open mb-1.5 flex items-center gap-1.5 rounded px-2 py-1 text-[11px]">
                 <span className="h-2 w-2 rounded-full wa-window-dot"></span>
                 Janela aberta — expira {windowExpires ? new Date(windowExpires).toLocaleString("pt-BR") : ""}
               </div>
@@ -643,8 +668,9 @@ export default function Conversas() {
                 <input
                   ref={inputRef}
                   type="text"
-                  placeholder="Digite sua mensagem..."
-                  className="h-10 flex-1 rounded-full border border-border/60 bg-background px-4 py-2 text-sm wa-text-main placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  placeholder="Digite uma mensagem"
+                  className="flex-1 outline-none"
+                  style={{ background: "#ffffff", borderRadius: "8px", border: "none", padding: "9px 12px", fontSize: "15px", color: "#111b21" }}
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
                   onKeyDown={(e) => {
@@ -655,26 +681,26 @@ export default function Conversas() {
                   }}
                   disabled={sending}
                 />
-                <Button
+                <button
                   onClick={sendMessage}
                   disabled={sending || !messageText.trim()}
-                  className="wa-send-btn h-10 w-10 rounded-full p-0"
+                  className="wa-send-btn flex h-10 w-10 items-center justify-center rounded-full"
                 >
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
-                </Button>
+                  {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <SendHorizontal className="h-5 w-5" />}
+                </button>
               </div>
             </div>
           ) : (
             <div>
-              <div className="wa-window-closed mb-2 rounded-md px-2 py-1 text-xs">
+              <div className="wa-window-closed mb-1.5 rounded px-2 py-1 text-[11px]">
                 Janela de 24h expirada
               </div>
-              <Button
-                className="wa-template-btn w-full rounded-lg px-4 py-2 text-sm"
+              <button
+                className="wa-template-btn w-full rounded-lg px-4 py-2.5 text-sm font-medium"
                 onClick={loadTemplates}
               >
                 Enviar Template
-              </Button>
+              </button>
             </div>
           )}
         </div>
