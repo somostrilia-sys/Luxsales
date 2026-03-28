@@ -1,8 +1,10 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Bell, Settings } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -11,6 +13,7 @@ import { Button } from "@/components/ui/button";
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isCEO, collaborator } = useCollaborator();
   const { companies, selectedCompanyId, setSelectedCompanyId } = useCompanyFilter();
+  const isMobile = useIsMobile();
   useGlobalShortcuts();
 
   const initials = collaborator?.name
@@ -20,15 +23,15 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <AppSidebar />
+        {!isMobile && <AppSidebar />}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Top Bar — Omni-inspired */}
-          <header className="h-16 flex items-center justify-between border-b border-border/40 bg-background/80 backdrop-blur-md px-6 shrink-0 sticky top-0 z-20">
-            <div className="flex items-center gap-4">
-              <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-colors" />
+          {/* Top Bar */}
+          <header className="h-14 md:h-16 flex items-center justify-between border-b border-border/40 bg-background/80 backdrop-blur-md px-4 md:px-6 shrink-0 sticky top-0 z-20">
+            <div className="flex items-center gap-3 md:gap-4">
+              {!isMobile && <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-colors" />}
 
-              {/* Search bar */}
-              <div className="topbar-search flex items-center gap-2.5 px-4 py-2 w-[280px]">
+              {/* Search bar — hide on mobile */}
+              <div className="hidden md:flex topbar-search items-center gap-2.5 px-4 py-2 w-[280px]">
                 <Search className="h-4 w-4 text-muted-foreground shrink-0" />
                 <input
                   type="text"
@@ -39,10 +42,14 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                   ⌘K
                 </kbd>
               </div>
+
+              {isMobile && (
+                <span className="text-sm font-semibold text-foreground">LuxSales</span>
+              )}
             </div>
 
-            <div className="flex items-center gap-3">
-              {isCEO && companies.length > 0 && (
+            <div className="flex items-center gap-2 md:gap-3">
+              {isCEO && companies.length > 0 && !isMobile && (
                 <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
                   <SelectTrigger className="w-[160px] h-9 text-xs bg-secondary/60 border-border/60 rounded-xl">
                     <SelectValue placeholder="Empresa" />
@@ -55,16 +62,18 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                   </SelectContent>
                 </Select>
               )}
-              {!isCEO && collaborator?.company && (
+              {!isCEO && collaborator?.company && !isMobile && (
                 <span className="text-xs text-muted-foreground font-medium bg-secondary/50 px-3 py-1.5 rounded-lg">{collaborator.company.name}</span>
               )}
 
               <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/60">
                 <Bell className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/60">
-                <Settings className="h-4 w-4" />
-              </Button>
+              {!isMobile && (
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/60">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              )}
 
               <Avatar className="h-9 w-9 border-2 border-border/60 cursor-pointer hover:border-primary/40 transition-colors">
                 <AvatarFallback className="bg-primary/15 text-primary text-xs font-semibold">{initials}</AvatarFallback>
@@ -72,8 +81,10 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             </div>
           </header>
 
-          <main className="flex-1 p-6 overflow-auto">{children}</main>
+          <main className="flex-1 p-4 md:p-6 overflow-auto pb-20 md:pb-6">{children}</main>
         </div>
+
+        {isMobile && <MobileBottomNav />}
       </div>
     </SidebarProvider>
   );
