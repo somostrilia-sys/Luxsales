@@ -87,14 +87,13 @@ export default function AtendimentoChat() {
     if (!reply.trim() || !selected) return;
     setSending(true);
     try {
-      await fetch(`${EDGE_BASE}/send-whatsapp-message`, {
+      await fetch(`${EDGE_BASE}/conversation-engine`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
         body: JSON.stringify({
-          instance_token: selected.instance_token,
-          server_url: selected.server_url,
-          number: selected.lead_phone,
-          text: reply,
+          action: "send-message",
+          phone_number: selected.lead_phone,
+          message: reply,
         }),
       });
       setMessages(prev => [...prev, { id: Date.now().toString(), sender: "consultant", content: reply, created_at: new Date().toISOString() }]);
