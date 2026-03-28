@@ -4134,36 +4134,69 @@ export type Database = {
       dispatch_permissions: {
         Row: {
           active: boolean
+          allowed_templates: Json | null
+          can_create_templates: boolean | null
+          can_dispatch: boolean | null
+          can_distribute_leads: boolean | null
+          can_edit_templates: boolean | null
+          can_manage_opt_ins: boolean | null
+          can_view_config: boolean | null
+          can_view_quality: boolean | null
           collaborator_id: string
           company_id: string | null
           created_at: string
+          daily_dispatch_limit: number | null
+          daily_dispatches_used: number | null
           daily_limit: number
           dispatches_today: number
           id: string
+          is_active: boolean | null
           last_reset_at: string | null
           role: string
           updated_at: string
         }
         Insert: {
           active?: boolean
+          allowed_templates?: Json | null
+          can_create_templates?: boolean | null
+          can_dispatch?: boolean | null
+          can_distribute_leads?: boolean | null
+          can_edit_templates?: boolean | null
+          can_manage_opt_ins?: boolean | null
+          can_view_config?: boolean | null
+          can_view_quality?: boolean | null
           collaborator_id: string
           company_id?: string | null
           created_at?: string
+          daily_dispatch_limit?: number | null
+          daily_dispatches_used?: number | null
           daily_limit?: number
           dispatches_today?: number
           id?: string
+          is_active?: boolean | null
           last_reset_at?: string | null
           role?: string
           updated_at?: string
         }
         Update: {
           active?: boolean
+          allowed_templates?: Json | null
+          can_create_templates?: boolean | null
+          can_dispatch?: boolean | null
+          can_distribute_leads?: boolean | null
+          can_edit_templates?: boolean | null
+          can_manage_opt_ins?: boolean | null
+          can_view_config?: boolean | null
+          can_view_quality?: boolean | null
           collaborator_id?: string
           company_id?: string | null
           created_at?: string
+          daily_dispatch_limit?: number | null
+          daily_dispatches_used?: number | null
           daily_limit?: number
           dispatches_today?: number
           id?: string
+          is_active?: boolean | null
           last_reset_at?: string | null
           role?: string
           updated_at?: string
@@ -5032,6 +5065,57 @@ export type Database = {
           },
         ]
       }
+      lead_import_batches: {
+        Row: {
+          column_mapping: Json | null
+          company_id: string
+          completed_at: string | null
+          duplicates: number | null
+          error_log: Json | null
+          file_name: string | null
+          id: string
+          imported: number | null
+          imported_by: string | null
+          invalid: number | null
+          source: string
+          started_at: string | null
+          status: string | null
+          total_rows: number | null
+        }
+        Insert: {
+          column_mapping?: Json | null
+          company_id: string
+          completed_at?: string | null
+          duplicates?: number | null
+          error_log?: Json | null
+          file_name?: string | null
+          id?: string
+          imported?: number | null
+          imported_by?: string | null
+          invalid?: number | null
+          source: string
+          started_at?: string | null
+          status?: string | null
+          total_rows?: number | null
+        }
+        Update: {
+          column_mapping?: Json | null
+          company_id?: string
+          completed_at?: string | null
+          duplicates?: number | null
+          error_log?: Json | null
+          file_name?: string | null
+          id?: string
+          imported?: number | null
+          imported_by?: string | null
+          invalid?: number | null
+          source?: string
+          started_at?: string | null
+          status?: string | null
+          total_rows?: number | null
+        }
+        Relationships: []
+      }
       lead_items: {
         Row: {
           assigned_at: string | null
@@ -5363,6 +5447,132 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_company_whatsapp_health"
             referencedColumns: ["company_id"]
+          },
+        ]
+      }
+      leads_master: {
+        Row: {
+          assigned_at: string | null
+          assigned_to: string | null
+          city: string | null
+          company_id: string
+          created_at: string | null
+          duplicate_of: string | null
+          email: string | null
+          extra_data: Json | null
+          id: string
+          import_batch_id: string | null
+          imported_at: string | null
+          last_call_at: string | null
+          last_call_id: string | null
+          last_call_result: string | null
+          last_dispatch_at: string | null
+          lead_name: string | null
+          lead_score: number | null
+          lead_temperature: string | null
+          lifecycle_id: string | null
+          next_call_at: string | null
+          opt_in_id: string | null
+          phone_number: string
+          priority: number | null
+          region: string | null
+          segment: string | null
+          source: string
+          source_detail: string | null
+          state: string | null
+          status: string | null
+          status_changed_at: string | null
+          tags: Json | null
+          total_call_attempts: number | null
+          total_dispatches: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_to?: string | null
+          city?: string | null
+          company_id: string
+          created_at?: string | null
+          duplicate_of?: string | null
+          email?: string | null
+          extra_data?: Json | null
+          id?: string
+          import_batch_id?: string | null
+          imported_at?: string | null
+          last_call_at?: string | null
+          last_call_id?: string | null
+          last_call_result?: string | null
+          last_dispatch_at?: string | null
+          lead_name?: string | null
+          lead_score?: number | null
+          lead_temperature?: string | null
+          lifecycle_id?: string | null
+          next_call_at?: string | null
+          opt_in_id?: string | null
+          phone_number: string
+          priority?: number | null
+          region?: string | null
+          segment?: string | null
+          source?: string
+          source_detail?: string | null
+          state?: string | null
+          status?: string | null
+          status_changed_at?: string | null
+          tags?: Json | null
+          total_call_attempts?: number | null
+          total_dispatches?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_to?: string | null
+          city?: string | null
+          company_id?: string
+          created_at?: string | null
+          duplicate_of?: string | null
+          email?: string | null
+          extra_data?: Json | null
+          id?: string
+          import_batch_id?: string | null
+          imported_at?: string | null
+          last_call_at?: string | null
+          last_call_id?: string | null
+          last_call_result?: string | null
+          last_dispatch_at?: string | null
+          lead_name?: string | null
+          lead_score?: number | null
+          lead_temperature?: string | null
+          lifecycle_id?: string | null
+          next_call_at?: string | null
+          opt_in_id?: string | null
+          phone_number?: string
+          priority?: number | null
+          region?: string | null
+          segment?: string | null
+          source?: string
+          source_detail?: string | null
+          state?: string | null
+          status?: string | null
+          status_changed_at?: string | null
+          tags?: Json | null
+          total_call_attempts?: number | null
+          total_dispatches?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_master_lifecycle_id_fkey"
+            columns: ["lifecycle_id"]
+            isOneToOne: false
+            referencedRelation: "lead_whatsapp_lifecycle"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_master_opt_in_id_fkey"
+            columns: ["opt_in_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_opt_ins"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -6961,6 +7171,7 @@ export type Database = {
       }
       smart_dispatches: {
         Row: {
+          collaborator_id: string | null
           company_id: string | null
           created_at: string | null
           delivered_at: string | null
@@ -6983,6 +7194,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          collaborator_id?: string | null
           company_id?: string | null
           created_at?: string | null
           delivered_at?: string | null
@@ -7005,6 +7217,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          collaborator_id?: string | null
           company_id?: string | null
           created_at?: string | null
           delivered_at?: string | null
@@ -8481,6 +8694,7 @@ export type Database = {
           status: string | null
           template_id: string | null
           template_name: string | null
+          template_params: Json | null
           type: string
           updated_at: string | null
         }
@@ -8519,6 +8733,7 @@ export type Database = {
           status?: string | null
           template_id?: string | null
           template_name?: string | null
+          template_params?: Json | null
           type: string
           updated_at?: string | null
         }
@@ -8557,6 +8772,7 @@ export type Database = {
           status?: string | null
           template_id?: string | null
           template_name?: string | null
+          template_params?: Json | null
           type?: string
           updated_at?: string | null
         }
@@ -9503,6 +9719,18 @@ export type Database = {
         }[]
       }
       get_my_company_id: { Args: never; Returns: string }
+      get_next_lead_to_call: {
+        Args: { p_company_id: string; p_queue_id?: string }
+        Returns: {
+          extra_data: Json
+          lead_id: string
+          lead_name: string
+          lead_score: number
+          phone_number: string
+          priority: number
+          total_call_attempts: number
+        }[]
+      }
       get_next_lead_to_dial: {
         Args: { p_campaign_id: string; p_company_id: string }
         Returns: {
@@ -9512,7 +9740,27 @@ export type Database = {
           queue_id: string
         }[]
       }
+      get_next_lead_to_dispatch: {
+        Args: { p_company_id: string; p_queue_id?: string }
+        Returns: {
+          extra_data: Json
+          lead_id: string
+          lead_name: string
+          lifecycle_id: string
+          opt_in_id: string
+          phone_number: string
+        }[]
+      }
       has_social_selling_access: { Args: never; Returns: boolean }
+      increment_call_attempts: {
+        Args: { p_lead_id: string }
+        Returns: undefined
+      }
+      increment_dispatch_counter: {
+        Args: { p_collaborator_id: string }
+        Returns: undefined
+      }
+      leads_master_stats: { Args: { p_company_id: string }; Returns: Json }
       match_memories: {
         Args: {
           match_count: number

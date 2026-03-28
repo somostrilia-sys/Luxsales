@@ -87,8 +87,8 @@ const App = () => (
 
           {/* WB — All roles */}
           <Route path="/my-leads" element={<ProtectedRoute><MyLeads /></ProtectedRoute>} />
+          <Route path="/conversations" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
           <Route path="/conversas" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
-          <Route path="/conversations/:phone" element={<ProtectedRoute><ConversationDetail /></ProtectedRoute>} />
 
           {/* VoIP */}
           <Route path="/calls" element={<ProtectedRoute minLevel={0}><DashboardCalls /></ProtectedRoute>} />

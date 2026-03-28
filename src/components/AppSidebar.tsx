@@ -50,7 +50,7 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
     label: "Operação",
     items: [
       { title: "Meus Leads", url: "/my-leads", icon: ClipboardList, levels: [0, 1, 2, 3] },
-      { title: "Conversas", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3], badgeKey: "conversas" },
+      { title: "Conversas", url: "/conversations", icon: MessageSquare, levels: [0, 1, 2, 3], badgeKey: "conversas" },
       { title: "Templates", url: "/templates", icon: FileText, levels: [0] },
     ],
   },

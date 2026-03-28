@@ -7,7 +7,7 @@ const tabs = [
   { title: "Ligações", url: "/calls", icon: Phone },
   { title: "WhatsApp", url: "/meta", icon: MessageSquare },
   { title: "Leads", url: "/leads", icon: Users },
-  { title: "Conversas", url: "/conversas", icon: ClipboardList },
+  { title: "Conversas", url: "/conversations", icon: ClipboardList },
 ];
 
 export function MobileBottomNav() {
