@@ -13,8 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
-  Search, Send, Loader2, ArrowLeft, Bot, User, Info, Check, CheckCheck,
-  X, Phone, FileText, MessageSquare, Clock,
+  Search, Loader2, ArrowLeft, Bot, User, Info, Check, CheckCheck,
+  X, Phone, MessageSquare,
 } from "lucide-react";
 import { format, isToday, isYesterday } from "date-fns";
 
@@ -74,8 +74,10 @@ export default function Conversas() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingChat, setLoadingChat] = useState(false);
   const [lifecycle, setLifecycle] = useState<LifecycleData | null>(null);
-  const [input, setInput] = useState("");
+  const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
+  const [windowOpen, setWindowOpen] = useState<boolean>(false);
+  const [windowExpires, setWindowExpires] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Template modal
@@ -187,6 +189,34 @@ export default function Conversas() {
     loadMessages(phone);
   }, [loadMessages]);
 
+  // ── Window state (24h) ──
+  useEffect(() => {
+    if (!selectedPhone) {
+      setWindowOpen(false);
+      setWindowExpires(null);
+      return;
+    }
+
+    const fetchWindow = async () => {
+      const { data } = await supabase
+        .from("lead_whatsapp_lifecycle")
+        .select("window_open, window_expires_at")
+        .eq("phone_number", selectedPhone.replace("+", ""))
+        .maybeSingle();
+
+      if (data) {
+        const isOpen = data.window_open === true && new Date(data.window_expires_at) > new Date();
+        setWindowOpen(isOpen);
+        setWindowExpires(data.window_expires_at);
+      } else {
+        setWindowOpen(false);
+        setWindowExpires(null);
+      }
+    };
+
+    fetchWindow();
+  }, [selectedPhone]);
+
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -232,23 +262,20 @@ export default function Conversas() {
   }, []);
 
   const sendMessage = async () => {
-    if (!input.trim() || !selectedPhone || sending) return;
+    if (!messageText.trim() || !selectedPhone || sending) return;
     setSending(true);
     try {
-      const headers = await getHeaders();
-      const res = await fetch(`${EDGE_BASE}/send-meta-message`, {
+      const res = await fetch("https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/send-meta-message", {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "send",
-          company_id: companyId,
-          to: selectedPhone,
-          type: "text",
-          text: input.trim(),
+          to: selectedPhone.replace("+", ""),
+          message: messageText,
+          company_id: FALLBACK_COMPANY_ID,
         }),
       });
       if (res.ok) {
-        setInput("");
+        setMessageText("");
       } else {
         const d = await res.json().catch(() => ({}));
         toast.error(d.error || "Erro ao enviar mensagem");
@@ -305,10 +332,6 @@ export default function Conversas() {
     if (status === "failed") return <X className="h-3 w-3 text-destructive" />;
     return <Check className="h-3 w-3 text-muted-foreground" />;
   };
-
-  const windowExpiresAt = lifecycle?.window_expires_at ? new Date(lifecycle.window_expires_at) : null;
-  const windowOpen = (lifecycle?.window_open ?? false) && windowExpiresAt !== null && windowExpiresAt > new Date();
-  const hoursLeft = windowExpiresAt ? Math.max(0, Math.round((windowExpiresAt.getTime() - Date.now()) / 3600000)) : 0;
 
   // ── Filter conversations ──
   const filtered = conversations.filter((c) => {
@@ -489,13 +512,6 @@ export default function Conversas() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {windowOpen ? (
-              <Badge variant="outline" className="text-green-400 border-green-500/30 text-xs">
-                <Clock className="h-3 w-3 mr-1" /> Janela aberta — expira em {hoursLeft}h
-              </Badge>
-            ) : (
-              <Badge variant="destructive" className="text-xs">Janela fechada</Badge>
-            )}
             {lifecycle?.stage && (
               <Badge variant="secondary" className="text-xs">{lifecycle.stage}</Badge>
             )}
@@ -551,25 +567,41 @@ export default function Conversas() {
         {/* Input area */}
         <div className="border-t border-border p-3">
           {windowOpen ? (
-            <div className="flex gap-2">
-              <Input
-                placeholder="Digitar mensagem..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-                disabled={sending}
-                className="flex-1"
-              />
-              <Button onClick={sendMessage} disabled={sending || !input.trim()}>
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </Button>
+            <div>
+              <div className="mb-2 flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs text-primary">
+                <span className="h-2 w-2 rounded-full bg-primary"></span>
+                Janela aberta — expira {windowExpires ? new Date(windowExpires).toLocaleString("pt-BR") : ""}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Digite sua mensagem..."
+                  className="flex-1 rounded-lg border border-input bg-background px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                  disabled={sending}
+                />
+                <button
+                  onClick={sendMessage}
+                  disabled={sending || !messageText.trim()}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar"}
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="text-center py-2">
-              <p className="text-xs text-yellow-400 mb-2">Janela expirada — só templates</p>
-              <Button size="sm" variant="outline" onClick={loadTemplates}>
-                <FileText className="h-3.5 w-3.5 mr-1" /> Enviar Template
-              </Button>
+            <div>
+              <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs text-destructive">
+                Janela fechada — apenas templates
+              </div>
+              <button
+                className="w-full rounded-lg bg-secondary px-4 py-2 text-sm text-secondary-foreground hover:bg-secondary/90"
+                onClick={loadTemplates}
+              >
+                Enviar Template
+              </button>
             </div>
           )}
         </div>
