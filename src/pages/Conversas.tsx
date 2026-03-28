@@ -152,15 +152,32 @@ export default function Conversas() {
 
     setMessages((data || []) as ChatMessage[]);
 
-    // Load lifecycle
-    const { data: lc } = await supabase
-      .from("lead_whatsapp_lifecycle")
-      .select("stage, sentiment, window_open, window_expires_at, interests, objections, messages_sent, messages_received")
-      .eq("company_id", companyId)
-      .eq("phone_number", phone)
-      .maybeSingle();
+    // Load lifecycle — try exact phone, then variations
+    console.log("Buscando lifecycle para phone:", phone);
+    let lc: LifecycleData | null = null;
 
-    setLifecycle(lc as LifecycleData | null);
+    const phonesToTry = [phone];
+    if (phone.startsWith("+")) phonesToTry.push(phone.slice(1));
+    else {
+      phonesToTry.push("+" + phone);
+      if (phone.startsWith("55")) phonesToTry.push("+55" + phone.slice(2), "+" + phone);
+    }
+
+    for (const tryPhone of phonesToTry) {
+      const { data } = await supabase
+        .from("lead_whatsapp_lifecycle")
+        .select("stage, sentiment, window_open, window_expires_at, interests, objections, messages_sent, messages_received")
+        .eq("phone_number", tryPhone)
+        .maybeSingle();
+      if (data) {
+        lc = data as LifecycleData;
+        console.log("Resultado lifecycle (match:", tryPhone, "):", lc);
+        break;
+      }
+    }
+    if (!lc) console.log("Resultado lifecycle: null (nenhuma variação encontrada)");
+
+    setLifecycle(lc);
     setLoadingChat(false);
   }, [companyId]);
 
@@ -289,7 +306,9 @@ export default function Conversas() {
     return <Check className="h-3 w-3 text-muted-foreground" />;
   };
 
-  const windowOpen = lifecycle?.window_open ?? false;
+  const windowExpiresAt = lifecycle?.window_expires_at ? new Date(lifecycle.window_expires_at) : null;
+  const windowOpen = (lifecycle?.window_open ?? false) && windowExpiresAt !== null && windowExpiresAt > new Date();
+  const hoursLeft = windowExpiresAt ? Math.max(0, Math.round((windowExpiresAt.getTime() - Date.now()) / 3600000)) : 0;
 
   // ── Filter conversations ──
   const filtered = conversations.filter((c) => {
@@ -472,10 +491,10 @@ export default function Conversas() {
           <div className="flex items-center gap-2">
             {windowOpen ? (
               <Badge variant="outline" className="text-green-400 border-green-500/30 text-xs">
-                <Clock className="h-3 w-3 mr-1" /> Janela aberta
+                <Clock className="h-3 w-3 mr-1" /> Janela aberta — expira em {hoursLeft}h
               </Badge>
             ) : (
-              <Badge variant="outline" className="text-yellow-400 border-yellow-400/30 text-xs">Janela fechada</Badge>
+              <Badge variant="destructive" className="text-xs">Janela fechada</Badge>
             )}
             {lifecycle?.stage && (
               <Badge variant="secondary" className="text-xs">{lifecycle.stage}</Badge>
