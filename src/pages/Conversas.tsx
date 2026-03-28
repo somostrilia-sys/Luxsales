@@ -306,7 +306,9 @@ export default function Conversas() {
     return <Check className="h-3 w-3 text-muted-foreground" />;
   };
 
-  const windowOpen = lifecycle?.window_open ?? false;
+  const windowExpiresAt = lifecycle?.window_expires_at ? new Date(lifecycle.window_expires_at) : null;
+  const windowOpen = (lifecycle?.window_open ?? false) && windowExpiresAt !== null && windowExpiresAt > new Date();
+  const hoursLeft = windowExpiresAt ? Math.max(0, Math.round((windowExpiresAt.getTime() - Date.now()) / 3600000)) : 0;
 
   // ── Filter conversations ──
   const filtered = conversations.filter((c) => {
