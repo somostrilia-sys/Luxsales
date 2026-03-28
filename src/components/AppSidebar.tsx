@@ -26,8 +26,6 @@ interface MenuItem {
 const managementItems: MenuItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, levels: [0, 1, 2] },
   { title: "Agentes de IA", url: "/agentes", icon: Cpu, levels: [0, 1] },
-  { title: "Bots / WhatsApp", url: "/bots", icon: Bot, levels: [0, 1, 2, 3] },
-  { title: "Proxy", url: "/proxy", icon: Network, levels: [0] },
   { title: "Colaboradores", url: "/colaboradores", icon: Users, levels: [0] },
   { title: "Meu Time", url: "/meu-time", icon: Users, levels: [0, 1] },
   { title: "Cadastro", url: "/cadastro", icon: UserPlus, levels: [0, 1] },
@@ -39,13 +37,9 @@ const managementItems: MenuItem[] = [
   { title: "CEO / Bolt", url: "/ceo", icon: Crown, levels: [0] },
   { title: "Empresas", url: "/empresas", icon: Building2, levels: [0] },
   { title: "Minha Empresa", url: "/minha-empresa", icon: Building, levels: [0, 1] },
-  { title: "Leads & Disparo", url: "/motor-leads", icon: Rocket, levels: [0, 1, 2, 3] },
 ];
 
 const consultantItems: MenuItem[] = [
-  { title: "Meus Chips", url: "/meus-chips", icon: Smartphone, levels: [0, 1, 2, 3] },
-  { title: "Disparos", url: "/disparos", icon: Zap, levels: [0, 1, 2, 3] },
-  { title: "Atendimento", url: "/atendimento-chat", icon: Phone, levels: [0, 1, 2, 3] },
   { title: "Conversas", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
   { title: "Meu Bot", url: "/meu-bot", icon: Bot, levels: [0, 1, 2, 3] },
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
