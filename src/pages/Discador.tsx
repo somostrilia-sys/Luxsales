@@ -14,7 +14,10 @@ import {
   Phone, PhoneOff, Clock, User, MessageSquare,
   Flame, Snowflake, Sun, ThumbsDown,
   ShieldAlert, SkipForward, Pause, Play,
+  TestTube, Loader2,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { EDGE_BASE } from "@/lib/constants";
 
 type CallStatus = "idle" | "dialing" | "ringing" | "in_call" | "ended";
 type Qualification = "hot" | "warm" | "cold" | "not_qualified";
