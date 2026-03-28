@@ -52,6 +52,8 @@ const ConversationDetail = lazy(() => import("./pages/ConversationDetail"));
 const DashboardWB = lazy(() => import("./pages/DashboardWB"));
 const Templates = lazy(() => import("./pages/Templates"));
 const TeamManagement = lazy(() => import("./pages/TeamManagement"));
+const LeadDistribution = lazy(() => import("./pages/LeadDistribution"));
+const OptIns = lazy(() => import("./pages/OptIns"));
 
 function PageLoader() {
   return (
@@ -115,6 +117,8 @@ const App = () => (
           <Route path="/conversations/:phone" element={<ProtectedRoute><ConversationDetail /></ProtectedRoute>} />
           <Route path="/templates" element={<ProtectedRoute minLevel={0}><Templates /></ProtectedRoute>} />
           <Route path="/team" element={<ProtectedRoute minLevel={0}><TeamManagement /></ProtectedRoute>} />
+          <Route path="/lead-distribution" element={<ProtectedRoute minLevel={0}><LeadDistribution /></ProtectedRoute>} />
+          <Route path="/opt-ins" element={<ProtectedRoute minLevel={0}><OptIns /></ProtectedRoute>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
