@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, FileSearch, Database,
   BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Phone, PhoneCall,
-  MessageCircle, ShieldCheck, Megaphone, FileText, FileSearch, Database, Users,
+  MessageCircle, ShieldCheck, Megaphone, FileText,
   Send, ClipboardList, UserCog, Building2, Building,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
