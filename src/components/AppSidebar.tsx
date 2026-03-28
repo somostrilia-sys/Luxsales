@@ -34,6 +34,7 @@ const managementItems: MenuItem[] = [
   { title: "Métricas", url: "/metricas", icon: BarChart3, levels: [0, 1] },
   { title: "Identidade Visual", url: "/identidade-visual", icon: Palette, levels: [0] },
   { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0] },
+  { title: "Config Empresa", url: "/config", icon: Sparkles, levels: [0] },
   { title: "CEO / Bolt", url: "/ceo", icon: Crown, levels: [0] },
   { title: "Empresas", url: "/empresas", icon: Building2, levels: [0] },
   { title: "Minha Empresa", url: "/minha-empresa", icon: Building, levels: [0, 1] },
