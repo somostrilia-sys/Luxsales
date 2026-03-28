@@ -1,8 +1,7 @@
 import {
-  LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Phone, PhoneCall, Sparkles,
-  MessageCircle, ShieldCheck, Megaphone, FileText,
-  Send, ClipboardList, UserCog, Building2, Building,
+  LayoutDashboard, Settings, MessageSquare, LogOut, Sparkles,
+  ShieldCheck, FileText, Send, UserCog, ClipboardList,
+  Phone, PhoneCall, BarChart3, Megaphone, Users,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -23,48 +22,33 @@ interface MenuItem {
   levels: number[];
 }
 
-const managementItems: MenuItem[] = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard, levels: [0, 1, 2] },
-  { title: "Agentes de IA", url: "/agentes", icon: Cpu, levels: [0, 1] },
-  { title: "Colaboradores", url: "/colaboradores", icon: Users, levels: [0] },
-  { title: "Meu Time", url: "/meu-time", icon: Users, levels: [0, 1] },
-  { title: "Cadastro", url: "/cadastro", icon: UserPlus, levels: [0, 1] },
-  { title: "Extração de Leads", url: "/extracao", icon: FileSearch, levels: [0, 1] },
-  { title: "Base de Dados", url: "/base-dados", icon: Database, levels: [0, 1] },
-  { title: "Métricas", url: "/metricas", icon: BarChart3, levels: [0, 1] },
-  { title: "Identidade Visual", url: "/identidade-visual", icon: Palette, levels: [0] },
-  { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0] },
-  { title: "Config Empresa", url: "/config", icon: Sparkles, levels: [0] },
-  { title: "CEO / Bolt", url: "/ceo", icon: Crown, levels: [0] },
-  { title: "Empresas", url: "/empresas", icon: Building2, levels: [0] },
-  { title: "Minha Empresa", url: "/minha-empresa", icon: Building, levels: [0, 1] },
-];
-
-const consultantItems: MenuItem[] = [
-  { title: "Conversas", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
-  { title: "Meu Bot", url: "/meu-bot", icon: Bot, levels: [0, 1, 2, 3] },
-  { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
-];
-
-const whatsappBusinessItems: MenuItem[] = [
-  { title: "Dashboard WB", url: "/dashboard-wb", icon: BarChart3, levels: [0] },
-  { title: "Meus Leads", url: "/my-leads", icon: ClipboardList, levels: [0, 1, 2, 3] },
+// CEO items (level 0)
+const ceoItems: MenuItem[] = [
+  { title: "Dashboard", url: "/dashboard-wb", icon: LayoutDashboard, levels: [0] },
+  { title: "Leads", url: "/lead-distribution", icon: Send, levels: [0] },
   { title: "Templates", url: "/templates", icon: FileText, levels: [0] },
-  { title: "Distribuição", url: "/lead-distribution", icon: Send, levels: [0] },
-  { title: "Equipe WB", url: "/team", icon: UserCog, levels: [0] },
+  { title: "Equipe", url: "/team", icon: UserCog, levels: [0] },
+  { title: "Conversas", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
   { title: "Opt-ins", url: "/opt-ins", icon: ShieldCheck, levels: [0] },
+  { title: "Config Empresa", url: "/config", icon: Sparkles, levels: [0] },
+  { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0] },
 ];
 
+// Vendedor items (level 1-3)
+const vendedorItems: MenuItem[] = [
+  { title: "Meus Leads", url: "/my-leads", icon: ClipboardList, levels: [1, 2, 3] },
+  { title: "Conversas", url: "/conversas", icon: MessageSquare, levels: [1, 2, 3] },
+];
+
+// Voice / VoIP (CEO/Director)
 const voiceItems: MenuItem[] = [
   { title: "Dashboard VoIP", url: "/dashboard-voip", icon: BarChart3, levels: [0, 1] },
   { title: "Discador", url: "/discador", icon: Phone, levels: [0, 1, 2] },
   { title: "Campanhas", url: "/call-campaigns", icon: Megaphone, levels: [0, 1] },
-  { title: "Leads", url: "/leads-discador", icon: Users, levels: [0, 1] },
+  { title: "Leads Discador", url: "/leads-discador", icon: Users, levels: [0, 1] },
   { title: "Ligações IA", url: "/voice-ai", icon: PhoneCall, levels: [0] },
-  { title: "WhatsApp", url: "/whatsapp-meta", icon: MessageCircle, levels: [0] },
   { title: "Relatórios", url: "/relatorios-voz", icon: FileText, levels: [0, 1] },
   { title: "Compliance", url: "/compliance-voz", icon: ShieldCheck, levels: [0] },
-  { title: "Config. Voz", url: "/configuracoes-voz", icon: Settings, levels: [0] },
 ];
 
 export function AppSidebar() {
@@ -74,10 +58,11 @@ export function AppSidebar() {
   const { signOut } = useAuth();
   const { unreadCount, resetUnread } = useRealtimeMessages();
 
-  const visibleManagement = managementItems.filter(i => i.levels.includes(roleLevel));
-  const visibleVoice = voiceItems.filter(i => i.levels.includes(roleLevel));
-  const visibleConsultant = consultantItems.filter(i => i.levels.includes(roleLevel));
-  const visibleWB = whatsappBusinessItems.filter(i => i.levels.includes(roleLevel));
+  const filterByLevel = (items: MenuItem[]) => items.filter(i => i.levels.includes(roleLevel));
+
+  const visibleCeo = filterByLevel(ceoItems);
+  const visibleVendedor = filterByLevel(vendedorItems);
+  const visibleVoice = filterByLevel(voiceItems);
 
   const renderItems = (items: MenuItem[]) =>
     items.map((item) => {
@@ -134,20 +119,20 @@ export function AppSidebar() {
           )}
         </div>
 
-        {visibleManagement.length > 0 && (
+        {visibleCeo.length > 0 && (
           <SidebarGroup>
-            <SectionLabel>Gestão</SectionLabel>
+            <SectionLabel>WhatsApp Business</SectionLabel>
             <SidebarGroupContent>
-              <SidebarMenu className="space-y-0.5">{renderItems(visibleManagement)}</SidebarMenu>
+              <SidebarMenu className="space-y-0.5">{renderItems(visibleCeo)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
 
-        {visibleWB.length > 0 && (
+        {visibleVendedor.length > 0 && roleLevel > 0 && (
           <SidebarGroup>
-            <SectionLabel>WhatsApp Business</SectionLabel>
+            <SectionLabel>Vendedor</SectionLabel>
             <SidebarGroupContent>
-              <SidebarMenu className="space-y-0.5">{renderItems(visibleWB)}</SidebarMenu>
+              <SidebarMenu className="space-y-0.5">{renderItems(visibleVendedor)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
@@ -157,15 +142,6 @@ export function AppSidebar() {
             <SectionLabel>Voz e Ligações</SectionLabel>
             <SidebarGroupContent>
               <SidebarMenu className="space-y-0.5">{renderItems(visibleVoice)}</SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {visibleConsultant.length > 0 && (
-          <SidebarGroup>
-            <SectionLabel>Consultor</SectionLabel>
-            <SidebarGroupContent>
-              <SidebarMenu className="space-y-0.5">{renderItems(visibleConsultant)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}

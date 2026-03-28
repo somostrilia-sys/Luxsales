@@ -245,10 +245,10 @@ export default function ConfiguracoesVoz() {
           {/* WHATSAPP */}
           <TabsContent value="whatsapp">
             <Card className="border-border/60 bg-card">
-              <CardHeader><CardTitle className="text-base flex items-center gap-2"><MessageSquare className="h-4 w-4 text-emerald-400" />WhatsApp</CardTitle><CardDescription>Evolution API / Meta Cloud API</CardDescription></CardHeader>
+              <CardHeader><CardTitle className="text-base flex items-center gap-2"><MessageSquare className="h-4 w-4 text-emerald-400" />WhatsApp</CardTitle><CardDescription>Meta WhatsApp Business Cloud API</CardDescription></CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>URL / Instance ID</Label><Input value={wa.instance_id} onChange={e => setWa({ ...wa, instance_id: e.target.value })} placeholder="https://api.evolution.com" /></div>
+                  <div className="space-y-2"><Label>URL / Instance ID</Label><Input value={wa.instance_id} onChange={e => setWa({ ...wa, instance_id: e.target.value })} placeholder="Phone Number ID" /></div>
                   <div className="space-y-2"><Label>API Key</Label><Input type="password" value={wa.api_key} onChange={e => setWa({ ...wa, api_key: e.target.value })} /></div>
                   <div className="space-y-2"><Label>Número WhatsApp</Label><Input value={wa.number} onChange={e => setWa({ ...wa, number: e.target.value })} placeholder="5511999998888" /></div>
                 </div>
