@@ -491,10 +491,10 @@ export default function Conversas() {
           <div className="flex items-center gap-2">
             {windowOpen ? (
               <Badge variant="outline" className="text-green-400 border-green-500/30 text-xs">
-                <Clock className="h-3 w-3 mr-1" /> Janela aberta
+                <Clock className="h-3 w-3 mr-1" /> Janela aberta — expira em {hoursLeft}h
               </Badge>
             ) : (
-              <Badge variant="outline" className="text-yellow-400 border-yellow-400/30 text-xs">Janela fechada</Badge>
+              <Badge variant="destructive" className="text-xs">Janela fechada</Badge>
             )}
             {lifecycle?.stage && (
               <Badge variant="secondary" className="text-xs">{lifecycle.stage}</Badge>
