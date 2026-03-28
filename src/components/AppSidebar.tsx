@@ -12,7 +12,9 @@ import {
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { LOGO_URL } from "@/lib/constants";
+import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 
 interface MenuItem {
   title: string;
@@ -44,7 +46,7 @@ const consultantItems: MenuItem[] = [
   { title: "Meus Chips", url: "/meus-chips", icon: Smartphone, levels: [0, 1, 2, 3] },
   { title: "Disparos", url: "/disparos", icon: Zap, levels: [0, 1, 2, 3] },
   { title: "Atendimento", url: "/atendimento-chat", icon: Phone, levels: [0, 1, 2, 3] },
-  { title: "Conversas IA", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
+  { title: "Conversas", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
   { title: "Meu Bot", url: "/meu-bot", icon: Bot, levels: [0, 1, 2, 3] },
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
 ];
@@ -75,6 +77,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const { collaborator, roleLevel } = useCollaborator();
   const { signOut } = useAuth();
+  const { unreadCount, resetUnread } = useRealtimeMessages();
 
   const visibleManagement = managementItems.filter(i => i.levels.includes(roleLevel));
   const visibleVoice = voiceItems.filter(i => i.levels.includes(roleLevel));
@@ -82,21 +85,37 @@ export function AppSidebar() {
   const visibleWB = whatsappBusinessItems.filter(i => i.levels.includes(roleLevel));
 
   const renderItems = (items: MenuItem[]) =>
-    items.map((item) => (
-      <SidebarMenuItem key={item.title + item.url}>
-        <SidebarMenuButton asChild>
-          <NavLink
-            to={item.url}
-            end={item.url === "/"}
-            className="hover:bg-sidebar-accent/70 transition-all duration-150 rounded-xl gap-3 px-3 py-2"
-            activeClassName="sidebar-active-gradient text-gold font-semibold"
-          >
-            <item.icon className="h-[18px] w-[18px] text-muted-foreground shrink-0" />
-            {!collapsed && <span className="text-[13px]">{item.title}</span>}
-          </NavLink>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    ));
+    items.map((item) => {
+      const isConversas = item.url === "/conversas";
+      return (
+        <SidebarMenuItem key={item.title + item.url}>
+          <SidebarMenuButton asChild>
+            <NavLink
+              to={item.url}
+              end={item.url === "/"}
+              className="hover:bg-sidebar-accent/70 transition-all duration-150 rounded-xl gap-3 px-3 py-2"
+              activeClassName="sidebar-active-gradient text-gold font-semibold"
+              onClick={isConversas ? resetUnread : undefined}
+            >
+              <item.icon className="h-[18px] w-[18px] text-muted-foreground shrink-0" />
+              {!collapsed && (
+                <span className="text-[13px] flex-1 flex items-center justify-between">
+                  {item.title}
+                  {isConversas && unreadCount > 0 && (
+                    <Badge variant="destructive" className="ml-1 h-5 min-w-[20px] px-1 text-[10px] font-bold">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </Badge>
+                  )}
+                </span>
+              )}
+              {collapsed && isConversas && unreadCount > 0 && (
+                <span className="absolute top-0 right-0 h-2.5 w-2.5 bg-destructive rounded-full" />
+              )}
+            </NavLink>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      );
+    });
 
   const SectionLabel = ({ children }: { children: React.ReactNode }) =>
     !collapsed ? (
