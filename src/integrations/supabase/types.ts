@@ -1808,6 +1808,108 @@ export type Database = {
           },
         ]
       }
+      call_queues: {
+        Row: {
+          active_days: number[] | null
+          calls_per_hour: number
+          company_id: string
+          created_at: string | null
+          daily_limit: number
+          filter_tags: string[] | null
+          id: string
+          leads_answered: number | null
+          leads_called: number | null
+          leads_converted: number | null
+          leads_opted_in: number | null
+          max_attempts: number
+          name: string
+          opening_script: string | null
+          priority_max: number | null
+          priority_min: number | null
+          retry_busy_min: number | null
+          retry_no_answer_min: number | null
+          schedule_end: string | null
+          schedule_start: string | null
+          segment: string | null
+          status: string
+          system_prompt: string | null
+          total_leads: number | null
+          updated_at: string | null
+          voice_key: string | null
+        }
+        Insert: {
+          active_days?: number[] | null
+          calls_per_hour?: number
+          company_id: string
+          created_at?: string | null
+          daily_limit?: number
+          filter_tags?: string[] | null
+          id?: string
+          leads_answered?: number | null
+          leads_called?: number | null
+          leads_converted?: number | null
+          leads_opted_in?: number | null
+          max_attempts?: number
+          name: string
+          opening_script?: string | null
+          priority_max?: number | null
+          priority_min?: number | null
+          retry_busy_min?: number | null
+          retry_no_answer_min?: number | null
+          schedule_end?: string | null
+          schedule_start?: string | null
+          segment?: string | null
+          status?: string
+          system_prompt?: string | null
+          total_leads?: number | null
+          updated_at?: string | null
+          voice_key?: string | null
+        }
+        Update: {
+          active_days?: number[] | null
+          calls_per_hour?: number
+          company_id?: string
+          created_at?: string | null
+          daily_limit?: number
+          filter_tags?: string[] | null
+          id?: string
+          leads_answered?: number | null
+          leads_called?: number | null
+          leads_converted?: number | null
+          leads_opted_in?: number | null
+          max_attempts?: number
+          name?: string
+          opening_script?: string | null
+          priority_max?: number | null
+          priority_min?: number | null
+          retry_busy_min?: number | null
+          retry_no_answer_min?: number | null
+          schedule_end?: string | null
+          schedule_start?: string | null
+          segment?: string | null
+          status?: string
+          system_prompt?: string | null
+          total_leads?: number | null
+          updated_at?: string | null
+          voice_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_queues_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_queues_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_company_whatsapp_health"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
       call_recordings: {
         Row: {
           call_id: string | null
@@ -4076,6 +4178,99 @@ export type Database = {
           },
           {
             foreignKeyName: "dispatch_permissions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_company_whatsapp_health"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
+      dispatch_queues: {
+        Row: {
+          active_days: number[] | null
+          company_id: string
+          created_at: string | null
+          daily_limit: number
+          filter_tags: string[] | null
+          filter_temperatures: string[] | null
+          id: string
+          leads_delivered: number | null
+          leads_dispatched: number | null
+          leads_read: number | null
+          leads_replied: number | null
+          max_per_hour: number
+          name: string
+          respect_tier_limit: boolean | null
+          safety_pct: number | null
+          schedule_end: string | null
+          schedule_start: string | null
+          segment: string | null
+          status: string
+          template_name: string | null
+          template_slot: string | null
+          total_leads: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          active_days?: number[] | null
+          company_id: string
+          created_at?: string | null
+          daily_limit?: number
+          filter_tags?: string[] | null
+          filter_temperatures?: string[] | null
+          id?: string
+          leads_delivered?: number | null
+          leads_dispatched?: number | null
+          leads_read?: number | null
+          leads_replied?: number | null
+          max_per_hour?: number
+          name: string
+          respect_tier_limit?: boolean | null
+          safety_pct?: number | null
+          schedule_end?: string | null
+          schedule_start?: string | null
+          segment?: string | null
+          status?: string
+          template_name?: string | null
+          template_slot?: string | null
+          total_leads?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          active_days?: number[] | null
+          company_id?: string
+          created_at?: string | null
+          daily_limit?: number
+          filter_tags?: string[] | null
+          filter_temperatures?: string[] | null
+          id?: string
+          leads_delivered?: number | null
+          leads_dispatched?: number | null
+          leads_read?: number | null
+          leads_replied?: number | null
+          max_per_hour?: number
+          name?: string
+          respect_tier_limit?: boolean | null
+          safety_pct?: number | null
+          schedule_end?: string | null
+          schedule_start?: string | null
+          segment?: string | null
+          status?: string
+          template_name?: string | null
+          template_slot?: string | null
+          total_leads?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatch_queues_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dispatch_queues_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_company_whatsapp_health"
