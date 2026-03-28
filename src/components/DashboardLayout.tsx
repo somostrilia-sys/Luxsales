@@ -2,6 +2,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
+import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Bell, Settings } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isCEO, collaborator } = useCollaborator();
   const { companies, selectedCompanyId, setSelectedCompanyId } = useCompanyFilter();
+  useGlobalShortcuts();
 
   const initials = collaborator?.name
     ? collaborator.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
@@ -34,7 +36,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                   className="bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground w-full"
                 />
                 <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-border/60 bg-secondary/60 px-1.5 text-[10px] font-medium text-muted-foreground">
-                  ⌘F
+                  ⌘K
                 </kbd>
               </div>
             </div>
