@@ -2064,6 +2064,8 @@ export type Database = {
           ai_transcript: string | null
           answered_at: string | null
           billable_duration_sec: number | null
+          call_context: Json | null
+          call_summary: string | null
           caller_number: string | null
           campaign_id: string | null
           codec: string | null
@@ -2072,9 +2074,11 @@ export type Database = {
           created_at: string | null
           destination_number: string
           direction: string | null
+          dispatch_id: string | null
           duration_seconds: number | null
           ended_at: string | null
           extension_id: string | null
+          extracted_data: Json | null
           freeswitch_uuid: string | null
           greeting_audio_url: string | null
           greeting_text: string | null
@@ -2086,6 +2090,10 @@ export type Database = {
           is_recorded: boolean | null
           ivr_path: Json | null
           lead_id: string | null
+          lead_name: string | null
+          lifecycle_id: string | null
+          opt_in_id: string | null
+          previous_call_id: string | null
           quality_mos: number | null
           recording_file_path: string | null
           recording_file_size_bytes: number | null
@@ -2096,10 +2104,13 @@ export type Database = {
           result: string | null
           ring_duration_sec: number | null
           ring_time_seconds: number | null
+          sentiment: string | null
           sip_call_id: string | null
           sip_response_code: number | null
           started_at: string | null
           status: string | null
+          suggested_template_slot: string | null
+          suggested_template_variables: Json | null
           system_prompt: string | null
           talk_duration_sec: number | null
           talk_time_seconds: number | null
@@ -2108,6 +2119,7 @@ export type Database = {
           transfer_count: number | null
           trunk_id: string | null
           voice_key: string | null
+          whatsapp_authorized: boolean | null
           whatsapp_sent: boolean | null
           whatsapp_sent_at: string | null
         }
@@ -2121,6 +2133,8 @@ export type Database = {
           ai_transcript?: string | null
           answered_at?: string | null
           billable_duration_sec?: number | null
+          call_context?: Json | null
+          call_summary?: string | null
           caller_number?: string | null
           campaign_id?: string | null
           codec?: string | null
@@ -2129,9 +2143,11 @@ export type Database = {
           created_at?: string | null
           destination_number: string
           direction?: string | null
+          dispatch_id?: string | null
           duration_seconds?: number | null
           ended_at?: string | null
           extension_id?: string | null
+          extracted_data?: Json | null
           freeswitch_uuid?: string | null
           greeting_audio_url?: string | null
           greeting_text?: string | null
@@ -2143,6 +2159,10 @@ export type Database = {
           is_recorded?: boolean | null
           ivr_path?: Json | null
           lead_id?: string | null
+          lead_name?: string | null
+          lifecycle_id?: string | null
+          opt_in_id?: string | null
+          previous_call_id?: string | null
           quality_mos?: number | null
           recording_file_path?: string | null
           recording_file_size_bytes?: number | null
@@ -2153,10 +2173,13 @@ export type Database = {
           result?: string | null
           ring_duration_sec?: number | null
           ring_time_seconds?: number | null
+          sentiment?: string | null
           sip_call_id?: string | null
           sip_response_code?: number | null
           started_at?: string | null
           status?: string | null
+          suggested_template_slot?: string | null
+          suggested_template_variables?: Json | null
           system_prompt?: string | null
           talk_duration_sec?: number | null
           talk_time_seconds?: number | null
@@ -2165,6 +2188,7 @@ export type Database = {
           transfer_count?: number | null
           trunk_id?: string | null
           voice_key?: string | null
+          whatsapp_authorized?: boolean | null
           whatsapp_sent?: boolean | null
           whatsapp_sent_at?: string | null
         }
@@ -2178,6 +2202,8 @@ export type Database = {
           ai_transcript?: string | null
           answered_at?: string | null
           billable_duration_sec?: number | null
+          call_context?: Json | null
+          call_summary?: string | null
           caller_number?: string | null
           campaign_id?: string | null
           codec?: string | null
@@ -2186,9 +2212,11 @@ export type Database = {
           created_at?: string | null
           destination_number?: string
           direction?: string | null
+          dispatch_id?: string | null
           duration_seconds?: number | null
           ended_at?: string | null
           extension_id?: string | null
+          extracted_data?: Json | null
           freeswitch_uuid?: string | null
           greeting_audio_url?: string | null
           greeting_text?: string | null
@@ -2200,6 +2228,10 @@ export type Database = {
           is_recorded?: boolean | null
           ivr_path?: Json | null
           lead_id?: string | null
+          lead_name?: string | null
+          lifecycle_id?: string | null
+          opt_in_id?: string | null
+          previous_call_id?: string | null
           quality_mos?: number | null
           recording_file_path?: string | null
           recording_file_size_bytes?: number | null
@@ -2210,10 +2242,13 @@ export type Database = {
           result?: string | null
           ring_duration_sec?: number | null
           ring_time_seconds?: number | null
+          sentiment?: string | null
           sip_call_id?: string | null
           sip_response_code?: number | null
           started_at?: string | null
           status?: string | null
+          suggested_template_slot?: string | null
+          suggested_template_variables?: Json | null
           system_prompt?: string | null
           talk_duration_sec?: number | null
           talk_time_seconds?: number | null
@@ -2222,6 +2257,7 @@ export type Database = {
           transfer_count?: number | null
           trunk_id?: string | null
           voice_key?: string | null
+          whatsapp_authorized?: boolean | null
           whatsapp_sent?: boolean | null
           whatsapp_sent_at?: string | null
         }
@@ -3341,6 +3377,81 @@ export type Database = {
         }
         Relationships: []
       }
+      company_config: {
+        Row: {
+          allowed_words: Json | null
+          call_system_prompt: string | null
+          company_id: string
+          company_name: string
+          created_at: string | null
+          extraction_schema: Json
+          followup_hours_call: number | null
+          followup_hours_first: number | null
+          forbidden_words: Json | null
+          id: string
+          is_active: boolean | null
+          max_templates_before_call: number | null
+          persona_company: string | null
+          persona_name: string
+          persona_role: string | null
+          persona_tone: string | null
+          product_data: Json | null
+          segment: string
+          segment_display_name: string | null
+          summary_prompt: string | null
+          updated_at: string | null
+          whatsapp_system_prompt: string | null
+        }
+        Insert: {
+          allowed_words?: Json | null
+          call_system_prompt?: string | null
+          company_id: string
+          company_name: string
+          created_at?: string | null
+          extraction_schema?: Json
+          followup_hours_call?: number | null
+          followup_hours_first?: number | null
+          forbidden_words?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_templates_before_call?: number | null
+          persona_company?: string | null
+          persona_name: string
+          persona_role?: string | null
+          persona_tone?: string | null
+          product_data?: Json | null
+          segment: string
+          segment_display_name?: string | null
+          summary_prompt?: string | null
+          updated_at?: string | null
+          whatsapp_system_prompt?: string | null
+        }
+        Update: {
+          allowed_words?: Json | null
+          call_system_prompt?: string | null
+          company_id?: string
+          company_name?: string
+          created_at?: string | null
+          extraction_schema?: Json
+          followup_hours_call?: number | null
+          followup_hours_first?: number | null
+          forbidden_words?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_templates_before_call?: number | null
+          persona_company?: string | null
+          persona_name?: string
+          persona_role?: string | null
+          persona_tone?: string | null
+          product_data?: Json | null
+          segment?: string
+          segment_display_name?: string | null
+          summary_prompt?: string | null
+          updated_at?: string | null
+          whatsapp_system_prompt?: string | null
+        }
+        Relationships: []
+      }
       consultant_lead_pool: {
         Row: {
           assigned_at: string | null
@@ -3927,130 +4038,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_company_whatsapp_health"
             referencedColumns: ["company_id"]
-          },
-        ]
-      }
-      disposable_chips: {
-        Row: {
-          chip_index: number
-          collaborator_id: string | null
-          created_at: string | null
-          created_at_date: string | null
-          daily_msg_count: number | null
-          id: string
-          instance_name: string | null
-          instance_token: string | null
-          label: string | null
-          last_reset_at: string | null
-          phone: string | null
-          phone_number: string | null
-          proxy_enabled: boolean
-          proxy_host: string | null
-          proxy_last_tested_at: string | null
-          proxy_password: string | null
-          proxy_port: number | null
-          proxy_protocol: string | null
-          proxy_username: string | null
-          qr_code: string | null
-          status: string | null
-          uazapi_account: string | null
-          uazapi_admin_token: string | null
-          uazapi_server_url: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          chip_index?: number
-          collaborator_id?: string | null
-          created_at?: string | null
-          created_at_date?: string | null
-          daily_msg_count?: number | null
-          id?: string
-          instance_name?: string | null
-          instance_token?: string | null
-          label?: string | null
-          last_reset_at?: string | null
-          phone?: string | null
-          phone_number?: string | null
-          proxy_enabled?: boolean
-          proxy_host?: string | null
-          proxy_last_tested_at?: string | null
-          proxy_password?: string | null
-          proxy_port?: number | null
-          proxy_protocol?: string | null
-          proxy_username?: string | null
-          qr_code?: string | null
-          status?: string | null
-          uazapi_account?: string | null
-          uazapi_admin_token?: string | null
-          uazapi_server_url?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          chip_index?: number
-          collaborator_id?: string | null
-          created_at?: string | null
-          created_at_date?: string | null
-          daily_msg_count?: number | null
-          id?: string
-          instance_name?: string | null
-          instance_token?: string | null
-          label?: string | null
-          last_reset_at?: string | null
-          phone?: string | null
-          phone_number?: string | null
-          proxy_enabled?: boolean
-          proxy_host?: string | null
-          proxy_last_tested_at?: string | null
-          proxy_password?: string | null
-          proxy_port?: number | null
-          proxy_protocol?: string | null
-          proxy_username?: string | null
-          qr_code?: string | null
-          status?: string | null
-          uazapi_account?: string | null
-          uazapi_admin_token?: string | null
-          uazapi_server_url?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "disposable_chips_collaborator_id_fkey"
-            columns: ["collaborator_id"]
-            isOneToOne: false
-            referencedRelation: "collaborators"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      disposable_chipset_proxy: {
-        Row: {
-          chip_id: string
-          created_at: string
-          id: string
-          proxy_url: string | null
-          updated_at: string
-        }
-        Insert: {
-          chip_id: string
-          created_at?: string
-          id?: string
-          proxy_url?: string | null
-          updated_at?: string
-        }
-        Update: {
-          chip_id?: string
-          created_at?: string
-          id?: string
-          proxy_url?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "disposable_chipset_proxy_chip_id_fkey"
-            columns: ["chip_id"]
-            isOneToOne: true
-            referencedRelation: "disposable_chips"
-            referencedColumns: ["id"]
           },
         ]
       }
@@ -4693,6 +4680,69 @@ export type Database = {
           },
         ]
       }
+      lead_distribution: {
+        Row: {
+          collaborator_id: string
+          company_id: string | null
+          completed_at: string | null
+          created_at: string | null
+          dispatch_id: string | null
+          distributed_at: string | null
+          distributed_by: string | null
+          id: string
+          lead_name: string | null
+          lifecycle_id: string | null
+          phone_number: string
+          result: string | null
+          status: string | null
+        }
+        Insert: {
+          collaborator_id: string
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          dispatch_id?: string | null
+          distributed_at?: string | null
+          distributed_by?: string | null
+          id?: string
+          lead_name?: string | null
+          lifecycle_id?: string | null
+          phone_number: string
+          result?: string | null
+          status?: string | null
+        }
+        Update: {
+          collaborator_id?: string
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          dispatch_id?: string | null
+          distributed_at?: string | null
+          distributed_by?: string | null
+          id?: string
+          lead_name?: string | null
+          lifecycle_id?: string | null
+          phone_number?: string
+          result?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_distribution_dispatch_id_fkey"
+            columns: ["dispatch_id"]
+            isOneToOne: false
+            referencedRelation: "smart_dispatches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_distribution_lifecycle_id_fkey"
+            columns: ["lifecycle_id"]
+            isOneToOne: false
+            referencedRelation: "lead_whatsapp_lifecycle"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_distributions: {
         Row: {
           collaborator_id: string
@@ -4835,6 +4885,110 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_company_whatsapp_health"
             referencedColumns: ["company_id"]
+          },
+        ]
+      }
+      lead_whatsapp_lifecycle: {
+        Row: {
+          avg_response_time_min: number | null
+          collaborator_id: string | null
+          company_id: string | null
+          conversation_summary: string | null
+          created_at: string | null
+          id: string
+          last_call_at: string | null
+          last_inbound_at: string | null
+          last_template_name: string | null
+          last_template_sent_at: string | null
+          lead_interests: Json | null
+          lead_name: string | null
+          messages_received: number | null
+          messages_sent: number | null
+          next_call_reason: string | null
+          next_call_requested: boolean | null
+          objections: Json | null
+          opt_in_id: string | null
+          phone_number: string
+          response_rate: number | null
+          sentiment: string | null
+          stage: string | null
+          stage_changed_at: string | null
+          templates_sent_24h: number | null
+          templates_sent_total: number | null
+          total_calls: number | null
+          updated_at: string | null
+          window_expires_at: string | null
+          window_open: boolean | null
+        }
+        Insert: {
+          avg_response_time_min?: number | null
+          collaborator_id?: string | null
+          company_id?: string | null
+          conversation_summary?: string | null
+          created_at?: string | null
+          id?: string
+          last_call_at?: string | null
+          last_inbound_at?: string | null
+          last_template_name?: string | null
+          last_template_sent_at?: string | null
+          lead_interests?: Json | null
+          lead_name?: string | null
+          messages_received?: number | null
+          messages_sent?: number | null
+          next_call_reason?: string | null
+          next_call_requested?: boolean | null
+          objections?: Json | null
+          opt_in_id?: string | null
+          phone_number: string
+          response_rate?: number | null
+          sentiment?: string | null
+          stage?: string | null
+          stage_changed_at?: string | null
+          templates_sent_24h?: number | null
+          templates_sent_total?: number | null
+          total_calls?: number | null
+          updated_at?: string | null
+          window_expires_at?: string | null
+          window_open?: boolean | null
+        }
+        Update: {
+          avg_response_time_min?: number | null
+          collaborator_id?: string | null
+          company_id?: string | null
+          conversation_summary?: string | null
+          created_at?: string | null
+          id?: string
+          last_call_at?: string | null
+          last_inbound_at?: string | null
+          last_template_name?: string | null
+          last_template_sent_at?: string | null
+          lead_interests?: Json | null
+          lead_name?: string | null
+          messages_received?: number | null
+          messages_sent?: number | null
+          next_call_reason?: string | null
+          next_call_requested?: boolean | null
+          objections?: Json | null
+          opt_in_id?: string | null
+          phone_number?: string
+          response_rate?: number | null
+          sentiment?: string | null
+          stage?: string | null
+          stage_changed_at?: string | null
+          templates_sent_24h?: number | null
+          templates_sent_total?: number | null
+          total_calls?: number | null
+          updated_at?: string | null
+          window_expires_at?: string | null
+          window_open?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_whatsapp_lifecycle_opt_in_id_fkey"
+            columns: ["opt_in_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_opt_ins"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -5095,13 +5249,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "messages_chip_id_fkey"
-            columns: ["chip_id"]
-            isOneToOne: false
-            referencedRelation: "disposable_chips"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "messages_conversation_id_fkey"
             columns: ["conversation_id"]
             isOneToOne: false
@@ -5109,6 +5256,93 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      meta_quality_tracking: {
+        Row: {
+          blocks_24h: number | null
+          checked_at: string | null
+          company_id: string | null
+          conversations_24h: number | null
+          id: string
+          messaging_limit_tier: string | null
+          phone_number_id: string
+          quality_rating: string | null
+          reports_24h: number | null
+          template_quality_scores: Json | null
+          templates_paused: Json | null
+          tier_limit: number | null
+          usage_pct: number | null
+        }
+        Insert: {
+          blocks_24h?: number | null
+          checked_at?: string | null
+          company_id?: string | null
+          conversations_24h?: number | null
+          id?: string
+          messaging_limit_tier?: string | null
+          phone_number_id: string
+          quality_rating?: string | null
+          reports_24h?: number | null
+          template_quality_scores?: Json | null
+          templates_paused?: Json | null
+          tier_limit?: number | null
+          usage_pct?: number | null
+        }
+        Update: {
+          blocks_24h?: number | null
+          checked_at?: string | null
+          company_id?: string | null
+          conversations_24h?: number | null
+          id?: string
+          messaging_limit_tier?: string | null
+          phone_number_id?: string
+          quality_rating?: string | null
+          reports_24h?: number | null
+          template_quality_scores?: Json | null
+          templates_paused?: Json | null
+          tier_limit?: number | null
+          usage_pct?: number | null
+        }
+        Relationships: []
+      }
+      meta_tier_history: {
+        Row: {
+          changed_at: string | null
+          company_id: string | null
+          id: string
+          new_quality: string | null
+          new_tier: string | null
+          notes: string | null
+          old_quality: string | null
+          old_tier: string | null
+          phone_number_id: string
+          trigger_event: string | null
+        }
+        Insert: {
+          changed_at?: string | null
+          company_id?: string | null
+          id?: string
+          new_quality?: string | null
+          new_tier?: string | null
+          notes?: string | null
+          old_quality?: string | null
+          old_tier?: string | null
+          phone_number_id: string
+          trigger_event?: string | null
+        }
+        Update: {
+          changed_at?: string | null
+          company_id?: string | null
+          id?: string
+          new_quality?: string | null
+          new_tier?: string | null
+          notes?: string | null
+          old_quality?: string | null
+          old_tier?: string | null
+          phone_number_id?: string
+          trigger_event?: string | null
+        }
+        Relationships: []
       }
       omnichannel_conversations: {
         Row: {
@@ -5774,13 +6008,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "prospection_messages_chip_id_fkey"
-            columns: ["chip_id"]
-            isOneToOne: false
-            referencedRelation: "disposable_chips"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "prospection_messages_consultant_id_fkey"
             columns: ["consultant_id"]
             isOneToOne: false
@@ -5836,15 +6063,7 @@ export type Database = {
           proxy_url_used?: string | null
           success?: boolean | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "proxy_logs_chip_id_fkey"
-            columns: ["chip_id"]
-            isOneToOne: false
-            referencedRelation: "disposable_chips"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       role_agent_access: {
         Row: {
@@ -6010,17 +6229,63 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "rotation_channels_chip_id_fkey"
-            columns: ["chip_id"]
-            isOneToOne: false
-            referencedRelation: "disposable_chips"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "rotation_channels_collaborator_id_fkey"
             columns: ["collaborator_id"]
             isOneToOne: false
             referencedRelation: "collaborators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scheduled_actions: {
+        Row: {
+          action_type: string
+          company_id: string
+          created_at: string | null
+          error_message: string | null
+          executed_at: string | null
+          id: string
+          lifecycle_id: string | null
+          phone_number: string
+          scheduled_for: string
+          status: string | null
+          template_slot: string | null
+          template_variables: Json | null
+        }
+        Insert: {
+          action_type: string
+          company_id: string
+          created_at?: string | null
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          lifecycle_id?: string | null
+          phone_number: string
+          scheduled_for: string
+          status?: string | null
+          template_slot?: string | null
+          template_variables?: Json | null
+        }
+        Update: {
+          action_type?: string
+          company_id?: string
+          created_at?: string | null
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          lifecycle_id?: string | null
+          phone_number?: string
+          scheduled_for?: string
+          status?: string | null
+          template_slot?: string | null
+          template_variables?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_actions_lifecycle_id_fkey"
+            columns: ["lifecycle_id"]
+            isOneToOne: false
+            referencedRelation: "lead_whatsapp_lifecycle"
             referencedColumns: ["id"]
           },
         ]
@@ -6457,6 +6722,83 @@ export type Database = {
           },
         ]
       }
+      smart_dispatches: {
+        Row: {
+          company_id: string | null
+          created_at: string | null
+          delivered_at: string | null
+          dispatch_reason: string | null
+          error_message: string | null
+          failed_at: string | null
+          id: string
+          lead_name: string | null
+          lifecycle_id: string | null
+          meta_message_id: string | null
+          phone_number: string
+          priority: number | null
+          read_at: string | null
+          replied_at: string | null
+          scheduled_for: string | null
+          sent_at: string | null
+          status: string | null
+          template_name: string
+          template_params: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string | null
+          delivered_at?: string | null
+          dispatch_reason?: string | null
+          error_message?: string | null
+          failed_at?: string | null
+          id?: string
+          lead_name?: string | null
+          lifecycle_id?: string | null
+          meta_message_id?: string | null
+          phone_number: string
+          priority?: number | null
+          read_at?: string | null
+          replied_at?: string | null
+          scheduled_for?: string | null
+          sent_at?: string | null
+          status?: string | null
+          template_name: string
+          template_params?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string | null
+          delivered_at?: string | null
+          dispatch_reason?: string | null
+          error_message?: string | null
+          failed_at?: string | null
+          id?: string
+          lead_name?: string | null
+          lifecycle_id?: string | null
+          meta_message_id?: string | null
+          phone_number?: string
+          priority?: number | null
+          read_at?: string | null
+          replied_at?: string | null
+          scheduled_for?: string | null
+          sent_at?: string | null
+          status?: string | null
+          template_name?: string
+          template_params?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smart_dispatches_lifecycle_id_fkey"
+            columns: ["lifecycle_id"]
+            isOneToOne: false
+            referencedRelation: "lead_whatsapp_lifecycle"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_config: {
         Row: {
           description: string | null
@@ -6736,6 +7078,150 @@ export type Database = {
           state?: string
           status?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      template_performance: {
+        Row: {
+          block_rate: number | null
+          company_id: string | null
+          created_at: string | null
+          delivery_rate: number | null
+          id: string
+          last_calculated_at: string | null
+          meta_quality_score: string | null
+          performance_score: number | null
+          read_rate: number | null
+          reply_rate: number | null
+          template_name: string
+          total_blocked: number | null
+          total_delivered: number | null
+          total_opted_out: number | null
+          total_read: number | null
+          total_replied: number | null
+          total_sent: number | null
+        }
+        Insert: {
+          block_rate?: number | null
+          company_id?: string | null
+          created_at?: string | null
+          delivery_rate?: number | null
+          id?: string
+          last_calculated_at?: string | null
+          meta_quality_score?: string | null
+          performance_score?: number | null
+          read_rate?: number | null
+          reply_rate?: number | null
+          template_name: string
+          total_blocked?: number | null
+          total_delivered?: number | null
+          total_opted_out?: number | null
+          total_read?: number | null
+          total_replied?: number | null
+          total_sent?: number | null
+        }
+        Update: {
+          block_rate?: number | null
+          company_id?: string | null
+          created_at?: string | null
+          delivery_rate?: number | null
+          id?: string
+          last_calculated_at?: string | null
+          meta_quality_score?: string | null
+          performance_score?: number | null
+          read_rate?: number | null
+          reply_rate?: number | null
+          template_name?: string
+          total_blocked?: number | null
+          total_delivered?: number | null
+          total_opted_out?: number | null
+          total_read?: number | null
+          total_replied?: number | null
+          total_sent?: number | null
+        }
+        Relationships: []
+      }
+      template_rejection_log: {
+        Row: {
+          ai_analysis: string | null
+          ai_fix_suggestion: string | null
+          category: string | null
+          company_id: string | null
+          id: string
+          meta_error_code: string | null
+          meta_error_message: string | null
+          rejected_at: string | null
+          rejection_reason: string | null
+          template_content: Json
+          template_name: string
+        }
+        Insert: {
+          ai_analysis?: string | null
+          ai_fix_suggestion?: string | null
+          category?: string | null
+          company_id?: string | null
+          id?: string
+          meta_error_code?: string | null
+          meta_error_message?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          template_content: Json
+          template_name: string
+        }
+        Update: {
+          ai_analysis?: string | null
+          ai_fix_suggestion?: string | null
+          category?: string | null
+          company_id?: string | null
+          id?: string
+          meta_error_code?: string | null
+          meta_error_message?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          template_content?: Json
+          template_name?: string
+        }
+        Relationships: []
+      }
+      template_slots: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          priority: number | null
+          slot: string
+          slot_label: string | null
+          template_id: string | null
+          template_name: string
+          use_condition: Json | null
+          variable_mapping: Json
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          priority?: number | null
+          slot: string
+          slot_label?: string | null
+          template_id?: string | null
+          template_name: string
+          use_condition?: Json | null
+          variable_mapping?: Json
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          priority?: number | null
+          slot?: string
+          slot_label?: string | null
+          template_id?: string | null
+          template_name?: string
+          use_condition?: Json | null
+          variable_mapping?: Json
         }
         Relationships: []
       }
@@ -7193,6 +7679,109 @@ export type Database = {
           payload?: string | null
         }
         Relationships: []
+      }
+      whatsapp_ai_conversations: {
+        Row: {
+          company_id: string | null
+          conversation_context: Json | null
+          created_at: string | null
+          handed_off_to: string | null
+          handoff_reason: string | null
+          id: string
+          lifecycle_id: string | null
+          messages_in_session: number | null
+          phone_number: string
+          status: string | null
+          system_prompt: string | null
+          updated_at: string | null
+          window_expires_at: string | null
+          window_opened_at: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          conversation_context?: Json | null
+          created_at?: string | null
+          handed_off_to?: string | null
+          handoff_reason?: string | null
+          id?: string
+          lifecycle_id?: string | null
+          messages_in_session?: number | null
+          phone_number: string
+          status?: string | null
+          system_prompt?: string | null
+          updated_at?: string | null
+          window_expires_at?: string | null
+          window_opened_at?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          conversation_context?: Json | null
+          created_at?: string | null
+          handed_off_to?: string | null
+          handoff_reason?: string | null
+          id?: string
+          lifecycle_id?: string | null
+          messages_in_session?: number | null
+          phone_number?: string
+          status?: string | null
+          system_prompt?: string | null
+          updated_at?: string | null
+          window_expires_at?: string | null
+          window_opened_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_ai_conversations_lifecycle_id_fkey"
+            columns: ["lifecycle_id"]
+            isOneToOne: false
+            referencedRelation: "lead_whatsapp_lifecycle"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_ai_messages: {
+        Row: {
+          content: string
+          conversation_id: string | null
+          created_at: string | null
+          id: string
+          message_type: string | null
+          model_used: string | null
+          role: string
+          tokens_used: number | null
+          wa_message_id: string | null
+        }
+        Insert: {
+          content: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          message_type?: string | null
+          model_used?: string | null
+          role: string
+          tokens_used?: number | null
+          wa_message_id?: string | null
+        }
+        Update: {
+          content?: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          message_type?: string | null
+          model_used?: string | null
+          role?: string
+          tokens_used?: number | null
+          wa_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_ai_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_ai_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_bot_conversations: {
         Row: {
@@ -8296,6 +8885,54 @@ export type Database = {
           },
         ]
       }
+      whatsapp_opt_ins: {
+        Row: {
+          company_id: string | null
+          created_at: string | null
+          id: string
+          lead_name: string | null
+          opt_in_at: string | null
+          opt_in_proof: string | null
+          opt_in_proof_type: string | null
+          opt_in_source: string
+          opt_out_at: string | null
+          opt_out_reason: string | null
+          phone_number: string
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string | null
+          id?: string
+          lead_name?: string | null
+          opt_in_at?: string | null
+          opt_in_proof?: string | null
+          opt_in_proof_type?: string | null
+          opt_in_source: string
+          opt_out_at?: string | null
+          opt_out_reason?: string | null
+          phone_number: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string | null
+          id?: string
+          lead_name?: string | null
+          opt_in_at?: string | null
+          opt_in_proof?: string | null
+          opt_in_proof_type?: string | null
+          opt_in_source?: string
+          opt_out_at?: string | null
+          opt_out_reason?: string | null
+          phone_number?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       v_active_conversations: {
@@ -8504,6 +9141,10 @@ export type Database = {
       }
     }
     Functions: {
+      can_collaborator_dispatch: {
+        Args: { p_collaborator_id: string; p_template_name?: string }
+        Returns: Json
+      }
       check_and_auto_refill: {
         Args: { p_bolt_collaborator_id: string }
         Returns: Json
@@ -8516,6 +9157,7 @@ export type Database = {
           phone: string
         }[]
       }
+      close_expired_windows: { Args: never; Returns: number }
       complete_call: {
         Args: {
           p_ai_qualification?: string
@@ -8649,7 +9291,35 @@ export type Database = {
           similarity: number
         }[]
       }
+      recalculate_template_performance: {
+        Args: { p_company_id: string; p_template_name: string }
+        Returns: undefined
+      }
       reset_daily_chip_counts: { Args: never; Returns: undefined }
+      reset_daily_dispatch_counters: { Args: never; Returns: number }
+      resolve_template_variables: {
+        Args: {
+          p_company_config?: Json
+          p_extracted_data: Json
+          p_lead_name: string
+          p_product_data: Json
+          p_variable_mapping: Json
+        }
+        Returns: Json
+      }
+      select_template_for_call: {
+        Args: {
+          p_company_id: string
+          p_extracted_data: Json
+          p_suggested_slot: string
+        }
+        Returns: {
+          slot: string
+          slot_id: string
+          template_name: string
+          variable_mapping: Json
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       sync_leads_from_base: {

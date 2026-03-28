@@ -5,6 +5,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { CollaboratorProvider } from "@/contexts/CollaboratorContext";
 import { CompanyFilterProvider } from "@/contexts/CompanyFilterContext";
 import { DispatchProvider } from "@/contexts/DispatchContext";
+import { CompanyProvider } from "@/contexts/CompanyContext";
 import App from "./App.tsx";
 import "./index.css";
 
@@ -19,9 +20,11 @@ createRoot(document.getElementById("root")!).render(
       <AuthProvider>
         <CollaboratorProvider>
           <CompanyFilterProvider>
-            <DispatchProvider>
-              <App />
-            </DispatchProvider>
+            <CompanyProvider>
+              <DispatchProvider>
+                <App />
+              </DispatchProvider>
+            </CompanyProvider>
           </CompanyFilterProvider>
         </CollaboratorProvider>
       </AuthProvider>
