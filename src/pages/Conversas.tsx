@@ -6,27 +6,26 @@ import { EDGE_BASE } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Search, Send, Loader2, ArrowLeft, Bot, User, Info, Check, CheckCheck,
-  X, Phone, FileText, ChevronDown, MessageSquare, Clock,
+  X, Phone, FileText, MessageSquare, Clock,
 } from "lucide-react";
 import { format, isToday, isYesterday } from "date-fns";
+
+const FALLBACK_COMPANY_ID = "d33b6a84-8f72-4441-b2eb-dd151a31ac12";
 
 interface ConversationItem {
   phone_from: string;
   body: string | null;
   created_at: string;
-  status: string | null;
   lead_name: string | null;
-  window_open?: boolean;
+  window_open: boolean;
   ai_status?: string;
 }
 
@@ -62,6 +61,8 @@ export default function Conversas() {
   const { collaborator } = useCollaborator();
   const isMobile = useIsMobile();
 
+  const companyId = collaborator?.company_id || FALLBACK_COMPANY_ID;
+
   // Left panel
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -81,13 +82,8 @@ export default function Conversas() {
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
 
-  const companyId = collaborator?.company_id;
-
   // ── Load conversation list ──
   const loadConversations = useCallback(async () => {
-    if (!companyId) return;
-    const { data, error } = await supabase.rpc("get_contact_leads_stats").select("*");
-    // Fallback: direct query for distinct conversations
     const { data: msgs } = await supabase
       .from("whatsapp_meta_messages")
       .select("phone_from, body, created_at, status")
@@ -106,7 +102,6 @@ export default function Conversas() {
           phone_from: m.phone_from,
           body: m.body,
           created_at: m.created_at,
-          status: m.status,
           lead_name: null,
           window_open: false,
           ai_status: undefined,
@@ -126,7 +121,7 @@ export default function Conversas() {
 
       if (lifecycles) {
         for (const lc of lifecycles) {
-          const item = map.get(lc.phone_number);
+          const item = map.get((lc as any).phone_number);
           if (item) {
             item.lead_name = (lc as any).lead_name || null;
             item.window_open = (lc as any).window_open ?? false;
@@ -144,8 +139,9 @@ export default function Conversas() {
 
   // ── Load chat messages ──
   const loadMessages = useCallback(async (phone: string) => {
-    if (!companyId) return;
     setLoadingChat(true);
+    setMessages([]);
+
     const { data } = await supabase
       .from("whatsapp_meta_messages")
       .select("id, phone_from, phone_to, body, direction, status, created_at, is_ai_generated")
@@ -168,9 +164,11 @@ export default function Conversas() {
     setLoadingChat(false);
   }, [companyId]);
 
-  useEffect(() => {
-    if (selectedPhone) loadMessages(selectedPhone);
-  }, [selectedPhone, loadMessages]);
+  // When a phone is selected, load its messages
+  const handleSelectPhone = useCallback((phone: string) => {
+    setSelectedPhone(phone);
+    loadMessages(phone);
+  }, [loadMessages]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -179,21 +177,26 @@ export default function Conversas() {
 
   // ── Realtime subscription ──
   useEffect(() => {
-    if (!companyId) return;
     const channel = supabase
-      .channel("conv-messages")
+      .channel("conv-messages-rt")
       .on("postgres_changes", {
         event: "INSERT",
         schema: "public",
         table: "whatsapp_meta_messages",
-        filter: `company_id=eq.${companyId}`,
       }, (payload) => {
         const msg = payload.new as ChatMessage;
-        // Update chat if this phone is selected
+        // Only care about our company
+        if ((msg as any).company_id !== companyId) return;
+
+        // If this message belongs to the selected conversation, append it
         if (selectedPhone && (msg.phone_from === selectedPhone || msg.phone_to === selectedPhone)) {
-          setMessages((prev) => [...prev, msg]);
+          setMessages((prev) => {
+            // Dedupe by id
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
         }
-        // Refresh list
+        // Refresh the conversation list
         loadConversations();
       })
       .subscribe();
@@ -212,7 +215,7 @@ export default function Conversas() {
   }, []);
 
   const sendMessage = async () => {
-    if (!input.trim() || !selectedPhone || !companyId || sending) return;
+    if (!input.trim() || !selectedPhone || sending) return;
     setSending(true);
     try {
       const headers = await getHeaders();
@@ -241,7 +244,6 @@ export default function Conversas() {
 
   // ── Send template ──
   const loadTemplates = async () => {
-    if (!companyId) return;
     const { data } = await supabase
       .from("whatsapp_meta_templates")
       .select("name, status, language")
@@ -252,7 +254,7 @@ export default function Conversas() {
   };
 
   const sendTemplate = async (templateName: string) => {
-    if (!selectedPhone || !companyId) return;
+    if (!selectedPhone) return;
     try {
       const headers = await getHeaders();
       await fetch(`${EDGE_BASE}/smart-dispatcher`, {
@@ -334,13 +336,17 @@ export default function Conversas() {
       )}
 
       <div className="pt-2 space-y-2">
-        <Button size="sm" variant="outline" className="w-full justify-start gap-2" onClick={() => {
+        <Button size="sm" variant="outline" className="w-full justify-start gap-2" onClick={async () => {
           if (selectedPhone) {
-            fetch(`${EDGE_BASE}/make-call`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "dial", to: selectedPhone }),
-            }).then(() => toast.success("Ligação iniciada")).catch(() => toast.error("Erro"));
+            try {
+              const headers = await getHeaders();
+              await fetch(`${EDGE_BASE}/make-call`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ action: "dial", to: selectedPhone }),
+              });
+              toast.success("Ligação iniciada");
+            } catch { toast.error("Erro"); }
           }
         }}>
           <Phone className="h-3.5 w-3.5" /> Ligar
@@ -402,7 +408,7 @@ export default function Conversas() {
             {filtered.map((c) => (
               <button
                 key={c.phone_from}
-                onClick={() => setSelectedPhone(c.phone_from)}
+                onClick={() => handleSelectPhone(c.phone_from)}
                 className={`w-full flex items-center gap-3 p-3 text-left transition-colors hover:bg-accent/50 ${
                   selectedPhone === c.phone_from ? "bg-accent" : ""
                 }`}
@@ -474,7 +480,6 @@ export default function Conversas() {
             {lifecycle?.stage && (
               <Badge variant="secondary" className="text-xs">{lifecycle.stage}</Badge>
             )}
-            {/* Context drawer */}
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon"><Info className="h-4 w-4" /></Button>
@@ -583,7 +588,6 @@ export default function Conversas() {
   );
 
   // ── Main render ──
-  // Mobile: show list or chat
   if (isMobile) {
     return (
       <DashboardLayout>
@@ -595,7 +599,6 @@ export default function Conversas() {
     );
   }
 
-  // Desktop: side by side
   return (
     <DashboardLayout>
       <div className="h-[calc(100vh-6rem)] flex border border-border rounded-lg overflow-hidden">
