@@ -2612,6 +2612,42 @@ export type Database = {
         }
         Relationships: []
       }
+      carrosseis: {
+        Row: {
+          created_at: string | null
+          id: string
+          instagram_post_id: string | null
+          legenda: string | null
+          perfil: string
+          published_at: string | null
+          slides: Json | null
+          status: string | null
+          tema: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          instagram_post_id?: string | null
+          legenda?: string | null
+          perfil: string
+          published_at?: string | null
+          slides?: Json | null
+          status?: string | null
+          tema: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          instagram_post_id?: string | null
+          legenda?: string | null
+          perfil?: string
+          published_at?: string | null
+          slides?: Json | null
+          status?: string | null
+          tema?: string
+        }
+        Relationships: []
+      }
       channel_routing: {
         Row: {
           business_hours: Json | null
