@@ -19,7 +19,7 @@ const MeuBot = lazy(() => import("./pages/MeuBot"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
 const IdentidadeVisual = lazy(() => import("./pages/IdentidadeVisual"));
 const CeoBolt = lazy(() => import("./pages/CeoBolt"));
-
+const CompanySetup = lazy(() => import("./pages/CompanySetup"));
 const AtendimentoLeads = lazy(() => import("./pages/AtendimentoLeads"));
 const VoiceAI = lazy(() => import("./pages/VoiceAI"));
 const CallCampaigns = lazy(() => import("./pages/CallCampaigns"));
@@ -87,7 +87,7 @@ const App = () => (
           <Route path="/configuracoes" element={<ProtectedRoute minLevel={0}><Configuracoes /></ProtectedRoute>} />
           <Route path="/identidade-visual" element={<ProtectedRoute minLevel={0}><IdentidadeVisual /></ProtectedRoute>} />
           <Route path="/ceo" element={<ProtectedRoute minLevel={0}><CeoBolt /></ProtectedRoute>} />
-          
+          <Route path="/config" element={<ProtectedRoute minLevel={0}><CompanySetup /></ProtectedRoute>} />
           <Route path="/voice-ai" element={<ProtectedRoute minLevel={0}><VoiceAI /></ProtectedRoute>} />
           <Route path="/call-campaigns" element={<ProtectedRoute minLevel={1}><CallCampaigns /></ProtectedRoute>} />
           <Route path="/atendimento" element={<ProtectedRoute><AtendimentoLeads /></ProtectedRoute>} />
