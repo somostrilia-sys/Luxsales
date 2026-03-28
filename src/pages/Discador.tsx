@@ -236,7 +236,27 @@ export default function Discador() {
           </div>
         </PageHeader>
 
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+        {roleLevel <= 1 && (
+          <Card className="border-yellow-500/30 bg-yellow-500/5 mb-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-yellow-400">
+                <TestTube className="h-4 w-4" /> Teste de Ligação
+              </CardTitle>
+              <CardDescription className="text-xs">Testa o pipeline de voz IA</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2">
+                <Input placeholder="+5531997441277" value={testPhone} onChange={e => setTestPhone(e.target.value)} className="h-8 text-sm" />
+                <Button size="sm" variant="outline" className="border-yellow-500/50 text-yellow-400" onClick={handleTestCall} disabled={testLoading || !testPhone}>
+                  {testLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Phone className="h-3 w-3" />}
+                  <span className="ml-1">{testLoading ? "Ligando..." : "Testar"}</span>
+                </Button>
+              </div>
+              {testResult && <p className={`text-xs mt-2 ${testResult.success ? "text-green-400" : "text-red-400"}`}>{testResult.message}</p>}
+            </CardContent>
+          </Card>
+        )}
+
           {/* Left Column */}
           <div className="space-y-4">
             <Card className="border-border/60 bg-card">
