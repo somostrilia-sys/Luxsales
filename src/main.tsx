@@ -20,9 +20,11 @@ createRoot(document.getElementById("root")!).render(
       <AuthProvider>
         <CollaboratorProvider>
           <CompanyFilterProvider>
-            <DispatchProvider>
-              <App />
-            </DispatchProvider>
+            <CompanyProvider>
+              <DispatchProvider>
+                <App />
+              </DispatchProvider>
+            </CompanyProvider>
           </CompanyFilterProvider>
         </CollaboratorProvider>
       </AuthProvider>
