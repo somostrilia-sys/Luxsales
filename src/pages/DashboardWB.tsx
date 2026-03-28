@@ -100,7 +100,7 @@ export default function DashboardWB() {
 
   return (
     <DashboardLayout>
-      <PageHeader title="Dashboard WhatsApp" description="Visão geral de qualidade e métricas" />
+      <PageHeader title="Dashboard WhatsApp" subtitle="Visão geral de qualidade e métricas" />
 
       {/* Section 1: Quality */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">

@@ -2,6 +2,7 @@ import {
   LayoutDashboard, Users, FileSearch, Database,
   BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone, Mic, PhoneCall, Network, Building2, Building,
   Headphones, Contact, MessageCircle, FileBarChart, ShieldCheck, Wrench, Megaphone, FileText, Smartphone, Zap,
+  Send, ClipboardList, UserCog,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -46,6 +47,13 @@ const consultantItems: MenuItem[] = [
   { title: "Conversas IA", url: "/conversas", icon: MessageSquare, levels: [0, 1, 2, 3] },
   { title: "Meu Bot", url: "/meu-bot", icon: Bot, levels: [0, 1, 2, 3] },
   { title: "Prospecção", url: "/extracao", icon: FileSearch, levels: [3] },
+];
+
+const whatsappBusinessItems: MenuItem[] = [
+  { title: "Dashboard WB", url: "/dashboard-wb", icon: BarChart3, levels: [0] },
+  { title: "Meus Leads", url: "/my-leads", icon: ClipboardList, levels: [0, 1, 2, 3] },
+  { title: "Templates", url: "/templates", icon: FileText, levels: [0] },
+  { title: "Equipe WB", url: "/team", icon: UserCog, levels: [0] },
 ];
 
 const voiceItems: MenuItem[] = [

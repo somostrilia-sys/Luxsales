@@ -139,7 +139,7 @@ export default function TeamManagement() {
 
   return (
     <DashboardLayout>
-      <PageHeader title="Equipe" description="Gerencie permissões de disparo da equipe" />
+      <PageHeader title="Equipe" subtitle="Gerencie permissões de disparo da equipe" />
 
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px]">

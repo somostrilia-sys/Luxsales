@@ -258,7 +258,7 @@ export default function MyLeads() {
 
   return (
     <DashboardLayout>
-      <PageHeader title="Meus Leads" description="Leads distribuídos para você" />
+      <PageHeader title="Meus Leads" subtitle="Leads distribuídos para você" />
 
       {/* Counter */}
       <div className="flex items-center justify-between mb-4 px-1">

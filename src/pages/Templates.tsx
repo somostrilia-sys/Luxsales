@@ -120,7 +120,7 @@ export default function Templates() {
 
   return (
     <DashboardLayout>
-      <PageHeader title="Templates" description="Gerencie seus templates WhatsApp" />
+      <PageHeader title="Templates" subtitle="Gerencie seus templates WhatsApp" />
 
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px]">
