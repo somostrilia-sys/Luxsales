@@ -126,24 +126,11 @@ export default function AtendimentoLeads() {
     loadConversations();
   }, [loadConversations]);
 
-  // ── Poll UAZAPI and refresh ──────────────────────────────────────────────
+  // ── Refresh conversations ──────────────────────────────────────────────
   const pollAndRefresh = useCallback(async () => {
     if (polling) return;
     setPolling(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (token) {
-        await fetch(`${EDGE_BASE}/poll-whatsapp`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-          },
-          body: JSON.stringify({}),
-          signal: AbortSignal.timeout(25000),
-        }).catch(() => null);
-      }
       await loadConversations();
     } catch {
       // silently ignore
@@ -254,25 +241,8 @@ export default function AtendimentoLeads() {
         .eq("id", conv.id);
     }
 
-    // Load chip info
-    if (conv.chip_id) {
-      const { data: chip } = await supabase
-        .from("disposable_chips")
-        .select("id, chip_index, phone, status, instance_token")
-        .eq("id", conv.chip_id)
-        .maybeSingle();
-      setChipInfo(chip as ChipInfo | null);
-    } else if (conv.chip_instance_token) {
-      // Fallback: buscar chip pelo instance_token (quando chip_id é null)
-      const { data: chip } = await supabase
-        .from("disposable_chips")
-        .select("id, chip_index, phone, status, instance_token")
-        .eq("instance_token", conv.chip_instance_token)
-        .maybeSingle();
-      setChipInfo(chip as ChipInfo | null);
-    } else {
-      setChipInfo(null);
-    }
+    // Chip info not needed in Meta API flow
+    setChipInfo(null);
 
     setTimeout(() => {
       scrollToBottom();
@@ -326,17 +296,18 @@ export default function AtendimentoLeads() {
 
       if (error) throw error;
 
-      // Send via edge function (anti-ban: edge function resolves the correct chip)
+      // Send via Meta API through conversation-engine
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) throw new Error("Sessão expirada");
 
-      await fetch(`${EDGE_BASE}/send-whatsapp-message`, {
+      await fetch(`${EDGE_BASE}/conversation-engine`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({
+          action: "send-message",
           conversation_id: selectedConv.id,
-          phone: selectedConv.lead_phone,
+          phone_number: selectedConv.lead_phone,
           message: content,
         }),
       });
