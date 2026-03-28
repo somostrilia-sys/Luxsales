@@ -13,8 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
-  Search, Send, Loader2, ArrowLeft, Bot, User, Info, Check, CheckCheck,
-  X, Phone, FileText, MessageSquare,
+  Search, Loader2, ArrowLeft, Bot, User, Info, Check, CheckCheck,
+  X, Phone, MessageSquare,
 } from "lucide-react";
 import { format, isToday, isYesterday } from "date-fns";
 
