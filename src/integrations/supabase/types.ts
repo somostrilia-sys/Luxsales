@@ -5752,6 +5752,60 @@ export type Database = {
         }
         Relationships: []
       }
+      meta_rules: {
+        Row: {
+          applies_to: string[] | null
+          category: string
+          created_at: string | null
+          description: string
+          effective_from: string | null
+          effective_until: string | null
+          id: string
+          is_active: boolean | null
+          region: string[] | null
+          rule_key: string
+          severity: string | null
+          source_url: string | null
+          subcategory: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          applies_to?: string[] | null
+          category: string
+          created_at?: string | null
+          description: string
+          effective_from?: string | null
+          effective_until?: string | null
+          id?: string
+          is_active?: boolean | null
+          region?: string[] | null
+          rule_key: string
+          severity?: string | null
+          source_url?: string | null
+          subcategory?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          applies_to?: string[] | null
+          category?: string
+          created_at?: string | null
+          description?: string
+          effective_from?: string | null
+          effective_until?: string | null
+          id?: string
+          is_active?: boolean | null
+          region?: string[] | null
+          rule_key?: string
+          severity?: string | null
+          source_url?: string | null
+          subcategory?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       meta_tier_history: {
         Row: {
           changed_at: string | null
