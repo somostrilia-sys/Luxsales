@@ -43,6 +43,7 @@ const RelatoriosVoz = lazy(() => import("./pages/RelatoriosVoz"));
 const ComplianceVoz = lazy(() => import("./pages/ComplianceVoz"));
 const ConfiguracoesVoz = lazy(() => import("./pages/ConfiguracoesVoz"));
 const WhatsAppMeta = lazy(() => import("./pages/WhatsAppMeta"));
+const MetaRules = lazy(() => import("./pages/MetaRules"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -102,6 +103,7 @@ const App = () => (
           <Route path="/relatorios-voz" element={<ProtectedRoute minLevel={1}><RelatoriosVoz /></ProtectedRoute>} />
           <Route path="/compliance-voz" element={<ProtectedRoute minLevel={0}><ComplianceVoz /></ProtectedRoute>} />
           <Route path="/configuracoes-voz" element={<ProtectedRoute minLevel={0}><ConfiguracoesVoz /></ProtectedRoute>} />
+          <Route path="/meta-rules" element={<ProtectedRoute minLevel={0}><MetaRules /></ProtectedRoute>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

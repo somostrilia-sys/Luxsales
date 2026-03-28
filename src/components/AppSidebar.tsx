@@ -67,6 +67,7 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
     items: [
       { title: "Equipe", url: "/team", icon: UserCog, levels: [0] },
       { title: "Opt-ins", url: "/opt-ins", icon: ShieldCheck, levels: [0] },
+      { title: "Regras Meta", url: "/meta-rules", icon: ClipboardList, levels: [0] },
       { title: "Configuração", url: "/config", icon: Sparkles, levels: [0] },
     ],
   },
