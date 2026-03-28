@@ -1,8 +1,8 @@
 import {
   LayoutDashboard, Users, FileSearch, Database,
-  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Rocket, Phone, Mic, PhoneCall, Network, Building2, Building,
-  Headphones, Contact, MessageCircle, FileBarChart, ShieldCheck, Wrench, Megaphone, FileText, Smartphone, Zap,
-  Send, ClipboardList, UserCog,
+  BarChart3, Settings, MessageSquare, Bot, LogOut, Palette, UserPlus, Cpu, Crown, Phone,
+  Headphones, Contact, MessageCircle, FileBarChart, ShieldCheck, Wrench, Megaphone, FileText,
+  Send, ClipboardList, UserCog, Building2, Building,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
