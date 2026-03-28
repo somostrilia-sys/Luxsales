@@ -23,6 +23,7 @@ const Conversas = lazy(() => import("./pages/Conversas"));
 const Templates = lazy(() => import("./pages/Templates"));
 const TeamManagement = lazy(() => import("./pages/TeamManagement"));
 const LeadDistribution = lazy(() => import("./pages/LeadDistribution"));
+const LeadsMaster = lazy(() => import("./pages/LeadsMaster"));
 const OptIns = lazy(() => import("./pages/OptIns"));
 const CompanySetup = lazy(() => import("./pages/CompanySetup"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
@@ -73,6 +74,7 @@ const App = () => (
           <Route path="/templates" element={<ProtectedRoute minLevel={0}><Templates /></ProtectedRoute>} />
           <Route path="/team" element={<ProtectedRoute minLevel={0}><TeamManagement /></ProtectedRoute>} />
           <Route path="/lead-distribution" element={<ProtectedRoute minLevel={0}><LeadDistribution /></ProtectedRoute>} />
+          <Route path="/leads" element={<ProtectedRoute minLevel={0}><LeadsMaster /></ProtectedRoute>} />
           <Route path="/opt-ins" element={<ProtectedRoute minLevel={0}><OptIns /></ProtectedRoute>} />
           <Route path="/config" element={<ProtectedRoute minLevel={0}><CompanySetup /></ProtectedRoute>} />
           <Route path="/configuracoes" element={<ProtectedRoute minLevel={0}><Configuracoes /></ProtectedRoute>} />
