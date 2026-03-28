@@ -25,6 +25,8 @@ const TeamManagement = lazy(() => import("./pages/TeamManagement"));
 const LeadDistribution = lazy(() => import("./pages/LeadDistribution"));
 const LeadsMaster = lazy(() => import("./pages/LeadsMaster"));
 const ImportLeads = lazy(() => import("./pages/ImportLeads"));
+const CallQueues = lazy(() => import("./pages/CallQueues"));
+const DispatchQueues = lazy(() => import("./pages/DispatchQueues"));
 const OptIns = lazy(() => import("./pages/OptIns"));
 const CompanySetup = lazy(() => import("./pages/CompanySetup"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
@@ -77,6 +79,8 @@ const App = () => (
           <Route path="/lead-distribution" element={<ProtectedRoute minLevel={0}><LeadDistribution /></ProtectedRoute>} />
           <Route path="/leads" element={<ProtectedRoute minLevel={0}><LeadsMaster /></ProtectedRoute>} />
           <Route path="/import" element={<ProtectedRoute minLevel={0}><ImportLeads /></ProtectedRoute>} />
+          <Route path="/call-queues" element={<ProtectedRoute minLevel={0}><CallQueues /></ProtectedRoute>} />
+          <Route path="/dispatch-queues" element={<ProtectedRoute minLevel={0}><DispatchQueues /></ProtectedRoute>} />
           <Route path="/opt-ins" element={<ProtectedRoute minLevel={0}><OptIns /></ProtectedRoute>} />
           <Route path="/config" element={<ProtectedRoute minLevel={0}><CompanySetup /></ProtectedRoute>} />
           <Route path="/configuracoes" element={<ProtectedRoute minLevel={0}><Configuracoes /></ProtectedRoute>} />
