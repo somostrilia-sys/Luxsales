@@ -32,30 +32,29 @@ import { ptBR } from "date-fns/locale";
 const FALLBACK_COMPANY_ID = "d33b6a84-8f72-4441-b2eb-dd151a31ac12";
 
 interface ConversationItem {
-  phone_from: string;
-  body: string | null;
-  created_at: string;
+  id: string;
+  phone: string;
   lead_name: string | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  status: string | null;
+  human_mode: boolean;
   window_open: boolean;
-  ai_status?: string;
 }
 
 interface ChatMessage {
   id: string;
-  phone_from: string;
-  phone_to: string;
-  body: string | null;
-  direction: string;
-  type?: string | null;
-  status: string | null;
+  conversation_id: string;
+  role: string;
+  content: string | null;
   created_at: string;
-  sent_at?: string | null;
-  delivered_at?: string | null;
-  read_at?: string | null;
-  template_name?: string | null;
-  metadata?: any;
-  is_ai_generated?: boolean;
 }
+
+const normalizePhone = (phone: string): string => {
+  let digits = phone.replace(/\D/g, "");
+  if (!digits.startsWith("55")) digits = "55" + digits;
+  return digits;
+};
 
 interface LifecycleData {
   stage: string | null;
