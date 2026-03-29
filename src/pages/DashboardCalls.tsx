@@ -156,8 +156,65 @@ export default function DashboardCalls() {
     if (!company_id) return;
     setFunnelLoading(true);
     try {
-      setFunnel(await callEdge({ action: "lead-funnel", ...base }));
-    } catch { toast.error("Erro ao carregar funil"); }
+      const result = await callEdge({ action: "lead-funnel", ...base });
+      const rawFunnel = result?.funnel ?? result ?? {};
+      const rawStages = rawFunnel?.stages;
+
+      const stageLabels: Record<string, string> = {
+        new: "Novos",
+        queued_call: "Fila de ligação",
+        calling: "Ligando",
+        called: "Ligados",
+        opted_in: "Opt-in",
+        queued_dispatch: "Fila de disparo",
+        dispatched: "Disparados",
+        engaged: "Engajados",
+        converted: "Convertidos",
+      };
+
+      let normalizedStages: FunnelStage[] = [];
+
+      if (Array.isArray(rawStages)) {
+        normalizedStages = rawStages.map((stage: any) => ({
+          label: String(stage?.label ?? stage?.key ?? "Etapa"),
+          key: String(stage?.key ?? stage?.label ?? "stage"),
+          count: Number(stage?.count ?? 0),
+        }));
+      } else if (rawStages && typeof rawStages === "object") {
+        const orderedKeys = [
+          "new",
+          "queued_call",
+          "calling",
+          "called",
+          "opted_in",
+          "queued_dispatch",
+          "dispatched",
+          "engaged",
+          "converted",
+        ];
+        const stageRecord = rawStages as Record<string, number>;
+        const knownKeys = orderedKeys.filter((key) => key in stageRecord);
+        const extraKeys = Object.keys(stageRecord).filter((key) => !orderedKeys.includes(key));
+
+        normalizedStages = [...knownKeys, ...extraKeys].map((key) => ({
+          key,
+          label: stageLabels[key] ?? key.replace(/_/g, " "),
+          count: Number(stageRecord[key] ?? 0),
+        }));
+      }
+
+      setFunnel({
+        stages: normalizedStages,
+        temperature: {
+          hot: Number(rawFunnel?.temperature?.hot ?? 0),
+          warm: Number(rawFunnel?.temperature?.warm ?? 0),
+          cold: Number(rawFunnel?.temperature?.cold ?? 0),
+        },
+      });
+    } catch {
+      toast.error("Erro ao carregar funil");
+      setFunnel({ stages: [], temperature: { hot: 0, warm: 0, cold: 0 } });
+    }
     setFunnelLoading(false);
   }, [company_id, user_role]);
 
