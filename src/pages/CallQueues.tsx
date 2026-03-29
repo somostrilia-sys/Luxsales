@@ -19,8 +19,9 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
   Phone, Play, Pause, Pencil, Trash2, Plus, RefreshCw,
-  Loader2, ChevronLeft, CheckCircle, Users, Target,
+  Loader2, ChevronLeft, CheckCircle, Users, Target, Mic,
 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface VoiceConfig {
   system_prompt: string; opening_script: string; objection_tree: string;
