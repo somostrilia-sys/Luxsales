@@ -99,7 +99,8 @@ export default function LeadsMaster() {
   // CEO: uses selected company or own; others: use own company
   const baseCompanyId = collaborator?.company_id ?? "";
   const user_role = roleLevel === 0 ? "ceo" : "collaborator";
-  const company_id = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : baseCompanyId;
+  // null = sem filtro (Todas Empresas); string = filtrar pela empresa selecionada
+  const company_id: string | null = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : null;
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -134,11 +135,63 @@ export default function LeadsMaster() {
   const [actionLoading, setActionLoading] = useState(false);
   const [collabs, setCollabs] = useState<{ id: string; name: string }[]>([]);
 
-  const base = { company_id, requester_role: user_role || "ceo" };
+  const base = { company_id: company_id ?? baseCompanyId, requester_role: user_role || "ceo" };
   const PAGE_SIZE = 20;
 
+  // Fallback: calcula stats diretamente do Supabase quando a edge function não retorna dados
+  const fetchStatsFallback = useCallback(async (cid: string | null) => {
+    try {
+      // Busca contagens por status
+      const statusList = ["new", "queued_call", "called", "opted_in", "dispatched", "engaged", "converted", "lost"];
+      const tempList = ["hot", "warm", "cold"];
+
+      const buildQ = (table: string) => {
+        let q = supabase.from(table).select("*", { count: "exact", head: true });
+        if (cid) q = (q as any).eq("company_id", cid);
+        return q;
+      };
+
+      const [totalRes, ...statusResults] = await Promise.all([
+        buildQ("leads_master"),
+        ...statusList.map(s => {
+          let q = supabase.from("leads_master").select("*", { count: "exact", head: true });
+          if (cid) q = q.eq("company_id", cid);
+          return q.eq("status", s);
+        }),
+      ]);
+
+      const tempResults = await Promise.all(
+        tempList.map(t => {
+          let q = supabase.from("leads_master").select("*", { count: "exact", head: true });
+          if (cid) q = q.eq("company_id", cid);
+          return q.eq("lead_temperature", t);
+        })
+      );
+
+      const counts = statusResults.map(r => r.count || 0);
+      const [hot, warm, cold] = tempResults.map(r => r.count || 0);
+
+      setStats({
+        total: totalRes.count || 0,
+        new: counts[0],
+        queued_call: counts[1],
+        called: counts[2],
+        opted_in: counts[3],
+        dispatched: counts[4],
+        engaged: counts[5],
+        converted: counts[6],
+        lost: counts[7],
+        hot,
+        warm,
+        cold,
+        avg_score: 0,
+      });
+    } catch {
+      // silencioso — mantém defaultStats
+    }
+  }, []);
+
   const fetchLeads = useCallback(async (silent = false) => {
-    if (!company_id) return;
     if (!silent) setLoading(true); else setRefreshing(true);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10000);
@@ -146,8 +199,8 @@ export default function LeadsMaster() {
       // Count query (separate, head-only)
       let countQ = supabase
         .from("leads_master")
-        .select("*", { count: "exact", head: true })
-        .eq("company_id", company_id);
+        .select("*", { count: "exact", head: true });
+      if (company_id) countQ = countQ.eq("company_id", company_id);
       if (fStatus !== "all") countQ = countQ.eq("status", fStatus);
       if (fTemp !== "all") countQ = countQ.eq("lead_temperature", fTemp);
       if (fSegment !== "all") countQ = countQ.eq("segment", fSegment);
@@ -158,8 +211,8 @@ export default function LeadsMaster() {
       // Data query
       let query = supabase
         .from("leads_master")
-        .select("id, lead_name, phone_number, status, lead_score, lead_temperature, segment, total_call_attempts, last_call_at, created_at")
-        .eq("company_id", company_id);
+        .select("id, lead_name, phone_number, status, lead_score, lead_temperature, segment, total_call_attempts, last_call_at, created_at");
+      if (company_id) query = query.eq("company_id", company_id);
       if (fStatus !== "all") query = query.eq("status", fStatus);
       if (fTemp !== "all") query = query.eq("lead_temperature", fTemp);
       if (fSegment !== "all") query = query.eq("segment", fSegment);
@@ -175,13 +228,20 @@ export default function LeadsMaster() {
       setLeads((data as Lead[]) || []);
 
       // Stats via dashboard-calls (leads_master breakdown)
-      callEdge("dashboard-calls", { action: "overview", company_id, requester_role: user_role || "ceo" })
+      // Passa "all" quando company_id é null para que a edge function retorne visão geral
+      callEdge("dashboard-calls", { action: "overview", company_id: company_id || "all", requester_role: user_role || "ceo" })
         .then(d => {
           if (d.leads_master) {
             setStats({ ...defaultStats, ...d.leads_master });
+          } else {
+            // Fallback: buscar stats diretamente do Supabase agrupando por status/temperatura
+            fetchStatsFallback(company_id);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          // Fallback se edge function falhar
+          fetchStatsFallback(company_id);
+        });
     } catch (e: any) {
       if (e.name !== "AbortError" && !silent) toast.error("Erro ao carregar leads");
     } finally {
