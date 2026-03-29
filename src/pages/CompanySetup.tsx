@@ -114,6 +114,17 @@ export default function CompanySetup() {
   const navigate = useNavigate();
   const { company_id: baseCompanyId, companyConfig: baseConfig, refetch } = useCompany();
   const { selectedCompanyId } = useCompanyFilter();
+  // Import useCollaborator at the top is needed — adding inline
+  const [isCEO, setIsCEO] = useState(false);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.id) {
+        supabase.from("collaborators").select("role:roles(level)").eq("user_id", session.user.id).maybeSingle().then(({ data }) => {
+          setIsCEO((data?.role as any)?.level <= 1);
+        });
+      }
+    });
+  }, []);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<FormData>(initialForm);
   const [companyConfig, setFetchedConfig] = useState<any>(null);
@@ -183,6 +194,7 @@ export default function CompanySetup() {
       const body = {
         action: "set",
         company_id,
+        requester_role: "ceo",
         company_name: form.company_name.trim(),
         segment: form.segment,
         segment_display_name: segDisplay,

@@ -167,24 +167,30 @@ export default function VoiceSimulate() {
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
         },
         body: JSON.stringify({
-          action: "chat",
-          company_id: companyId,
           messages: conversationRef.current,
-          phone_number: phoneNumber,
+          company_id: companyId,
+          context: { phone_number: phoneNumber },
         }),
       });
 
       const data = await res.json();
-      const aiText = data.response || data.message || "...";
+      const aiText = data.text || data.response || data.message || "...";
       conversationRef.current.push({ role: "assistant", content: aiText });
       addEntry("ai", aiText);
 
-      // TTS via browser
+      // TTS via browser — seleciona melhor voz pt-BR disponível
       if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(aiText);
         utterance.lang = "pt-BR";
-        utterance.rate = 1.1;
+        utterance.rate = 1.05;
+        utterance.pitch = 1.0;
+        // Tentar encontrar voz masculina pt-BR de qualidade
+        const voices = window.speechSynthesis.getVoices();
+        const ptVoice = voices.find(v => v.lang === "pt-BR" && /google|microsoft|luciana|daniel/i.test(v.name))
+          || voices.find(v => v.lang === "pt-BR")
+          || voices.find(v => v.lang.startsWith("pt"));
+        if (ptVoice) utterance.voice = ptVoice;
         synthRef.current = utterance;
         window.speechSynthesis.speak(utterance);
       }
