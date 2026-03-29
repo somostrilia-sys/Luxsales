@@ -46,8 +46,14 @@ interface ChatMessage {
   phone_to: string;
   body: string | null;
   direction: string;
+  type?: string | null;
   status: string | null;
   created_at: string;
+  sent_at?: string | null;
+  delivered_at?: string | null;
+  read_at?: string | null;
+  template_name?: string | null;
+  metadata?: any;
   is_ai_generated?: boolean;
 }
 
