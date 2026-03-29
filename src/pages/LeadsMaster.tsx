@@ -143,7 +143,7 @@ export default function LeadsMaster() {
         .select("*", { count: "exact", head: true })
         .eq("company_id", company_id);
       if (fStatus !== "all") countQ = countQ.eq("status", fStatus);
-      if (fTemp !== "all") countQ = countQ.eq("temperature", fTemp);
+      if (fTemp !== "all") countQ = countQ.eq("lead_temperature", fTemp);
       if (fSegment !== "all") countQ = countQ.eq("segment", fSegment);
       if (fSearch.length >= 3) countQ = countQ.or(`lead_name.ilike.%${fSearch}%,phone_number.ilike.%${fSearch}%`);
       const { count } = await countQ.abortSignal(controller.signal);
