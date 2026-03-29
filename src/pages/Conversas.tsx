@@ -181,28 +181,29 @@ export default function Conversas() {
 
         // 2. Load from whatsapp_meta_messages (old history) using phone
         const norm = normalizePhone(selectedPhone);
-        const phonesToTry = [norm, `+${norm}`];
+        // Try multiple phone formats to catch all legacy data
+        const phoneVariants = [...new Set([norm, `+${norm}`, selectedPhone, selectedPhone.replace(/\D/g, "")])];
+        const orFilter = phoneVariants
+          .flatMap(p => [`phone_from.eq.${p}`, `phone_to.eq.${p}`])
+          .join(",");
 
         let metaMsgs: ChatMessage[] = [];
-        for (const tryPhone of phonesToTry) {
-          const { data: metaData } = await supabase
-            .from("whatsapp_meta_messages")
-            .select("id, direction, body, created_at")
-            .or(`phone_from.eq.${tryPhone},phone_to.eq.${tryPhone}`)
-            .order("created_at", { ascending: true })
-            .limit(500)
-            .abortSignal(controller.signal);
+        const { data: metaData } = await supabase
+          .from("whatsapp_meta_messages")
+          .select("id, direction, body, created_at")
+          .or(orFilter)
+          .order("created_at", { ascending: true })
+          .limit(1000)
+          .abortSignal(controller.signal);
 
-          if (metaData && metaData.length > 0) {
-            metaMsgs = metaData.map((m: any) => ({
-              id: m.id,
-              conversation_id: selectedConvId,
-              role: m.direction === "inbound" ? "user" : "assistant",
-              content: m.body,
-              created_at: m.created_at,
-            }));
-            break;
-          }
+        if (metaData && metaData.length > 0) {
+          metaMsgs = metaData.map((m: any) => ({
+            id: m.id,
+            conversation_id: selectedConvId,
+            role: m.direction === "inbound" ? "user" : "assistant",
+            content: m.body,
+            created_at: m.created_at,
+          }));
         }
 
         // 3. Merge both sources, dedup by content+timestamp proximity
