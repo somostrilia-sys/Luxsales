@@ -120,11 +120,11 @@ export default function Conversas() {
           seen.set(norm, {
             id: row.id,
             phone: row.phone,
-            lead_name: row.lead_name,
-            last_message: row.last_message,
-            last_message_at: row.last_message_at,
+            lead_name: null,
+            last_message: null,
+            last_message_at: row.created_at,
             status: row.status,
-            human_mode: row.human_mode ?? false,
+            human_mode: false,
             window_open: false,
           });
         }
