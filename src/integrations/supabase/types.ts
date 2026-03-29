@@ -2179,6 +2179,7 @@ export type Database = {
       calls: {
         Row: {
           agent_id: string | null
+          ai_analysis: Json | null
           ai_cost: number | null
           ai_handled: boolean | null
           ai_qualification: string | null
@@ -2199,6 +2200,7 @@ export type Database = {
           direction: string | null
           dispatch_id: string | null
           duration_seconds: number | null
+          eligible_for_whatsapp: boolean | null
           ended_at: string | null
           extension_id: string | null
           extracted_data: Json | null
@@ -2209,6 +2211,7 @@ export type Database = {
           hangup_source: string | null
           hold_duration_sec: number | null
           id: string
+          interest_detected: boolean | null
           is_internal: boolean | null
           is_recorded: boolean | null
           ivr_path: Json | null
@@ -2239,6 +2242,7 @@ export type Database = {
           talk_time_seconds: number | null
           telnyx_call_control_id: string | null
           telnyx_call_session_id: string | null
+          transcript: string | null
           transfer_count: number | null
           trunk_id: string | null
           voice_key: string | null
@@ -2248,6 +2252,7 @@ export type Database = {
         }
         Insert: {
           agent_id?: string | null
+          ai_analysis?: Json | null
           ai_cost?: number | null
           ai_handled?: boolean | null
           ai_qualification?: string | null
@@ -2268,6 +2273,7 @@ export type Database = {
           direction?: string | null
           dispatch_id?: string | null
           duration_seconds?: number | null
+          eligible_for_whatsapp?: boolean | null
           ended_at?: string | null
           extension_id?: string | null
           extracted_data?: Json | null
@@ -2278,6 +2284,7 @@ export type Database = {
           hangup_source?: string | null
           hold_duration_sec?: number | null
           id?: string
+          interest_detected?: boolean | null
           is_internal?: boolean | null
           is_recorded?: boolean | null
           ivr_path?: Json | null
@@ -2308,6 +2315,7 @@ export type Database = {
           talk_time_seconds?: number | null
           telnyx_call_control_id?: string | null
           telnyx_call_session_id?: string | null
+          transcript?: string | null
           transfer_count?: number | null
           trunk_id?: string | null
           voice_key?: string | null
@@ -2317,6 +2325,7 @@ export type Database = {
         }
         Update: {
           agent_id?: string | null
+          ai_analysis?: Json | null
           ai_cost?: number | null
           ai_handled?: boolean | null
           ai_qualification?: string | null
@@ -2337,6 +2346,7 @@ export type Database = {
           direction?: string | null
           dispatch_id?: string | null
           duration_seconds?: number | null
+          eligible_for_whatsapp?: boolean | null
           ended_at?: string | null
           extension_id?: string | null
           extracted_data?: Json | null
@@ -2347,6 +2357,7 @@ export type Database = {
           hangup_source?: string | null
           hold_duration_sec?: number | null
           id?: string
+          interest_detected?: boolean | null
           is_internal?: boolean | null
           is_recorded?: boolean | null
           ivr_path?: Json | null
@@ -2377,6 +2388,7 @@ export type Database = {
           talk_time_seconds?: number | null
           telnyx_call_control_id?: string | null
           telnyx_call_session_id?: string | null
+          transcript?: string | null
           transfer_count?: number | null
           trunk_id?: string | null
           voice_key?: string | null
