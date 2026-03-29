@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Phone, MessageSquare, LogOut, Settings,
   FileText, Send, UserCog, Users, ShieldCheck, Sparkles,
-  ClipboardList, PhoneCall, Upload, Loader2,
+  ClipboardList, PhoneCall, Upload, Loader2, Mic, FlaskConical, History,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
