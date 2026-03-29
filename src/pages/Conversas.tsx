@@ -46,8 +46,14 @@ interface ChatMessage {
   phone_to: string;
   body: string | null;
   direction: string;
+  type?: string | null;
   status: string | null;
   created_at: string;
+  sent_at?: string | null;
+  delivered_at?: string | null;
+  read_at?: string | null;
+  template_name?: string | null;
+  metadata?: any;
   is_ai_generated?: boolean;
 }
 
@@ -165,16 +171,20 @@ export default function Conversas() {
     const cleanPhone = phone.replace(/^\+/, "");
     console.log("Buscando mensagens para:", cleanPhone);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("whatsapp_meta_messages")
-      .select("id, phone_from, phone_to, body, direction, status, created_at, is_ai_generated")
+      .select("id, body, direction, phone_from, phone_to, type, status, created_at, sent_at, delivered_at, read_at, template_name, metadata, is_ai_generated")
       .or(`phone_from.eq.${cleanPhone},phone_to.eq.${cleanPhone}`)
       .order("created_at", { ascending: true })
       .limit(200);
 
-    console.log("Mensagens encontradas:", data?.length, data);
-
-    setMessages((data || []) as ChatMessage[]);
+    if (error) {
+      console.error("Erro ao buscar mensagens:", error);
+      setMessages([]);
+    } else {
+      console.log("Mensagens carregadas:", data?.length);
+      setMessages((data || []) as ChatMessage[]);
+    }
 
     // Load lifecycle context — keep phone exactly as selected, then fallback variations
     console.log("Buscando lifecycle para phone:", phone);
@@ -255,9 +265,8 @@ export default function Conversas() {
         event: "INSERT",
         schema: "public",
         table: "whatsapp_meta_messages",
-      }, (payload) => {
+      }, (payload: any) => {
         const msg = payload.new as ChatMessage;
-        if ((msg as { company_id?: string }).company_id !== companyId) return;
 
         const currentPhone = selectedPhoneRef.current;
         const belongsToCurrent = currentPhone && (msg.phone_from === currentPhone || msg.phone_to === currentPhone);
@@ -623,7 +632,7 @@ export default function Conversas() {
           {loadingChat ? (
             <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" style={{ color: "#008069" }} /></div>
           ) : messages.length === 0 ? (
-            <p className="py-12 text-center text-sm" style={{ color: "#667781" }}>Nenhuma mensagem</p>
+            <div className="flex justify-center py-10 text-gray-500">Nenhuma mensagem ainda</div>
           ) : (
             messages.map((msg, index) => {
               const isOutbound = msg.direction === "outbound";
@@ -646,10 +655,14 @@ export default function Conversas() {
                           <span className="text-[10px]" style={{ color: "#667781" }}>IA</span>
                         </div>
                       )}
-                      <p className="whitespace-pre-wrap" style={{ fontSize: "14.2px", color: "#111b21", lineHeight: 1.4 }}>{msg.body}</p>
+                      <p className="whitespace-pre-wrap" style={{ fontSize: "14.2px", color: "#111b21", lineHeight: 1.4 }}>{msg.body || `[${msg.type || "mensagem"}]`}</p>
                       <div className="flex items-center justify-end gap-1 -mb-1" style={{ marginLeft: "8px", float: "right", marginTop: "2px" }}>
                         <span style={{ fontSize: "11px", color: "#667781" }}>{format(msg.created_at, "HH:mm")}</span>
-                        {isOutbound && <StatusIcon status={msg.status} />}
+                        {isOutbound && (
+                          <span className={`text-[11px] ${msg.read_at ? "text-[#53bdeb]" : "text-[#667781]"}`}>
+                            {msg.read_at ? "✓✓" : msg.delivered_at ? "✓✓" : msg.sent_at ? "✓" : "🕐"}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
