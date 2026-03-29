@@ -618,7 +618,7 @@ export default function Conversas() {
                           <span className="text-[10px]" style={{ color: "#667781" }}>Lucas</span>
                         </div>
                       )}
-                      <p className="whitespace-pre-wrap" style={{ fontSize: "14.2px", color: "#111b21", lineHeight: 1.4 }}>{msg.content || "[mensagem]"}</p>
+                      <p className="whitespace-pre-wrap" style={{ fontSize: "14.2px", color: "#e9edef", lineHeight: 1.4 }}>{msg.content || "[mensagem]"}</p>
                       <div className="flex items-center justify-end gap-1 -mb-1" style={{ marginLeft: "8px", float: "right", marginTop: "2px" }}>
                         <span style={{ fontSize: "11px", color: "#667781" }}>{format(new Date(msg.created_at), "HH:mm")}</span>
                       </div>

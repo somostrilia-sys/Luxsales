@@ -229,12 +229,20 @@ input:focus, textarea:focus, [role="combobox"]:focus {
   color: #e9edef;
   border-radius: 0 8px 8px 8px;
   box-shadow: 0 1px 0.5px rgba(0,0,0,0.3);
+  max-width: 70%;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
 }
 .wa-bubble-outbound {
   background: #005c4b;
   color: #e9edef;
   border-radius: 8px 0 8px 8px;
   box-shadow: 0 1px 0.5px rgba(0,0,0,0.3);
+  max-width: 70%;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
 }
 .wa-bubble-inbound .wa-msg-text { color: #e9edef; }
 .wa-bubble-outbound .wa-msg-text { color: #e9edef; }
