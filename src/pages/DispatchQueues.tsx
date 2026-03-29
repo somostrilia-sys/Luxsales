@@ -332,6 +332,64 @@ export default function DispatchQueues() {
                 </div>
               ))}</div>
             </div>
+
+            {/* Attachment Upload */}
+            <div className="space-y-1.5">
+              <Label className="text-xs flex items-center gap-1.5">
+                <Paperclip className="h-3.5 w-3.5" /> Anexo (PDF/Imagem)
+              </Label>
+              {form.attachment_url ? (
+                <div className="flex items-center gap-2 bg-muted/30 rounded-md p-2 text-xs">
+                  <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <a href={form.attachment_url} target="_blank" rel="noreferrer" className="truncate text-primary hover:underline flex-1">
+                    {form.attachment_url.split("/").pop()}
+                  </a>
+                  <Button type="button" variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => setForm(f => ({ ...f, attachment_url: "" }))}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className="hidden" onChange={handleFileUpload} />
+                  <Button type="button" variant="outline" size="sm" className="text-xs" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+                    {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Upload className="h-3.5 w-3.5 mr-1" />}
+                    {uploading ? "Enviando..." : "Upload"}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Auto-trigger after call */}
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs flex items-center gap-1.5">
+                  <PhoneForwarded className="h-3.5 w-3.5" /> Disparo automático pós-ligação
+                </Label>
+                <Switch
+                  checked={form.auto_trigger_enabled}
+                  onCheckedChange={v => setForm(f => ({ ...f, auto_trigger_enabled: v }))}
+                />
+              </div>
+              {form.auto_trigger_enabled && (
+                <div className="space-y-1">
+                  <p className="text-[11px] text-muted-foreground">
+                    Leads qualificados na ligação entram automaticamente nesta fila
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs whitespace-nowrap">Aguardar</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={60}
+                      className="h-7 text-xs w-16"
+                      value={form.auto_trigger_delay}
+                      onChange={e => setForm(f => ({ ...f, auto_trigger_delay: +e.target.value }))}
+                    />
+                    <span className="text-xs text-muted-foreground">min após ligação</span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
