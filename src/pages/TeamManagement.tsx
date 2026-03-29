@@ -29,25 +29,34 @@ export default function TeamManagement() {
 
   const fetchMembers = useCallback(async () => {
     setLoading(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
     try {
+      // Separate count query
+      let countQuery = supabase
+        .from("collaborators")
+        .select("*", { count: "exact", head: true });
+      if (debouncedSearch.length >= 3) countQuery = countQuery.or(`name.ilike.%${debouncedSearch}%,email.ilike.%${debouncedSearch}%`);
+      const { count } = await countQuery.abortSignal(controller.signal);
+      setTotal(count || 0);
+
+      // Data query
       let query = supabase
         .from("collaborators")
-        .select("id, name, email, phone, active, telegram_id, role:roles(name, slug), created_at", { count: "exact" });
+        .select("id, name, email, phone, active, telegram_id, role:roles(name, slug), created_at");
+      if (debouncedSearch.length >= 3) query = query.or(`name.ilike.%${debouncedSearch}%,email.ilike.%${debouncedSearch}%`);
 
-      if (debouncedSearch.length >= 3) {
-        query = query.or(`name.ilike.%${debouncedSearch}%,email.ilike.%${debouncedSearch}%`);
-      }
-
-      const { data, count, error } = await query
+      const { data, error } = await query
         .order("name", { ascending: true })
-        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+        .abortSignal(controller.signal);
 
       if (error) throw error;
       setMembers(data || []);
-      setTotal(count || 0);
     } catch (e: any) {
-      toast.error(e.message || "Erro ao buscar colaboradores");
+      if (e.name !== "AbortError") toast.error(e.message || "Erro ao buscar colaboradores");
     } finally {
+      clearTimeout(timer);
       setLoading(false);
     }
   }, [page, debouncedSearch]);
