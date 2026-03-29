@@ -17,7 +17,7 @@ const PAGE_SIZE = 20;
 export default function TeamManagement() {
   const { collaborator } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
-  const companyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : collaborator?.company_id;
+  const companyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : null;
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
