@@ -44,6 +44,25 @@ function fmtDate(iso: string | null) {
   try { return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); } catch { return iso; }
 }
 
+function fmtPhone(phone: string | null): string {
+  if (!phone) return "—";
+  const d = phone.replace(/\D/g, "");
+  if (d.length >= 12) {
+    // 5511999999999 → (11) 99999-9999
+    const ddd = d.slice(2, 4);
+    const part1 = d.slice(4, 9);
+    const part2 = d.slice(9, 13);
+    return `(${ddd}) ${part1}-${part2}`;
+  }
+  if (d.length >= 10) {
+    const ddd = d.slice(0, 2);
+    const part1 = d.length === 11 ? d.slice(2, 7) : d.slice(2, 6);
+    const part2 = d.length === 11 ? d.slice(7) : d.slice(6);
+    return `(${ddd}) ${part1}-${part2}`;
+  }
+  return phone;
+}
+
 const statusLabels: Record<string, { label: string; cls: string }> = {
   new: { label: "Novo", cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
   queued_call: { label: "Na Fila", cls: "bg-purple-500/15 text-purple-400 border-purple-500/30" },
