@@ -93,26 +93,35 @@ export default function Conversas() {
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedPhoneRef = useRef<string | null>(null);
+  const lastMessageTsRef = useRef<string | null>(null);
 
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
 
   useEffect(() => { selectedPhoneRef.current = selectedPhone; }, [selectedPhone]);
 
+  // ── Track last message timestamp for polling ──
+  useEffect(() => {
+    if (messages.length > 0) {
+      lastMessageTsRef.current = messages[messages.length - 1].created_at;
+    }
+  }, [messages]);
+
   // ── Load conversation list from wa_conversations ──
-  const loadConversations = useCallback(async () => {
-    setLoadingList(true);
+  const loadConversations = useCallback(async (silent = false) => {
+    if (!silent) setLoadingList(true);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10000);
     try {
       const { data } = await supabase
         .from("wa_conversations")
-        .select("id, phone, status, turn_count, created_at")
+        .select("id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode")
+        .order("last_message_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .limit(50)
         .abortSignal(controller.signal);
 
-      if (!data) { setLoadingList(false); return; }
+      if (!data) { if (!silent) setLoadingList(false); return; }
 
       // Deduplicate by normalized phone — keep most recent
       const seen = new Map<string, ConversationItem>();
@@ -122,11 +131,11 @@ export default function Conversas() {
           seen.set(norm, {
             id: row.id,
             phone: row.phone,
-            lead_name: null,
-            last_message: null,
-            last_message_at: row.created_at,
+            lead_name: (row as any).lead_name ?? null,
+            last_message: (row as any).last_message ?? null,
+            last_message_at: (row as any).last_message_at ?? row.created_at,
             status: row.status,
-            human_mode: false,
+            human_mode: (row as any).human_mode ?? false,
             window_open: false,
           });
         }
@@ -140,7 +149,7 @@ export default function Conversas() {
           .select("phone_number, window_open")
           .eq("company_id", companyId)
           .in("phone_number", phones)
-          .limit(20)
+          .limit(50)
           .abortSignal(controller.signal);
 
         if (lifecycles) {
@@ -154,14 +163,20 @@ export default function Conversas() {
 
       setConversations(Array.from(seen.values()));
     } catch (e: any) {
-      if (e.name !== "AbortError") toast.error("Erro ao carregar conversas");
+      if (e.name !== "AbortError" && !silent) toast.error("Erro ao carregar conversas");
     } finally {
       clearTimeout(timer);
-      setLoadingList(false);
+      if (!silent) setLoadingList(false);
     }
   }, [companyId]);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
+
+  // ── Polling: conversation list every 5s (silent) ──
+  useEffect(() => {
+    const interval = setInterval(() => loadConversations(true), 5000);
+    return () => clearInterval(interval);
+  }, [loadConversations]);
 
   // ── Load chat messages from wa_messages ──
   useEffect(() => {
@@ -259,12 +274,36 @@ export default function Conversas() {
             return [...prev, msg];
           });
         }
-        loadConversations();
+        loadConversations(true);
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [selectedConvId, loadConversations]);
+
+  // ── Polling: messages every 3s when conversation is open ──
+  useEffect(() => {
+    if (!selectedConvId) return;
+    const interval = setInterval(async () => {
+      const since = lastMessageTsRef.current;
+      if (!since) return;
+      const { data } = await supabase
+        .from("wa_messages")
+        .select("id, role, content, created_at")
+        .eq("conversation_id", selectedConvId)
+        .gt("created_at", since)
+        .order("created_at", { ascending: true })
+        .limit(50);
+      if (data && data.length > 0) {
+        setMessages((prev) => {
+          const ids = new Set(prev.map((m) => m.id));
+          const newMsgs = (data as ChatMessage[]).filter((m) => !ids.has(m.id));
+          return newMsgs.length > 0 ? [...prev, ...newMsgs] : prev;
+        });
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [selectedConvId]);
 
   // ── Send message ──
   const getHeaders = useCallback(async () => {

@@ -105,6 +105,11 @@ export default function Templates() {
   const [selectedSellers, setSelectedSellers] = useState<string[]>([]);
   const [savingAssign, setSavingAssign] = useState(false);
 
+  // Drafts
+  const [drafts, setDrafts] = useState<GeneratedTemplate[]>([]);
+  const [draftsLoading, setDraftsLoading] = useState(false);
+  const [submittingDraft, setSubmittingDraft] = useState<string | null>(null);
+
   // Rejection history
   const [rejections, setRejections] = useState<Rejection[]>([]);
   const [rejectionsLoading, setRejectionsLoading] = useState(false);
@@ -182,13 +187,38 @@ export default function Templates() {
     setRejectionsLoading(false);
   }, [collaborator, getHeaders]);
 
+  const fetchDrafts = useCallback(async () => {
+    if (!collaborator) return;
+    setDraftsLoading(true);
+    try {
+      const { data } = await supabase
+        .from("wa_templates")
+        .select("name, category, language, body, header, footer, buttons, strategy_notes, confidence_score, status")
+        .eq("company_id", effectiveCompanyId)
+        .eq("status", "draft")
+        .order("created_at", { ascending: false });
+      setDrafts((data || []).map((d: any) => ({
+        name: d.name,
+        category: d.category,
+        body: d.body || "",
+        header: d.header,
+        footer: d.footer,
+        buttons: d.buttons || [],
+        strategy_notes: d.strategy_notes,
+        confidence_score: d.confidence_score,
+      })));
+    } catch { /* silent */ }
+    setDraftsLoading(false);
+  }, [collaborator, effectiveCompanyId]);
+
   useEffect(() => {
     fetchTemplates();
   }, [fetchTemplates]);
 
   useEffect(() => {
     if (tab === "pending") fetchRejections();
-  }, [tab, fetchRejections]);
+    if (tab === "drafts") fetchDrafts();
+  }, [tab, fetchRejections, fetchDrafts]);
 
   const approved = templates.filter((t) => t.status === "APPROVED" && (!search || t.name.toLowerCase().includes(search.toLowerCase())));
   const pending = templates.filter((t) => (t.status === "PENDING" || t.status === "REJECTED") && (!search || t.name.toLowerCase().includes(search.toLowerCase())));
@@ -222,6 +252,80 @@ export default function Templates() {
       toast.error("Erro de conexão");
     }
     setGenerating(false);
+  };
+
+  const handleSaveDraft = async (tmpl: GeneratedTemplate) => {
+    if (!collaborator) return;
+    setSubmitting(tmpl.name);
+    try {
+      const { error } = await supabase.from("wa_templates").upsert({
+        company_id: effectiveCompanyId,
+        name: tmpl.name,
+        category: (tmpl.category || "MARKETING").toUpperCase(),
+        language: "pt_BR",
+        body: tmpl.body,
+        header: tmpl.header || null,
+        footer: tmpl.footer || null,
+        buttons: tmpl.buttons || [],
+        strategy_notes: tmpl.strategy_notes || null,
+        confidence_score: tmpl.confidence_score || null,
+        status: "draft",
+      }, { onConflict: "name,company_id" });
+      if (error) throw error;
+      toast.success("Rascunho salvo — acesse a aba Rascunhos para submeter à Meta");
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao salvar rascunho");
+    }
+    setSubmitting(null);
+  };
+
+  const handleSubmitDraft = async (tmpl: GeneratedTemplate) => {
+    if (!collaborator) return;
+    setSubmittingDraft(tmpl.name);
+    try {
+      const headers = await getHeaders();
+      const components: any[] = [];
+      if (tmpl.body) components.push({ type: "BODY", text: tmpl.body });
+      if (tmpl.header) components.push({ type: "HEADER", format: "TEXT", text: tmpl.header });
+      if (tmpl.footer) components.push({ type: "FOOTER", text: tmpl.footer });
+      if (tmpl.buttons && tmpl.buttons.length > 0) {
+        components.push({
+          type: "BUTTONS",
+          buttons: tmpl.buttons.map((b: any) => typeof b === "string"
+            ? { type: "QUICK_REPLY", text: b }
+            : { type: b.type || "QUICK_REPLY", text: b.text, ...(b.url ? { url: b.url } : {}), ...(b.phone_number ? { phone_number: b.phone_number } : {}) }
+          ),
+        });
+      }
+      const res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          action: "create",
+          company_id: effectiveCompanyId,
+          name: tmpl.name,
+          category: (tmpl.category || "MARKETING").toUpperCase(),
+          language: "pt_BR",
+          components,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        // Mark draft as submitted
+        await supabase.from("wa_templates")
+          .update({ status: "submitted" })
+          .eq("name", tmpl.name)
+          .eq("company_id", effectiveCompanyId);
+        toast.success("Template submetido à Meta — aguardando aprovação");
+        fetchDrafts();
+        fetchTemplates();
+      } else {
+        toast.error(data.error || "Erro ao submeter");
+      }
+    } catch {
+      toast.error("Erro de conexão");
+    }
+    setSubmittingDraft(null);
   };
 
   const handleSubmitTemplate = async (tmpl: GeneratedTemplate) => {
@@ -356,6 +460,7 @@ export default function Templates() {
           <TabsList>
             <TabsTrigger value="approved">Aprovados</TabsTrigger>
             <TabsTrigger value="pending">Pendentes</TabsTrigger>
+            <TabsTrigger value="drafts">Rascunhos</TabsTrigger>
             <TabsTrigger value="create">Criar Novo</TabsTrigger>
           </TabsList>
           {tab !== "create" && (
@@ -418,6 +523,53 @@ export default function Templates() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* DRAFTS TAB */}
+        <TabsContent value="drafts" className="space-y-4">
+          {draftsLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+          ) : drafts.length === 0 ? (
+            <Card><CardContent className="py-12 text-center text-muted-foreground">Nenhum rascunho. Gere templates na aba "Criar Novo" e salve como rascunho.</CardContent></Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {drafts.map((d) => {
+                const score = d.confidence_score || 0;
+                const sb = score > 0 ? scoreBadge(score) : null;
+                const catColor = (d.category || "").toUpperCase() === "MARKETING"
+                  ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+                  : "bg-green-500/10 text-green-400 border-green-500/30";
+                return (
+                  <Card key={d.name} className="hover:border-primary/30 transition-colors">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-sm">{d.name}</CardTitle>
+                        <div className="flex gap-1">
+                          {d.category && (
+                            <Badge variant="outline" className={`text-xs ${catColor}`}>
+                              {d.category.toUpperCase()}
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className="text-xs bg-muted/30 text-muted-foreground">Rascunho</Badge>
+                          {sb && <Badge variant="outline" className={`text-xs ${sb.color}`}>{sb.label}</Badge>}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="text-sm text-muted-foreground bg-muted/30 p-2 rounded whitespace-pre-wrap">{d.body}</p>
+                      {d.strategy_notes && (
+                        <p className="text-xs italic text-muted-foreground border-l-2 border-primary/30 pl-2">{d.strategy_notes}</p>
+                      )}
+                      <Button size="sm" disabled={submittingDraft === d.name} onClick={() => handleSubmitDraft(d)}>
+                        {submittingDraft === d.name ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
+                        Submeter à Meta
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
 
         {/* CREATE TAB */}
@@ -523,9 +675,9 @@ export default function Templates() {
                         <Button size="sm" variant="outline" onClick={() => { setEditIdx(idx); setEditBody(g.body); }}>
                           Editar
                         </Button>
-                        <Button size="sm" disabled={submitting === g.name} onClick={() => handleSubmitTemplate(g)}>
+                        <Button size="sm" variant="outline" disabled={submitting === g.name} onClick={() => handleSaveDraft(g)}>
                           {submitting === g.name ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
-                          Submeter à Meta
+                          Salvar Rascunho
                         </Button>
                       </div>
                     </CardContent>
