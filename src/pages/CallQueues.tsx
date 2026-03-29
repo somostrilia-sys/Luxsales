@@ -19,7 +19,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
   Phone, Play, Pause, Pencil, Trash2, Plus, RefreshCw,
-  Loader2, ChevronLeft, CheckCircle, Users, Target, Mic,
+  Loader2, ChevronLeft, ChevronRight, CheckCircle, Users, Target, Mic,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 

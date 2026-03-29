@@ -18,7 +18,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
   Send, Play, Pause, Pencil, Plus, RefreshCw,
-  Loader2, ChevronLeft, Eye, MessageSquare, Reply,
+  Loader2, ChevronLeft, ChevronRight, Eye, MessageSquare, Reply,
   Upload, Paperclip, X, PhoneForwarded,
 } from "lucide-react";
 
