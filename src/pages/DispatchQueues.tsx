@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import {
   Send, Play, Pause, Pencil, Plus, RefreshCw,
   Loader2, ChevronLeft, Eye, MessageSquare, Reply,
+  Upload, Paperclip, X, PhoneForwarded,
 } from "lucide-react";
 
 interface DispatchQueue {
@@ -32,6 +33,8 @@ interface DispatchQueue {
   total_leads: number; leads_dispatched: number;
   leads_delivered: number; leads_read: number; leads_replied: number;
   created_at: string;
+  attachment_url: string | null;
+  auto_trigger: { on_call_qualified: boolean; delay_minutes: number } | null;
 }
 
 interface Template { name: string; status: string; }
@@ -59,6 +62,9 @@ const emptyForm = {
   respect_tier_limit: true, safety_pct: 50,
   schedule_start: "08:00", schedule_end: "20:00",
   active_days: [1, 2, 3, 4, 5],
+  attachment_url: "" as string,
+  auto_trigger_enabled: false,
+  auto_trigger_delay: 2,
 };
 
 export default function DispatchQueues() {
