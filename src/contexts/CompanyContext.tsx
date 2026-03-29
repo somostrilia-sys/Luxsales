@@ -98,7 +98,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         const { data: dpRow } = await supabase
           .from("dispatch_permissions")
           .select("*")
-          .eq("collaborator_id", collaborator?.id || user.id)
+          .eq("collaborator_id", user.id)
           .eq("is_active", true)
           .maybeSingle();
 
@@ -126,7 +126,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
             body: JSON.stringify({
               action: "set",
               company_id: resolvedCompanyId,
-              collaborator_id: collaborator.id,
+              collaborator_id: user.id,
               role: "ceo",
               daily_dispatch_limit: 9999,
               requester_role: "ceo",
