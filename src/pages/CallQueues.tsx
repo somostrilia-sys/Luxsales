@@ -57,6 +57,8 @@ const emptyForm = {
   schedule_end: "20:00", active_days: [1, 2, 3, 4, 5],
   retry_no_answer_min: 120, retry_busy_min: 30, voice_key: "",
   system_prompt: "", opening_script: "", priority_min: 1, priority_max: 10,
+  vc_system_prompt: "", vc_opening_script: "", vc_objection_tree: "",
+  vc_forbidden_phrases: "", vc_tone: "consultivo", vc_conversation_example: "",
 };
 
 export default function CallQueues() {
