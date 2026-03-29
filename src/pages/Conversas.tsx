@@ -4,7 +4,6 @@ import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { supabase } from "@/lib/supabase";
 import { EDGE_BASE } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -19,9 +18,6 @@ import {
   ArrowLeft,
   Bot,
   Info,
-  Check,
-  CheckCheck,
-  X,
   Phone,
   MessageSquare,
   SendHorizontal,
@@ -32,29 +28,22 @@ import { ptBR } from "date-fns/locale";
 const FALLBACK_COMPANY_ID = "d33b6a84-8f72-4441-b2eb-dd151a31ac12";
 
 interface ConversationItem {
-  phone_from: string;
-  body: string | null;
-  created_at: string;
+  id: string;
+  phone: string;
   lead_name: string | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  status: string | null;
+  human_mode: boolean;
   window_open: boolean;
-  ai_status?: string;
 }
 
 interface ChatMessage {
   id: string;
-  phone_from: string;
-  phone_to: string;
-  body: string | null;
-  direction: string;
-  type?: string | null;
-  status: string | null;
+  conversation_id: string;
+  role: string;
+  content: string | null;
   created_at: string;
-  sent_at?: string | null;
-  delivered_at?: string | null;
-  read_at?: string | null;
-  template_name?: string | null;
-  metadata?: any;
-  is_ai_generated?: boolean;
 }
 
 interface LifecycleData {
@@ -74,79 +63,80 @@ interface TemplateItem {
   language: string;
 }
 
+const normalizePhone = (phone: string): string => {
+  let digits = phone.replace(/\D/g, "");
+  if (!digits.startsWith("55")) digits = "55" + digits;
+  return digits;
+};
+
 export default function Conversas() {
   const { collaborator } = useCollaborator();
   const isMobile = useIsMobile();
-
   const companyId = collaborator?.company_id || FALLBACK_COMPANY_ID;
 
-  // Left panel
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Right panel
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingChat, setLoadingChat] = useState(false);
   const [lifecycle, setLifecycle] = useState<LifecycleData | null>(null);
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
-  const [windowOpen, setWindowOpen] = useState<boolean>(false);
+  const [windowOpen, setWindowOpen] = useState(false);
   const [windowExpires, setWindowExpires] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedPhoneRef = useRef<string | null>(null);
 
-  // Template modal
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
 
-  useEffect(() => {
-    selectedPhoneRef.current = selectedPhone;
-  }, [selectedPhone]);
+  useEffect(() => { selectedPhoneRef.current = selectedPhone; }, [selectedPhone]);
 
-  // ── Load conversation list ──
+  // ── Load conversation list from wa_conversations ──
   const loadConversations = useCallback(async () => {
     setLoadingList(true);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10000);
     try {
-      const { data: msgs } = await supabase
-        .from("whatsapp_meta_messages")
-        .select("phone_from, body, created_at, status")
+      const { data } = await supabase
+        .from("wa_conversations")
+        .select("id, phone, lead_name, last_message, last_message_at, status, human_mode")
         .eq("company_id", companyId)
-        .eq("direction", "inbound")
-        .order("created_at", { ascending: false })
-        .limit(200)
+        .order("last_message_at", { ascending: false })
+        .limit(20)
         .abortSignal(controller.signal);
 
-      if (!msgs) { setLoadingList(false); return; }
+      if (!data) { setLoadingList(false); return; }
 
-      // Group by phone_from, keep latest — max 20 conversations
-      const map = new Map<string, ConversationItem>();
-      for (const m of msgs) {
-        if (map.size >= 20 && !map.has(m.phone_from)) continue;
-        if (!map.has(m.phone_from)) {
-          map.set(m.phone_from, {
-            phone_from: m.phone_from,
-            body: m.body,
-            created_at: m.created_at,
-            lead_name: null,
+      // Deduplicate by normalized phone — keep most recent
+      const seen = new Map<string, ConversationItem>();
+      for (const row of data) {
+        const norm = normalizePhone(row.phone || "");
+        if (!seen.has(norm)) {
+          seen.set(norm, {
+            id: row.id,
+            phone: row.phone,
+            lead_name: row.lead_name,
+            last_message: row.last_message,
+            last_message_at: row.last_message_at,
+            status: row.status,
+            human_mode: row.human_mode ?? false,
             window_open: false,
-            ai_status: undefined,
           });
         }
       }
 
-      const phones = Array.from(map.keys());
-
-      // Enrich with lifecycle data
+      // Enrich with lifecycle window data
+      const phones = Array.from(seen.values()).map((c) => normalizePhone(c.phone));
       if (phones.length > 0) {
         const { data: lifecycles } = await supabase
           .from("lead_whatsapp_lifecycle")
-          .select("phone_number, lead_name, window_open, ai_conversation_active")
+          .select("phone_number, window_open")
           .eq("company_id", companyId)
           .in("phone_number", phones)
           .limit(20)
@@ -154,17 +144,14 @@ export default function Conversas() {
 
         if (lifecycles) {
           for (const lc of lifecycles) {
-            const item = map.get((lc as any).phone_number);
-            if (item) {
-              item.lead_name = (lc as any).lead_name || null;
-              item.window_open = (lc as any).window_open ?? false;
-              item.ai_status = (lc as any).ai_conversation_active ? "ia" : undefined;
-            }
+            const norm = normalizePhone((lc as any).phone_number || "");
+            const item = seen.get(norm);
+            if (item) item.window_open = (lc as any).window_open ?? false;
           }
         }
       }
 
-      setConversations(Array.from(map.values()));
+      setConversations(Array.from(seen.values()));
     } catch (e: any) {
       if (e.name !== "AbortError") toast.error("Erro ao carregar conversas");
     } finally {
@@ -175,69 +162,43 @@ export default function Conversas() {
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
-  // ── Load chat messages ──
+  // ── Load chat messages from wa_messages ──
   useEffect(() => {
-    if (!selectedPhone) {
-      setMessages([]);
-      return;
-    }
-
-    console.log("=== FETCH MESSAGES ===");
-    console.log("selectedPhone:", selectedPhone);
+    if (!selectedConvId) { setMessages([]); return; }
 
     const load = async () => {
       setLoadingChat(true);
-      const chatController = new AbortController();
-      const chatTimer = setTimeout(() => chatController.abort(), 10000);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
       try {
-        const { data, error } = await supabase
-          .from("whatsapp_meta_messages")
-          .select("*")
-          .or(`phone_from.eq.${selectedPhone},phone_to.eq.${selectedPhone}`)
+        const { data } = await supabase
+          .from("wa_messages")
+          .select("id, role, content, created_at")
+          .eq("conversation_id", selectedConvId)
           .order("created_at", { ascending: true })
-          .limit(20)
-          .abortSignal(chatController.signal);
+          .limit(100)
+          .abortSignal(controller.signal);
 
-        if (data && data.length > 0) {
-          setMessages(data as ChatMessage[]);
-        } else {
-          const { data: data2 } = await supabase
-            .from("whatsapp_meta_messages")
-            .select("*")
-            .eq("phone_from", selectedPhone)
-            .order("created_at", { ascending: true })
-            .limit(20)
-            .abortSignal(chatController.signal);
-
-          setMessages((data2 || []) as ChatMessage[]);
-        }
-        clearTimeout(chatTimer);
+        setMessages((data || []) as ChatMessage[]);
       } catch (err) {
         console.error("Erro ao buscar mensagens:", err);
         setMessages([]);
       } finally {
+        clearTimeout(timer);
         setLoadingChat(false);
       }
     };
 
     void load();
-  }, [selectedPhone]);
+  }, [selectedConvId]);
 
   // ── Load lifecycle context ──
   useEffect(() => {
-    if (!selectedPhone) {
-      setLifecycle(null);
-      return;
-    }
+    if (!selectedPhone) { setLifecycle(null); return; }
 
     const loadLifecycle = async () => {
-      console.log("Buscando lifecycle para phone:", selectedPhone);
-      let lifecycleData: LifecycleData | null = null;
-
-      const phonesToTry = [selectedPhone];
-      if (selectedPhone.startsWith("+")) phonesToTry.push(selectedPhone.slice(1));
-      if (!selectedPhone.startsWith("+")) phonesToTry.push(`+${selectedPhone}`);
-      if (selectedPhone.startsWith("55")) phonesToTry.push(`+${selectedPhone}`);
+      const norm = normalizePhone(selectedPhone);
+      const phonesToTry = [norm, `+${norm}`, selectedPhone];
 
       for (const tryPhone of Array.from(new Set(phonesToTry))) {
         const { data: lc } = await supabase
@@ -246,14 +207,9 @@ export default function Conversas() {
           .eq("phone_number", tryPhone)
           .maybeSingle();
 
-        if (lc) {
-          lifecycleData = lc as LifecycleData;
-          break;
-        }
+        if (lc) { setLifecycle(lc as LifecycleData); return; }
       }
-
-      console.log("Resultado lifecycle:", lifecycleData);
-      setLifecycle(lifecycleData);
+      setLifecycle(null);
     };
 
     void loadLifecycle();
@@ -261,10 +217,11 @@ export default function Conversas() {
 
   // ── Window state (24h) ──
   const fetchWindow = useCallback(async (phone: string) => {
+    const norm = normalizePhone(phone);
     const { data } = await supabase
       .from("lead_whatsapp_lifecycle")
       .select("window_open, window_expires_at")
-      .eq("phone_number", phone.replace("+", ""))
+      .eq("phone_number", norm)
       .maybeSingle();
 
     if (data) {
@@ -278,58 +235,35 @@ export default function Conversas() {
   }, []);
 
   useEffect(() => {
-    if (!selectedPhone) {
-      setWindowOpen(false);
-      setWindowExpires(null);
-      return;
-    }
-
+    if (!selectedPhone) { setWindowOpen(false); setWindowExpires(null); return; }
     fetchWindow(selectedPhone);
   }, [selectedPhone, fetchWindow]);
 
-  // Auto-scroll when messages update
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => { if (windowOpen) inputRef.current?.focus(); }, [selectedPhone, windowOpen]);
 
-  // Keep input focus when chat window is open
-  useEffect(() => {
-    if (windowOpen) {
-      inputRef.current?.focus();
-    }
-  }, [selectedPhone, windowOpen]);
-
-  // ── Realtime subscription ──
+  // ── Realtime subscription for wa_messages ──
   useEffect(() => {
     const channel = supabase
-      .channel("conv-messages-rt")
+      .channel("wa-messages-rt")
       .on("postgres_changes", {
         event: "INSERT",
         schema: "public",
-        table: "whatsapp_meta_messages",
+        table: "wa_messages",
       }, (payload: any) => {
         const msg = payload.new as ChatMessage;
-
-        const currentPhone = selectedPhoneRef.current;
-        const belongsToCurrent = currentPhone && (msg.phone_from === currentPhone || msg.phone_to === currentPhone);
-
-        if (belongsToCurrent) {
+        if (msg.conversation_id === selectedConvId) {
           setMessages((prev) => {
             if (prev.some((m) => m.id === msg.id)) return prev;
             return [...prev, msg];
           });
-
-          if (currentPhone) {
-            fetchWindow(currentPhone);
-          }
         }
-
         loadConversations();
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [companyId, loadConversations, fetchWindow]);
+  }, [selectedConvId, loadConversations]);
 
   // ── Send message ──
   const getHeaders = useCallback(async () => {
@@ -349,7 +283,7 @@ export default function Conversas() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          to: selectedPhone.replace("+", ""),
+          to: normalizePhone(selectedPhone),
           message: messageText,
           company_id: FALLBACK_COMPANY_ID,
         }),
@@ -409,9 +343,7 @@ export default function Conversas() {
 
   const formatRelativeListTs = (ts: string) => {
     const d = new Date(ts);
-    if (isToday(d)) {
-      return formatDistanceToNowStrict(d, { addSuffix: true, locale: ptBR });
-    }
+    if (isToday(d)) return formatDistanceToNowStrict(d, { addSuffix: true, locale: ptBR });
     if (isYesterday(d)) return "Ontem";
     return format(d, "dd/MM/yy");
   };
@@ -447,23 +379,14 @@ export default function Conversas() {
     return format(d, "dd/MM/yyyy");
   };
 
-  const StatusIcon = ({ status }: { status?: string | null }) => {
-    if (status === "read") return <CheckCheck className="h-3 w-3 wa-read-receipt" />;
-    if (status === "delivered") return <CheckCheck className="h-3 w-3 text-muted-foreground" />;
-    if (status === "failed") return <X className="h-3 w-3 text-destructive" />;
-    return <Check className="h-3 w-3 text-muted-foreground" />;
-  };
-
   // ── Filter conversations ──
   const filtered = conversations.filter((c) => {
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (c.lead_name?.toLowerCase().includes(q) || c.phone_from.includes(q));
-    }
-    return true;
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (c.lead_name?.toLowerCase().includes(q) || c.phone.includes(q));
   });
 
-  // ── Context panel content ──
+  // ── Context panel ──
   const ContextPanel = () => (
     <div className="space-y-4 p-4">
       <h3 className="font-semibold text-sm">Contexto do Lead</h3>
@@ -519,11 +442,9 @@ export default function Conversas() {
   // ── Conversation List Panel ──
   const renderConversationList = () => (
     <div className="flex h-full flex-col wa-surface" style={{ borderRight: "1px solid #e9edef" }}>
-      {/* Green header */}
       <div className="wa-header-green flex h-14 items-center px-4">
         <h2 className="text-base font-semibold text-white">Conversas</h2>
       </div>
-      {/* Search */}
       <div className="px-2 py-1.5" style={{ background: "#f0f2f5" }}>
         <div className="relative">
           <Search className="absolute left-3 top-2.5 h-4 w-4" style={{ color: "#54656f" }} />
@@ -559,18 +480,18 @@ export default function Conversas() {
         ) : (
           <div>
             {filtered.map((c) => {
-              const avatar = getAvatarTone(c.phone_from);
+              const avatar = getAvatarTone(c.phone);
               return (
                 <button
-                  key={c.phone_from}
+                  key={c.id}
                   onClick={() => {
-                    console.log("Clicou em:", c.phone_from);
-                    setSelectedPhone(c.phone_from);
+                    setSelectedConvId(c.id);
+                    setSelectedPhone(c.phone);
                     setMessageText("");
                   }}
                   className={cn(
                     "wa-row-hover flex w-full items-center gap-3 px-3 py-[10px] text-left transition-colors",
-                    selectedPhone === c.phone_from && "wa-row-selected",
+                    selectedConvId === c.id && "wa-row-selected",
                   )}
                   style={{ borderBottom: "1px solid #e9edef" }}
                 >
@@ -585,14 +506,14 @@ export default function Conversas() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="truncate text-[15px] wa-text-main" style={{ fontWeight: 500 }}>{c.lead_name || formatPhone(c.phone_from)}</p>
-                      <span className="shrink-0 text-[12px] wa-text-muted">{formatRelativeListTs(c.created_at)}</span>
+                      <p className="truncate text-[15px] wa-text-main" style={{ fontWeight: 500 }}>{c.lead_name || formatPhone(c.phone)}</p>
+                      <span className="shrink-0 text-[12px] wa-text-muted">{c.last_message_at ? formatRelativeListTs(c.last_message_at) : ""}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <p className="truncate text-[13px] wa-text-muted flex-1">{c.body || "..."}</p>
-                      {c.ai_status === "ia" && (
-                        <span className="shrink-0 flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ background: "#e1f2fb", color: "#008069" }}>
-                          <Bot className="h-2.5 w-2.5" />IA
+                      <p className="truncate text-[13px] wa-text-muted flex-1">{c.last_message || "..."}</p>
+                      {c.human_mode && (
+                        <span className="shrink-0 flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ background: "#fef3c7", color: "#92400e" }}>
+                          Humano
                         </span>
                       )}
                     </div>
@@ -618,11 +539,9 @@ export default function Conversas() {
   );
 
   const renderChatPanel = () => {
-    if (!selectedPhone) {
-      return renderEmptyState();
-    }
+    if (!selectedPhone) return renderEmptyState();
 
-    const selected = conversations.find((c) => c.phone_from === selectedPhone);
+    const selected = conversations.find((c) => c.id === selectedConvId);
     const title = selected?.lead_name || formatPhone(selectedPhone);
     const avatar = getAvatarTone(selectedPhone);
 
@@ -632,14 +551,11 @@ export default function Conversas() {
         <div className="sticky top-0 z-10 flex h-[60px] shrink-0 items-center justify-between px-4" style={{ background: "#f0f2f5", borderBottom: "1px solid #e0e0e0" }}>
           <div className="flex items-center gap-3">
             {isMobile && (
-              <button onClick={() => setSelectedPhone(null)} className="mr-1">
+              <button onClick={() => { setSelectedPhone(null); setSelectedConvId(null); }} className="mr-1">
                 <ArrowLeft className="h-5 w-5" style={{ color: "#54656f" }} />
               </button>
             )}
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-medium"
-              style={{ background: avatar.bg, color: avatar.fg }}
-            >
+            <div className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-medium" style={{ background: avatar.bg, color: avatar.fg }}>
               {title.slice(0, 1).toUpperCase()}
             </div>
             <div>
@@ -678,10 +594,12 @@ export default function Conversas() {
           {loadingChat ? (
             <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" style={{ color: "#008069" }} /></div>
           ) : messages.length === 0 ? (
-            <div className="flex justify-center py-10 text-gray-500">Nenhuma mensagem</div>
+            <div className="flex justify-center py-10 text-muted-foreground">Nenhuma mensagem</div>
           ) : (
             messages.map((msg, index) => {
-              const isOutbound = msg.direction === "outbound";
+              // role "user" = mensagem do lead → balão direito (verde)
+              // role "assistant" = mensagem do Lucas → balão esquerdo (cinza)
+              const isUser = msg.role === "user";
               const previous = messages[index - 1];
               const showDateSeparator = !previous || new Date(previous.created_at).toDateString() !== new Date(msg.created_at).toDateString();
 
@@ -693,22 +611,17 @@ export default function Conversas() {
                     </div>
                   )}
 
-                  <div className={cn("flex", isOutbound ? "justify-end" : "justify-start")}>
-                    <div className={cn("max-w-[65%]", isOutbound ? "wa-bubble-outbound" : "wa-bubble-inbound")} style={{ padding: "6px 7px 8px 9px" }}>
-                      {msg.is_ai_generated && isOutbound && (
+                  <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+                    <div className={cn("max-w-[65%]", isUser ? "wa-bubble-outbound" : "wa-bubble-inbound")} style={{ padding: "6px 7px 8px 9px" }}>
+                      {!isUser && (
                         <div className="mb-0.5 flex items-center gap-1">
                           <Bot className="h-3 w-3" style={{ color: "#667781" }} />
-                          <span className="text-[10px]" style={{ color: "#667781" }}>IA</span>
+                          <span className="text-[10px]" style={{ color: "#667781" }}>Lucas</span>
                         </div>
                       )}
-                      <p className="whitespace-pre-wrap" style={{ fontSize: "14.2px", color: "#111b21", lineHeight: 1.4 }}>{msg.body || `[${msg.type || "mensagem"}]`}</p>
+                      <p className="whitespace-pre-wrap" style={{ fontSize: "14.2px", color: "#111b21", lineHeight: 1.4 }}>{msg.content || "[mensagem]"}</p>
                       <div className="flex items-center justify-end gap-1 -mb-1" style={{ marginLeft: "8px", float: "right", marginTop: "2px" }}>
-                        <span style={{ fontSize: "11px", color: "#667781" }}>{format(msg.created_at, "HH:mm")}</span>
-                        {isOutbound && (
-                          <span className={`text-[11px] ${msg.read_at ? "text-[#53bdeb]" : "text-[#667781]"}`}>
-                            {msg.read_at ? "✓✓" : msg.delivered_at ? "✓✓" : msg.sent_at ? "✓" : "🕐"}
-                          </span>
-                        )}
+                        <span style={{ fontSize: "11px", color: "#667781" }}>{format(new Date(msg.created_at), "HH:mm")}</span>
                       </div>
                     </div>
                   </div>
@@ -736,12 +649,7 @@ export default function Conversas() {
                   style={{ background: "#ffffff", borderRadius: "8px", border: "none", padding: "9px 12px", fontSize: "15px", color: "#111b21" }}
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void sendMessage();
-                    }
-                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void sendMessage(); } }}
                   disabled={sending}
                 />
                 <button
