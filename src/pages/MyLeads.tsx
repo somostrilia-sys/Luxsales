@@ -74,43 +74,7 @@ export default function MyLeads() {
     if (!collaborator) return;
     setLoading(true);
     try {
-      if (isCEO) {
-        // Count
-        let cq = supabase
-          .from("leads_master")
-          .select("*", { count: "exact", head: true });
-        if (selectedCompanyId && selectedCompanyId !== "all") cq = cq.eq("company_id", selectedCompanyId);
-        if (debouncedSearch.length >= 2)
-          cq = cq.or(`lead_name.ilike.%${debouncedSearch}%,phone_number.ilike.%${debouncedSearch}%`);
-        const { count } = await cq;
-        setTotal(count ?? 0);
-
-        // Data
-        let dq = supabase
-          .from("leads_master")
-          .select("id, lead_name, phone_number, lead_score, lead_temperature");
-        if (selectedCompanyId && selectedCompanyId !== "all") dq = dq.eq("company_id", selectedCompanyId);
-        if (debouncedSearch.length >= 2)
-          dq = dq.or(`lead_name.ilike.%${debouncedSearch}%,phone_number.ilike.%${debouncedSearch}%`);
-        const { data, error } = await dq
-          .order("lead_score", { ascending: false })
-          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-        if (error) throw error;
-
-        setRows(
-          (data ?? []).map((l: any) => ({
-            poolId: null,
-            leadId: l.id,
-            name: l.lead_name,
-            phone: l.phone_number,
-            score: l.lead_score,
-            temperature: l.lead_temperature,
-            status: null,
-            lastContact: null,
-            notes: null,
-          }))
-        );
-      } else {
+      {
         // Count (without search — search is client-side for joined tables)
         let cq = supabase
           .from("consultant_lead_pool")
@@ -213,7 +177,7 @@ export default function MyLeads() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        {!isCEO && (
+        (
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Status" />
@@ -228,7 +192,6 @@ export default function MyLeads() {
               <SelectItem value="lost">Perdido</SelectItem>
             </SelectContent>
           </Select>
-        )}
       </div>
 
       <Card>
@@ -243,7 +206,9 @@ export default function MyLeads() {
               <p className="text-muted-foreground text-sm">
                 {isCEO
                   ? "Nenhum lead encontrado"
-                  : "Nenhum lead atribuído. Peça ao gestor."}
+                  : isCEO
+                    ? "Você é CEO — use Leads Master para a base completa. Esta tela é para leads distribuídos aos consultores."
+                    : "Nenhum lead atribuído. Peça ao gestor."}
               </p>
             </div>
           ) : (
@@ -255,8 +220,8 @@ export default function MyLeads() {
                     <TableHead>Telefone</TableHead>
                     <TableHead>Score</TableHead>
                     <TableHead>Temperatura</TableHead>
-                    {!isCEO && <TableHead>Status</TableHead>}
-                    {!isCEO && <TableHead>Último Contato</TableHead>}
+                    <TableHead>Status</TableHead>
+                    <TableHead>Último Contato</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -281,7 +246,6 @@ export default function MyLeads() {
                             ? (TEMP_MAP[row.temperature] ?? row.temperature)
                             : "—"}
                         </TableCell>
-                        {!isCEO && (
                           <TableCell>
                             {st ? (
                               <Badge variant="outline" className={`text-xs ${st.cls}`}>
@@ -289,14 +253,11 @@ export default function MyLeads() {
                               </Badge>
                             ) : "—"}
                           </TableCell>
-                        )}
-                        {!isCEO && (
                           <TableCell className="text-xs text-muted-foreground">
                             {row.lastContact
                               ? new Date(row.lastContact).toLocaleDateString("pt-BR")
                               : "—"}
                           </TableCell>
-                        )}
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-0.5">
                             <Button
