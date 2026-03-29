@@ -252,8 +252,9 @@ export default function LeadsMaster() {
   };
 
   // ── stat cards ──
+  const totalLeads = totalRows > 0 ? totalRows : stats.total;
   const statCards = [
-    { label: "Total", value: stats.total, color: "text-foreground" },
+    { label: "Total", value: totalLeads, color: "text-foreground" },
     { label: "Novos", value: stats.new, color: "text-blue-400" },
     { label: "Na Fila", value: stats.queued_call, color: "text-purple-400" },
     { label: "Chamados", value: stats.called, color: "text-cyan-400" },
@@ -284,7 +285,7 @@ export default function LeadsMaster() {
       <div className="space-y-5">
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <PageHeader title="Leads Master" subtitle={`${stats.total.toLocaleString("pt-BR")} leads na base`} />
+          <PageHeader title="Leads Master" subtitle={`${totalLeads.toLocaleString("pt-BR")} leads na base`} />
           <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={() => navigate("/leads-discador")}>
               <Upload className="h-4 w-4 mr-1.5" /> Importar
