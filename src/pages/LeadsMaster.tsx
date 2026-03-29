@@ -80,9 +80,8 @@ const tempEmoji: Record<string, string> = { hot: "🔥", warm: "🌡️", cold: 
 
 // ── types ──
 interface Lead {
-  id: string; phone: string; name: string; status: string; score: number; temperature: string;
-  segment: string; call_count: number; last_contact_at: string | null; created_at: string;
-  email?: string; tags?: string[]; extra_data?: Record<string, unknown>;
+  id: string; phone_number: string; lead_name: string; status: string; lead_score: number; lead_temperature: string;
+  segment: string; total_call_attempts: number; last_call_at: string | null; created_at: string;
 }
 interface Stats {
   total: number; new: number; queued_call: number; called: number; opted_in: number;
@@ -146,19 +145,19 @@ export default function LeadsMaster() {
       if (fStatus !== "all") countQ = countQ.eq("status", fStatus);
       if (fTemp !== "all") countQ = countQ.eq("temperature", fTemp);
       if (fSegment !== "all") countQ = countQ.eq("segment", fSegment);
-      if (fSearch.length >= 3) countQ = countQ.or(`name.ilike.%${fSearch}%,phone.ilike.%${fSearch}%`);
+      if (fSearch.length >= 3) countQ = countQ.or(`lead_name.ilike.%${fSearch}%,phone_number.ilike.%${fSearch}%`);
       const { count } = await countQ.abortSignal(controller.signal);
       setTotalRows(count || 0);
 
       // Data query
       let query = supabase
         .from("leads_master")
-        .select("id, name, phone, status, score, temperature, segment, call_count, last_contact_at, created_at")
+        .select("id, lead_name, phone_number, status, lead_score, lead_temperature, segment, total_call_attempts, last_call_at, created_at")
         .eq("company_id", company_id);
       if (fStatus !== "all") query = query.eq("status", fStatus);
-      if (fTemp !== "all") query = query.eq("temperature", fTemp);
+      if (fTemp !== "all") query = query.eq("lead_temperature", fTemp);
       if (fSegment !== "all") query = query.eq("segment", fSegment);
-      if (fSearch.length >= 3) query = query.or(`name.ilike.%${fSearch}%,phone.ilike.%${fSearch}%`);
+      if (fSearch.length >= 3) query = query.or(`lead_name.ilike.%${fSearch}%,phone_number.ilike.%${fSearch}%`);
 
       const offset = page * PAGE_SIZE;
       const { data, error } = await query
@@ -196,7 +195,7 @@ export default function LeadsMaster() {
   };
   const toggleAll = () => {
     if (selected.size === leads.length) setSelected(new Set());
-    else setSelected(new Set(leads.map(l => l.phone)));
+    else setSelected(new Set(leads.map(l => l.phone_number)));
   };
   const selectedPhones = Array.from(selected);
 
@@ -440,29 +439,29 @@ export default function LeadsMaster() {
                     {leads.map((l) => {
                       const st = statusLabels[l.status] || { label: l.status, cls: "bg-muted text-muted-foreground border-border" };
                       return (
-                        <tr key={l.phone} className="border-b border-border/50 hover:bg-muted/20 cursor-pointer" onClick={() => openDetail(l)}>
+                        <tr key={l.id} className="border-b border-border/50 hover:bg-muted/20 cursor-pointer" onClick={() => openDetail(l)}>
                           <td className="py-2 px-3" onClick={e => e.stopPropagation()}>
-                            <Checkbox checked={selected.has(l.phone)} onCheckedChange={() => toggleSelect(l.phone)} />
+                            <Checkbox checked={selected.has(l.phone_number)} onCheckedChange={() => toggleSelect(l.phone_number)} />
                           </td>
                           <td className="py-2 px-2"><Badge variant="outline" className={`text-xs ${st.cls}`}>{st.label}</Badge></td>
-                          <td className="py-2 px-2 font-mono text-xs">{fmtPhone(l.phone)}</td>
-                          <td className="py-2 px-2">{l.name || "—"}</td>
+                          <td className="py-2 px-2 font-mono text-xs">{fmtPhone(l.phone_number)}</td>
+                          <td className="py-2 px-2">{l.lead_name || "—"}</td>
                           <td className="py-2 px-2">
                             <div className="flex items-center gap-1.5 justify-center">
-                              <Progress value={l.score} className="w-12 h-1.5" />
-                              <span className="text-xs text-muted-foreground w-6">{l.score}</span>
+                              <Progress value={l.lead_score || 0} className="w-12 h-1.5" />
+                              <span className="text-xs text-muted-foreground w-6">{l.lead_score || 0}</span>
                             </div>
                           </td>
-                          <td className="py-2 px-2 text-center text-base">{tempEmoji[l.temperature] || "—"}</td>
+                          <td className="py-2 px-2 text-center text-base">{tempEmoji[l.lead_temperature] || "—"}</td>
                           <td className="py-2 px-2 text-xs">{l.segment || "—"}</td>
-                          <td className="py-2 px-2 text-center text-xs">{l.call_count}</td>
-                          <td className="py-2 px-2 text-xs">{fmtDate(l.last_contact_at)}</td>
+                          <td className="py-2 px-2 text-center text-xs">{l.total_call_attempts || 0}</td>
+                          <td className="py-2 px-2 text-xs">{fmtDate(l.last_call_at)}</td>
                           <td className="py-2 px-3 text-right" onClick={e => e.stopPropagation()}>
                             <div className="flex gap-1 justify-end">
-                              <Button variant="ghost" size="icon" className="h-7 w-7" title="Ligar" onClick={() => singleCall(l.phone)}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" title="Ligar" onClick={() => singleCall(l.phone_number)}>
                                 <Phone className="h-3.5 w-3.5" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" title="Disparar" onClick={() => singleDispatch(l.phone)}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" title="Disparar" onClick={() => singleDispatch(l.phone_number)}>
                                 <Send className="h-3.5 w-3.5" />
                               </Button>
                             </div>
