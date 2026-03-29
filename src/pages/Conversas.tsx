@@ -162,13 +162,17 @@ export default function Conversas() {
     setLoadingChat(true);
     setMessages([]);
 
+    const cleanPhone = phone.replace(/^\+/, "");
+    console.log("Buscando mensagens para:", cleanPhone);
+
     const { data } = await supabase
       .from("whatsapp_meta_messages")
       .select("id, phone_from, phone_to, body, direction, status, created_at, is_ai_generated")
-      .eq("company_id", companyId)
-      .or(`phone_from.eq.${phone},phone_to.eq.${phone}`)
+      .or(`phone_from.eq.${cleanPhone},phone_to.eq.${cleanPhone}`)
       .order("created_at", { ascending: true })
       .limit(200);
+
+    console.log("Mensagens encontradas:", data?.length, data);
 
     setMessages((data || []) as ChatMessage[]);
 
