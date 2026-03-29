@@ -177,7 +177,7 @@ export default function GestaoUsuarios() {
     setLoading(true);
     let query = supabase
       .from("collaborators")
-      .select("id, name, email, active, role:roles(name, level)")
+      .select("id, name, email, active, role:roles(name, level), company:companies(name)")
       .order("name");
 
     if (companyId) {
@@ -399,6 +399,7 @@ export default function GestaoUsuarios() {
                       <TableRow>
                         <TableHead>Nome</TableHead>
                         <TableHead>Email</TableHead>
+                        {!companyId && <TableHead>Empresa</TableHead>}
                         <TableHead>Cargo</TableHead>
                         <TableHead>Módulos</TableHead>
                         <TableHead>Status</TableHead>
@@ -410,6 +411,7 @@ export default function GestaoUsuarios() {
                         <TableRow key={c.id}>
                           <TableCell className="font-medium">{c.name}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{c.email}</TableCell>
+                          {!companyId && <TableCell className="text-xs text-muted-foreground">{(c as any).company?.name || "—"}</TableCell>}
                           <TableCell>
                             <Badge variant="outline" className="text-xs">{c.role?.name || "—"}</Badge>
                           </TableCell>
