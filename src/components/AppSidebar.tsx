@@ -71,7 +71,6 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
   },
   {
     label: "Gestão",
-    ceoOnly: true,
     items: [
       { title: "Equipe", url: "/team", icon: UserCog, levels: [0] },
       { title: "Gestão de Usuários", url: "/gestao-usuarios", icon: Users2, levels: [0, 1] },
