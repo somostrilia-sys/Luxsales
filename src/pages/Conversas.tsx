@@ -164,61 +164,88 @@ export default function Conversas() {
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
   // ── Load chat messages ──
-  const loadMessages = useCallback(async (phone: string) => {
-    setLoadingChat(true);
-    setMessages([]);
-
-    const cleanPhone = phone.replace(/^\+/, "");
-    console.log("Buscando mensagens para:", cleanPhone);
-
-    const { data, error } = await supabase
-      .from("whatsapp_meta_messages")
-      .select("id, body, direction, phone_from, phone_to, type, status, created_at, sent_at, delivered_at, read_at, template_name, metadata, is_ai_generated")
-      .or(`phone_from.eq.${cleanPhone},phone_to.eq.${cleanPhone}`)
-      .order("created_at", { ascending: true })
-      .limit(200);
-
-    if (error) {
-      console.error("Erro ao buscar mensagens:", error);
+  useEffect(() => {
+    if (!selectedPhone) {
       setMessages([]);
-    } else {
-      console.log("Mensagens carregadas:", data?.length);
-      setMessages((data || []) as ChatMessage[]);
+      return;
     }
 
-    // Load lifecycle context — keep phone exactly as selected, then fallback variations
-    console.log("Buscando lifecycle para phone:", phone);
-    let lifecycleData: LifecycleData | null = null;
+    console.log("=== FETCH MESSAGES ===");
+    console.log("selectedPhone:", selectedPhone);
 
-    const phonesToTry = [phone];
-    if (phone.startsWith("+")) phonesToTry.push(phone.slice(1));
-    if (!phone.startsWith("+")) phonesToTry.push(`+${phone}`);
-    if (phone.startsWith("55")) phonesToTry.push(`+${phone}`);
+    const load = async () => {
+      setLoadingChat(true);
+      try {
+        const { data, error } = await supabase
+          .from("whatsapp_meta_messages")
+          .select("*")
+          .or(`phone_from.eq.${selectedPhone},phone_to.eq.${selectedPhone}`)
+          .order("created_at", { ascending: true })
+          .limit(200);
 
-    for (const tryPhone of Array.from(new Set(phonesToTry))) {
-      const { data: lc } = await supabase
-        .from("lead_whatsapp_lifecycle")
-        .select("stage, sentiment, window_open, window_expires_at, interests, objections, messages_sent, messages_received")
-        .eq("phone_number", tryPhone)
-        .maybeSingle();
+        console.log("Query result - error:", error);
+        console.log("Query result - count:", data?.length);
+        console.log("Query result - first:", data?.[0]);
 
-      if (lc) {
-        lifecycleData = lc as LifecycleData;
-        break;
+        if (data && data.length > 0) {
+          setMessages(data as ChatMessage[]);
+        } else {
+          const { data: data2 } = await supabase
+            .from("whatsapp_meta_messages")
+            .select("*")
+            .eq("phone_from", selectedPhone)
+            .order("created_at", { ascending: true })
+            .limit(200);
+
+          console.log("Fallback result:", data2?.length);
+          setMessages((data2 || []) as ChatMessage[]);
+        }
+      } catch (err) {
+        console.error("Erro ao buscar mensagens:", err);
+        setMessages([]);
+      } finally {
+        setLoadingChat(false);
       }
+    };
+
+    void load();
+  }, [selectedPhone]);
+
+  // ── Load lifecycle context ──
+  useEffect(() => {
+    if (!selectedPhone) {
+      setLifecycle(null);
+      return;
     }
 
-    console.log("Resultado lifecycle:", lifecycleData);
-    setLifecycle(lifecycleData);
-    setLoadingChat(false);
-  }, [companyId]);
+    const loadLifecycle = async () => {
+      console.log("Buscando lifecycle para phone:", selectedPhone);
+      let lifecycleData: LifecycleData | null = null;
 
-  // When a phone is selected, load its messages
-  const handleSelectPhone = useCallback((phone: string) => {
-    setSelectedPhone(phone);
-    setMessageText("");
-    loadMessages(phone);
-  }, [loadMessages]);
+      const phonesToTry = [selectedPhone];
+      if (selectedPhone.startsWith("+")) phonesToTry.push(selectedPhone.slice(1));
+      if (!selectedPhone.startsWith("+")) phonesToTry.push(`+${selectedPhone}`);
+      if (selectedPhone.startsWith("55")) phonesToTry.push(`+${selectedPhone}`);
+
+      for (const tryPhone of Array.from(new Set(phonesToTry))) {
+        const { data: lc } = await supabase
+          .from("lead_whatsapp_lifecycle")
+          .select("stage, sentiment, window_open, window_expires_at, interests, objections, messages_sent, messages_received")
+          .eq("phone_number", tryPhone)
+          .maybeSingle();
+
+        if (lc) {
+          lifecycleData = lc as LifecycleData;
+          break;
+        }
+      }
+
+      console.log("Resultado lifecycle:", lifecycleData);
+      setLifecycle(lifecycleData);
+    };
+
+    void loadLifecycle();
+  }, [selectedPhone]);
 
   // ── Window state (24h) ──
   const fetchWindow = useCallback(async (phone: string) => {
@@ -248,14 +275,17 @@ export default function Conversas() {
     fetchWindow(selectedPhone);
   }, [selectedPhone, fetchWindow]);
 
-  // Scroll + keep input focus stable on message updates
+  // Auto-scroll when messages update
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
+  // Keep input focus when chat window is open
+  useEffect(() => {
     if (windowOpen) {
       inputRef.current?.focus();
     }
-  }, [messages, selectedPhone, windowOpen]);
+  }, [selectedPhone, windowOpen]);
 
   // ── Realtime subscription ──
   useEffect(() => {
@@ -521,7 +551,11 @@ export default function Conversas() {
               return (
                 <button
                   key={c.phone_from}
-                  onClick={() => handleSelectPhone(c.phone_from)}
+                  onClick={() => {
+                    console.log("Clicou em:", c.phone_from);
+                    setSelectedPhone(c.phone_from);
+                    setMessageText("");
+                  }}
                   className={cn(
                     "wa-row-hover flex w-full items-center gap-3 px-3 py-[10px] text-left transition-colors",
                     selectedPhone === c.phone_from && "wa-row-selected",
@@ -632,7 +666,7 @@ export default function Conversas() {
           {loadingChat ? (
             <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" style={{ color: "#008069" }} /></div>
           ) : messages.length === 0 ? (
-            <div className="flex justify-center py-10 text-gray-500">Nenhuma mensagem ainda</div>
+            <div className="flex justify-center py-10 text-gray-500">Nenhuma mensagem</div>
           ) : (
             messages.map((msg, index) => {
               const isOutbound = msg.direction === "outbound";
