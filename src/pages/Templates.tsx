@@ -159,20 +159,21 @@ export default function Templates() {
   const pending = templates.filter((t) => (t.status === "PENDING" || t.status === "REJECTED") && (!search || t.name.toLowerCase().includes(search.toLowerCase())));
 
   const handleGenerate = async () => {
-    if (!objective.trim() || !collaborator) return;
+    if (!objective.trim()) return;
     setGenerating(true);
     setGenerated([]);
     try {
-      const headers = await getHeaders();
-      const res = await fetch(`${EDGE_BASE}/template-intelligence`, {
+      const res = await fetch("https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/generate-template", {
         method: "POST",
-        headers,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.pF2XU3pFDc98GSJzA1xyf7d4pHbkrxf3sRDX1jh5Vrg",
+        },
         body: JSON.stringify({
           action: "generate",
-          company_id: collaborator.company_id,
           objective,
+          company_id: "70967469-9a9b-4e29-a744-410e41eb47a5",
           count: 3,
-          requester_role: "ceo",
         }),
       });
       const data = await res.json();
