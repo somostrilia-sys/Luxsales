@@ -157,14 +157,25 @@ export default function Templates() {
     if (!collaborator) return;
     setRejectionsLoading(true);
     try {
+      // Fetch rejected templates from same endpoint
       const headers = await getHeaders();
-      const res = await fetch(`${EDGE_BASE}/template-intelligence`, {
+      const res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ action: "rejection-history", company_id: collaborator.company_id }),
+        body: JSON.stringify({ action: "list", company_id: collaborator.company_id }),
       });
       const data = await res.json();
-      if (res.ok) setRejections(data.rejections || []);
+      if (res.ok) {
+        const rejected = (data.templates || [])
+          .filter((t: any) => t.status === "REJECTED")
+          .map((t: any) => ({
+            name: t.name,
+            reason: t.rejection_reason || "Não especificado",
+            date: t.updated_at ? new Date(t.updated_at).toLocaleDateString("pt-BR") : "—",
+            analysis: "",
+          }));
+        setRejections(rejected);
+      }
     } catch {}
     setRejectionsLoading(false);
   }, [collaborator, getHeaders]);
@@ -216,14 +227,30 @@ export default function Templates() {
     setSubmitting(tmpl.name);
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${EDGE_BASE}/template-intelligence`, {
+      const components: any[] = [];
+      if (tmpl.body) components.push({ type: "BODY", text: tmpl.body });
+      if (tmpl.header) components.push({ type: "HEADER", format: "TEXT", text: tmpl.header });
+      if (tmpl.footer) components.push({ type: "FOOTER", text: tmpl.footer });
+      if (tmpl.buttons && tmpl.buttons.length > 0) {
+        components.push({
+          type: "BUTTONS",
+          buttons: tmpl.buttons.map(b => typeof b === "string"
+            ? { type: "QUICK_REPLY", text: b }
+            : { type: b.type || "QUICK_REPLY", text: b.text, ...(b.url ? { url: b.url } : {}), ...(b.phone_number ? { phone_number: b.phone_number } : {}) }
+          ),
+        });
+      }
+
+      const res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
         method: "POST",
         headers,
         body: JSON.stringify({
-          action: "submit",
+          action: "create",
           company_id: collaborator.company_id,
-          template: tmpl,
-          requester_role: "ceo",
+          name: tmpl.name,
+          category: (tmpl.category || "UTILITY").toUpperCase(),
+          language: "pt_BR",
+          components,
         }),
       });
       const data = await res.json();
