@@ -12,7 +12,9 @@ import { toast } from "sonner";
 import { Rocket, Phone, Clock, Activity, AlertTriangle, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-const ORCH = import.meta.env.VITE_ORCHESTRATOR_URL || "http://134.122.17.106:3099";
+const PROXY = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/orchestrator-proxy";
+const AUTH_HEADER = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.pF2XU3pFDc98GSJzA1xyf7d4pHbkrxf3sRDX1jh5Vrg";
+const proxyUrl = (path: string) => `${PROXY}?path=${encodeURIComponent(path)}`;
 
 type LogEntry = { ts: string; level: "success" | "simulated" | "error"; message: string };
 
@@ -44,7 +46,9 @@ export default function VoiceSimulate() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${ORCH}/queue/status`);
+      const res = await fetch(proxyUrl("/queue/status"), {
+        headers: { Authorization: AUTH_HEADER },
+      });
       if (!res.ok) throw new Error();
       const json = await res.json();
       setStatus(json);
@@ -71,9 +75,9 @@ export default function VoiceSimulate() {
     }
     setToggling(true);
     try {
-      const res = await fetch(`${ORCH}/queue/simulate`, {
+      const res = await fetch(proxyUrl("/queue/simulate"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: AUTH_HEADER },
         body: JSON.stringify({ enabled }),
       });
       if (!res.ok) throw new Error();
@@ -94,9 +98,9 @@ export default function VoiceSimulate() {
     }
     setDispatching(true);
     try {
-      const res = await fetch(`${ORCH}/dispatch`, {
+      const res = await fetch(proxyUrl("/dispatch"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: AUTH_HEADER },
         body: JSON.stringify({ phone: phone.replace(/\D/g, ""), company_id: companyId, simulation: simEnabled }),
       });
       const json = await res.json().catch(() => ({}));
