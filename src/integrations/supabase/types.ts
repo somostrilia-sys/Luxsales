@@ -9921,6 +9921,7 @@ export type Database = {
         Args: { p_collaborator_id: string }
         Returns: undefined
       }
+      is_dispatch_ceo: { Args: { _user_id: string }; Returns: boolean }
       leads_master_stats: { Args: { p_company_id: string }; Returns: Json }
       match_memories: {
         Args: {
