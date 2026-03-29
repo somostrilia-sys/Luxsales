@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";

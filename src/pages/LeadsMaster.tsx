@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -93,7 +94,10 @@ const defaultStats: Stats = { total: 0, new: 0, queued_call: 0, called: 0, opted
 
 // ── component ──
 export default function LeadsMaster() {
-  const { company_id, user_role } = useCompany();
+  const { company_id: baseCompanyId, user_role } = useCompany();
+  const { selectedCompanyId } = useCompanyFilter();
+  // Super admin: se selecionou empresa específica, usa ela; senão usa a própria
+  const company_id = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : baseCompanyId;
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);

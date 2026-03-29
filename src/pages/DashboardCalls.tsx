@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -93,7 +94,9 @@ const defaultOverview: OverviewData = {
 
 // ── component ──
 export default function DashboardCalls() {
-  const { company_id, user_role } = useCompany();
+  const { company_id: baseCompanyId, user_role } = useCompany();
+  const { selectedCompanyId } = useCompanyFilter();
+  const company_id = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : baseCompanyId;
   const navigate = useNavigate();
 
   // overview

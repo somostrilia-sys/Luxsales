@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
@@ -64,7 +65,9 @@ const emptyForm = {
 const CQ_PAGE_SIZE = 20;
 
 export default function CallQueues() {
-  const { company_id } = useCompany();
+  const { company_id: baseCompanyId } = useCompany();
+  const { selectedCompanyId } = useCompanyFilter();
+  const company_id = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : baseCompanyId;
   const navigate = useNavigate();
 
   const [queues, setQueues] = useState<CallQueue[]>([]);

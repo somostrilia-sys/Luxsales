@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -105,7 +106,9 @@ async function getAuthHeaders() {
 }
 
 export default function DashboardGeral() {
-  const { company_id, user_role } = useCompany();
+  const { company_id: baseCompanyId, user_role } = useCompany();
+  const { selectedCompanyId } = useCompanyFilter();
+  const company_id = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : baseCompanyId;
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardData>(defaultData);
   const [loading, setLoading] = useState(true);
