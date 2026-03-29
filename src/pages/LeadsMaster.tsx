@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { useCompany } from "@/contexts/CompanyContext";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
@@ -94,9 +94,11 @@ const defaultStats: Stats = { total: 0, new: 0, queued_call: 0, called: 0, opted
 
 // ── component ──
 export default function LeadsMaster() {
-  const { company_id: baseCompanyId, user_role } = useCompany();
+  const { collaborator, roleLevel } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
-  // Super admin: se selecionou empresa específica, usa ela; senão usa a própria
+  // CEO: uses selected company or own; others: use own company
+  const baseCompanyId = collaborator?.company_id ?? "";
+  const user_role = roleLevel === 0 ? "ceo" : "collaborator";
   const company_id = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : baseCompanyId;
   const navigate = useNavigate();
 
