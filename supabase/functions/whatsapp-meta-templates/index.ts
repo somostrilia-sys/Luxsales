@@ -4,6 +4,11 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -196,11 +201,15 @@ async function deleteTemplate(companyId: string, templateName: string) {
 }
 
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   if (req.method === "GET") {
     const url = new URL(req.url);
     const companyId = url.searchParams.get("company_id");
     if (!companyId) {
-      return Response.json({ error: "company_id required" }, { status: 400 });
+      return Response.json({ error: "company_id required" }, { status: 400, headers: corsHeaders });
     }
 
     const { data: templates } = await supabase
@@ -211,11 +220,11 @@ Deno.serve(async (req: Request) => {
       .order("category")
       .order("name");
 
-    return Response.json({ templates });
+    return Response.json({ templates }, { headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return new Response("Method not allowed", { status: 405, headers: corsHeaders });
   }
 
   try {
@@ -223,7 +232,7 @@ Deno.serve(async (req: Request) => {
     const { company_id, action } = body;
 
     if (!company_id || !action) {
-      return Response.json({ error: "company_id and action required" }, { status: 400 });
+      return Response.json({ error: "company_id and action required" }, { status: 400, headers: corsHeaders });
     }
 
     let result;
@@ -237,7 +246,7 @@ Deno.serve(async (req: Request) => {
         break;
       case "delete":
         if (!body.template_name) {
-          return Response.json({ error: "template_name required" }, { status: 400 });
+          return Response.json({ error: "template_name required" }, { status: 400, headers: corsHeaders });
         }
         result = await deleteTemplate(company_id, body.template_name);
         break;
@@ -250,16 +259,16 @@ Deno.serve(async (req: Request) => {
         result = { templates: data };
         break;
       default:
-        return Response.json({ error: "Invalid action" }, { status: 400 });
+        return Response.json({ error: "Action inválida" }, { status: 400, headers: corsHeaders });
     }
 
     if (result && "error" in result) {
-      return Response.json(result, { status: 400 });
+      return Response.json(result, { status: 400, headers: corsHeaders });
     }
 
-    return Response.json(result);
+    return Response.json(result, { headers: corsHeaders });
   } catch (err) {
     console.error("Template error:", err);
-    return Response.json({ error: String(err) }, { status: 500 });
+    return Response.json({ error: String(err) }, { status: 500, headers: corsHeaders });
   }
 });
