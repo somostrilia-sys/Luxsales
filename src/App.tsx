@@ -41,6 +41,7 @@ const LeadsDiscador = lazy(() => import("./pages/LeadsDiscador"));
 const VoiceAI = lazy(() => import("./pages/VoiceAI"));
 const VoiceDialer = lazy(() => import("./pages/VoiceDialer"));
 const VoiceSimulate = lazy(() => import("./pages/VoiceSimulate"));
+const VoiceCalls = lazy(() => import("./pages/VoiceCalls"));
 const RelatoriosVoz = lazy(() => import("./pages/RelatoriosVoz"));
 const ComplianceVoz = lazy(() => import("./pages/ComplianceVoz"));
 const ConfiguracoesVoz = lazy(() => import("./pages/ConfiguracoesVoz"));
@@ -108,6 +109,7 @@ const App = () => (
           <Route path="/meta-rules" element={<ProtectedRoute minLevel={0}><MetaRules /></ProtectedRoute>} />
           <Route path="/voice/dialer" element={<ProtectedRoute minLevel={0}><VoiceDialer /></ProtectedRoute>} />
           <Route path="/voice/simulate" element={<ProtectedRoute minLevel={0}><VoiceSimulate /></ProtectedRoute>} />
+          <Route path="/voice/calls" element={<ProtectedRoute minLevel={0}><VoiceCalls /></ProtectedRoute>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
