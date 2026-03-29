@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { supabase } from "@/lib/supabase";
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { toast } from "sonner";
@@ -111,15 +112,44 @@ function TagsInput({ value, onChange, placeholder }: { value: string[]; onChange
 
 export default function CompanySetup() {
   const navigate = useNavigate();
-  const { company_id, companyConfig, refetch } = useCompany();
+  const { company_id: baseCompanyId, companyConfig: baseConfig, refetch } = useCompany();
+  const { selectedCompanyId } = useCompanyFilter();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<FormData>(initialForm);
+  const [companyConfig, setFetchedConfig] = useState<any>(null);
+
+  // Resolve which company to configure
+  const company_id = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : baseCompanyId;
+
+  // Fetch config when selected company changes
+  useEffect(() => {
+    if (!company_id) return;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`${EDGE_BASE}/company-config`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token || SUPABASE_ANON_KEY}`,
+            apikey: SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ action: "get", company_id }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          setFetchedConfig(json?.config || json?.data || json);
+        }
+      } catch {}
+    })();
+  }, [company_id]);
   const [saving, setSaving] = useState(false);
 
-  // Pre-fill from existing config
+  // Pre-fill from existing config (fetched or from context)
+  const activeConfig = companyConfig || baseConfig;
   useEffect(() => {
-    if (companyConfig) {
-      const cfg = companyConfig as any;
+    if (activeConfig) {
+      const cfg = activeConfig as any;
       const pd = cfg.product_data || {};
       setForm({
         company_name: cfg.company_name || "",
@@ -137,7 +167,7 @@ export default function CompanySetup() {
         differentials: pd.differentials || [],
       });
     }
-  }, [companyConfig]);
+  }, [activeConfig]);
 
   const update = <K extends keyof FormData>(key: K, val: FormData[K]) =>
     setForm((prev) => ({ ...prev, [key]: val }));
