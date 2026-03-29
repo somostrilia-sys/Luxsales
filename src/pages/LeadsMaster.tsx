@@ -44,6 +44,25 @@ function fmtDate(iso: string | null) {
   try { return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); } catch { return iso; }
 }
 
+function fmtPhone(phone: string | null): string {
+  if (!phone) return "—";
+  const d = phone.replace(/\D/g, "");
+  if (d.length >= 12) {
+    // 5511999999999 → (11) 99999-9999
+    const ddd = d.slice(2, 4);
+    const part1 = d.slice(4, 9);
+    const part2 = d.slice(9, 13);
+    return `(${ddd}) ${part1}-${part2}`;
+  }
+  if (d.length >= 10) {
+    const ddd = d.slice(0, 2);
+    const part1 = d.length === 11 ? d.slice(2, 7) : d.slice(2, 6);
+    const part2 = d.length === 11 ? d.slice(7) : d.slice(6);
+    return `(${ddd}) ${part1}-${part2}`;
+  }
+  return phone;
+}
+
 const statusLabels: Record<string, { label: string; cls: string }> = {
   new: { label: "Novo", cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
   queued_call: { label: "Na Fila", cls: "bg-purple-500/15 text-purple-400 border-purple-500/30" },
@@ -61,8 +80,8 @@ const tempEmoji: Record<string, string> = { hot: "🔥", warm: "🌡️", cold: 
 
 // ── types ──
 interface Lead {
-  phone: string; name: string; status: string; lead_score: number; temperature: string;
-  segment: string; call_count: number; last_contact_at: string | null;
+  id: string; phone: string; name: string; status: string; score: number; temperature: string;
+  segment: string; call_count: number; last_contact_at: string | null; created_at: string;
   email?: string; tags?: string[]; extra_data?: Record<string, unknown>;
 }
 interface Stats {
@@ -116,26 +135,51 @@ export default function LeadsMaster() {
   const fetchLeads = useCallback(async (silent = false) => {
     if (!company_id) return;
     if (!silent) setLoading(true); else setRefreshing(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
     try {
-      const body: Record<string, unknown> = {
-        action: "list-master", ...base, limit: PAGE_SIZE, offset: page * PAGE_SIZE,
-        sort_by: fSort,
-      };
-      if (fStatus !== "all") body.status_filter = fStatus;
-      if (fTemp !== "all") body.temperature_filter = fTemp;
-      if (fSegment !== "all") body.segment_filter = fSegment;
-      if (fSearch.length >= 3) body.search = fSearch;
-      body.sort_order = fSort === "lead_score" ? "desc" : "desc";
+      // Count query (separate, head-only)
+      let countQ = supabase
+        .from("leads_master")
+        .select("*", { count: "exact", head: true })
+        .eq("company_id", company_id);
+      if (fStatus !== "all") countQ = countQ.eq("status", fStatus);
+      if (fTemp !== "all") countQ = countQ.eq("temperature", fTemp);
+      if (fSegment !== "all") countQ = countQ.eq("segment", fSegment);
+      if (fSearch.length >= 3) countQ = countQ.or(`name.ilike.%${fSearch}%,phone.ilike.%${fSearch}%`);
+      const { count } = await countQ.abortSignal(controller.signal);
+      setTotalRows(count || 0);
 
-      const data = await callEdge("lead-distributor", body);
-      setLeads(data.leads || []);
-      setTotalRows(data.total || 0);
-      if (data.stats) setStats({ ...defaultStats, ...data.stats });
-    } catch {
-      if (!silent) toast.error("Erro ao carregar leads");
+      // Data query
+      let query = supabase
+        .from("leads_master")
+        .select("id, name, phone, status, score, temperature, segment, call_count, last_contact_at, created_at")
+        .eq("company_id", company_id);
+      if (fStatus !== "all") query = query.eq("status", fStatus);
+      if (fTemp !== "all") query = query.eq("temperature", fTemp);
+      if (fSegment !== "all") query = query.eq("segment", fSegment);
+      if (fSearch.length >= 3) query = query.or(`name.ilike.%${fSearch}%,phone.ilike.%${fSearch}%`);
+
+      const offset = page * PAGE_SIZE;
+      const { data, error } = await query
+        .order("created_at", { ascending: false })
+        .range(offset, offset + 19)
+        .abortSignal(controller.signal);
+
+      if (error) throw error;
+      setLeads((data as Lead[]) || []);
+
+      // Stats via edge function (silent, non-blocking)
+      callEdge("lead-distributor", { action: "stats", company_id, requester_role: user_role || "ceo" })
+        .then(d => { if (d.stats) setStats({ ...defaultStats, ...d.stats }); })
+        .catch(() => {});
+    } catch (e: any) {
+      if (e.name !== "AbortError" && !silent) toast.error("Erro ao carregar leads");
+    } finally {
+      clearTimeout(timer);
+      setLoading(false);
+      setRefreshing(false);
     }
-    setLoading(false);
-    setRefreshing(false);
   }, [company_id, user_role, page, fStatus, fTemp, fSegment, fSearch, fSort]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
@@ -401,12 +445,12 @@ export default function LeadsMaster() {
                             <Checkbox checked={selected.has(l.phone)} onCheckedChange={() => toggleSelect(l.phone)} />
                           </td>
                           <td className="py-2 px-2"><Badge variant="outline" className={`text-xs ${st.cls}`}>{st.label}</Badge></td>
-                          <td className="py-2 px-2 font-mono text-xs">{l.phone}</td>
+                          <td className="py-2 px-2 font-mono text-xs">{fmtPhone(l.phone)}</td>
                           <td className="py-2 px-2">{l.name || "—"}</td>
                           <td className="py-2 px-2">
                             <div className="flex items-center gap-1.5 justify-center">
-                              <Progress value={l.lead_score} className="w-12 h-1.5" />
-                              <span className="text-xs text-muted-foreground w-6">{l.lead_score}</span>
+                              <Progress value={l.score} className="w-12 h-1.5" />
+                              <span className="text-xs text-muted-foreground w-6">{l.score}</span>
                             </div>
                           </td>
                           <td className="py-2 px-2 text-center text-base">{tempEmoji[l.temperature] || "—"}</td>
@@ -471,10 +515,10 @@ export default function LeadsMaster() {
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase">Dados</h4>
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div><span className="text-muted-foreground">Telefone:</span> <span className="font-mono">{detailLead.phone}</span></div>
+                    <div><span className="text-muted-foreground">Telefone:</span> <span className="font-mono">{fmtPhone(detailLead.phone)}</span></div>
                     <div><span className="text-muted-foreground">Nome:</span> {detailLead.name || "—"}</div>
                     <div><span className="text-muted-foreground">Email:</span> {detailLead.email || "—"}</div>
-                    <div><span className="text-muted-foreground">Score:</span> {detailLead.lead_score}</div>
+                    <div><span className="text-muted-foreground">Score:</span> {detailLead.score}</div>
                     <div><span className="text-muted-foreground">Temp:</span> {tempEmoji[detailLead.temperature]} {detailLead.temperature}</div>
                     <div><span className="text-muted-foreground">Segmento:</span> {detailLead.segment || "—"}</div>
                   </div>
