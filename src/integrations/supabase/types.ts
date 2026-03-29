@@ -8175,6 +8175,92 @@ export type Database = {
         }
         Relationships: []
       }
+      wa_conversations: {
+        Row: {
+          analysis: Json | null
+          assigned_human_id: string | null
+          call_id: string | null
+          company_id: string | null
+          created_at: string | null
+          human_mode: boolean | null
+          id: string
+          last_message: string | null
+          last_message_at: string | null
+          lead_name: string | null
+          phone: string
+          status: string | null
+          turn_count: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          analysis?: Json | null
+          assigned_human_id?: string | null
+          call_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          human_mode?: boolean | null
+          id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          lead_name?: string | null
+          phone: string
+          status?: string | null
+          turn_count?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          analysis?: Json | null
+          assigned_human_id?: string | null
+          call_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          human_mode?: boolean | null
+          id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          lead_name?: string | null
+          phone?: string
+          status?: string | null
+          turn_count?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      wa_messages: {
+        Row: {
+          content: string
+          conversation_id: string | null
+          created_at: string | null
+          id: string
+          meta_message_id: string | null
+          role: string
+        }
+        Insert: {
+          content: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          meta_message_id?: string | null
+          role: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          meta_message_id?: string | null
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wa_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "wa_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       webhook_debug_logs: {
         Row: {
           created_at: string | null
