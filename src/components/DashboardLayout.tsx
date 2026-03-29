@@ -49,9 +49,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex items-center gap-2 md:gap-3">
-              {isCEO && companies.length > 0 && !isMobile && (
+              {isCEO && companies.length > 0 && (
                 <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
-                  <SelectTrigger className="w-[160px] h-9 text-xs bg-secondary/60 border-border/60 rounded-xl">
+                  <SelectTrigger className="w-[140px] md:w-[160px] h-9 text-xs bg-secondary/60 border-border/60 rounded-xl">
                     <SelectValue placeholder="Empresa" />
                   </SelectTrigger>
                   <SelectContent>
@@ -62,8 +62,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                   </SelectContent>
                 </Select>
               )}
-              {!isCEO && collaborator?.company && !isMobile && (
-                <span className="text-xs text-muted-foreground font-medium bg-secondary/50 px-3 py-1.5 rounded-lg">{collaborator.company.name}</span>
+              {!isCEO && collaborator?.company && (
+                <span className="text-xs text-muted-foreground font-medium bg-secondary/50 px-3 py-1.5 rounded-lg hidden md:inline">{collaborator.company.name}</span>
               )}
 
               <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/60">
