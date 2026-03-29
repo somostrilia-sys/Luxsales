@@ -46,6 +46,7 @@ const RelatoriosVoz = lazy(() => import("./pages/RelatoriosVoz"));
 const ComplianceVoz = lazy(() => import("./pages/ComplianceVoz"));
 const ConfiguracoesVoz = lazy(() => import("./pages/ConfiguracoesVoz"));
 const WhatsAppMeta = lazy(() => import("./pages/WhatsAppMeta"));
+const ConfigWhatsApp = lazy(() => import("./pages/ConfigWhatsApp"));
 const MetaRules = lazy(() => import("./pages/MetaRules"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -103,6 +104,7 @@ const App = () => (
           <Route path="/leads-discador" element={<ProtectedRoute minLevel={1}><LeadsDiscador /></ProtectedRoute>} />
           <Route path="/voice-ai" element={<ProtectedRoute minLevel={0}><VoiceAI /></ProtectedRoute>} />
           <Route path="/whatsapp-meta" element={<ProtectedRoute minLevel={0}><WhatsAppMeta /></ProtectedRoute>} />
+          <Route path="/config-whatsapp" element={<ProtectedRoute minLevel={0}><ConfigWhatsApp /></ProtectedRoute>} />
           <Route path="/relatorios-voz" element={<ProtectedRoute minLevel={1}><RelatoriosVoz /></ProtectedRoute>} />
           <Route path="/compliance-voz" element={<ProtectedRoute minLevel={0}><ComplianceVoz /></ProtectedRoute>} />
           <Route path="/configuracoes-voz" element={<ProtectedRoute minLevel={0}><ConfiguracoesVoz /></ProtectedRoute>} />

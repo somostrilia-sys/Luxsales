@@ -77,6 +77,7 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
       { title: "Opt-ins", url: "/opt-ins", icon: ShieldCheck, levels: [0] },
       { title: "Regras Meta", url: "/meta-rules", icon: ClipboardList, levels: [0] },
       { title: "Configuração", url: "/config", icon: Sparkles, levels: [0] },
+      { title: "WhatsApp Empresas", url: "/config-whatsapp", icon: MessageSquare, levels: [0] },
     ],
   },
 ];
