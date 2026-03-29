@@ -161,24 +161,69 @@ export default function Conversas() {
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
-  // ── Load chat messages from wa_messages ──
+  // ── Load chat messages from wa_messages + whatsapp_meta_messages (old history) ──
   useEffect(() => {
-    if (!selectedConvId) { setMessages([]); return; }
+    if (!selectedConvId || !selectedPhone) { setMessages([]); return; }
 
     const load = async () => {
       setLoadingChat(true);
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10000);
+      const timer = setTimeout(() => controller.abort(), 12000);
       try {
-        const { data } = await supabase
+        // 1. Load from wa_messages (new system)
+        const { data: waData } = await supabase
           .from("wa_messages")
           .select("id, role, content, created_at")
           .eq("conversation_id", selectedConvId)
           .order("created_at", { ascending: true })
-          .limit(100)
+          .limit(500)
           .abortSignal(controller.signal);
 
-        setMessages((data || []) as ChatMessage[]);
+        // 2. Load from whatsapp_meta_messages (old history) using phone
+        const norm = normalizePhone(selectedPhone);
+        const phonesToTry = [norm, `+${norm}`];
+
+        let metaMsgs: ChatMessage[] = [];
+        for (const tryPhone of phonesToTry) {
+          const { data: metaData } = await supabase
+            .from("whatsapp_meta_messages")
+            .select("id, direction, body, created_at")
+            .or(`phone_from.eq.${tryPhone},phone_to.eq.${tryPhone}`)
+            .order("created_at", { ascending: true })
+            .limit(500)
+            .abortSignal(controller.signal);
+
+          if (metaData && metaData.length > 0) {
+            metaMsgs = metaData.map((m: any) => ({
+              id: m.id,
+              conversation_id: selectedConvId,
+              role: m.direction === "inbound" ? "user" : "assistant",
+              content: m.body,
+              created_at: m.created_at,
+            }));
+            break;
+          }
+        }
+
+        // 3. Merge both sources, dedup by content+timestamp proximity
+        const waMessages = (waData || []) as ChatMessage[];
+        const allMessages = [...metaMsgs, ...waMessages];
+
+        // Dedup: remove messages that have same content and are within 5 seconds
+        const deduped: ChatMessage[] = [];
+        const seen = new Set<string>();
+        for (const msg of allMessages) {
+          const key = `${(msg.content || "").slice(0, 50)}_${Math.floor(new Date(msg.created_at).getTime() / 5000)}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            deduped.push(msg);
+          }
+        }
+
+        // Sort by created_at
+        deduped.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+        setMessages(deduped);
       } catch (err) {
         console.error("Erro ao buscar mensagens:", err);
         setMessages([]);
@@ -189,7 +234,7 @@ export default function Conversas() {
     };
 
     void load();
-  }, [selectedConvId]);
+  }, [selectedConvId, selectedPhone]);
 
   // ── Load lifecycle context ──
   useEffect(() => {
