@@ -4233,6 +4233,8 @@ export type Database = {
       dispatch_queues: {
         Row: {
           active_days: number[] | null
+          attachment_url: string | null
+          auto_trigger: Json | null
           company_id: string
           created_at: string | null
           daily_limit: number
@@ -4258,6 +4260,8 @@ export type Database = {
         }
         Insert: {
           active_days?: number[] | null
+          attachment_url?: string | null
+          auto_trigger?: Json | null
           company_id: string
           created_at?: string | null
           daily_limit?: number
@@ -4283,6 +4287,8 @@ export type Database = {
         }
         Update: {
           active_days?: number[] | null
+          attachment_url?: string | null
+          auto_trigger?: Json | null
           company_id?: string
           created_at?: string | null
           daily_limit?: number

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import {
   Send, Play, Pause, Pencil, Plus, RefreshCw,
   Loader2, ChevronLeft, Eye, MessageSquare, Reply,
+  Upload, Paperclip, X, PhoneForwarded,
 } from "lucide-react";
 
 interface DispatchQueue {
@@ -32,6 +33,8 @@ interface DispatchQueue {
   total_leads: number; leads_dispatched: number;
   leads_delivered: number; leads_read: number; leads_replied: number;
   created_at: string;
+  attachment_url: string | null;
+  auto_trigger: { on_call_qualified: boolean; delay_minutes: number } | null;
 }
 
 interface Template { name: string; status: string; }
@@ -59,6 +62,9 @@ const emptyForm = {
   respect_tier_limit: true, safety_pct: 50,
   schedule_start: "08:00", schedule_end: "20:00",
   active_days: [1, 2, 3, 4, 5],
+  attachment_url: "" as string,
+  auto_trigger_enabled: false,
+  auto_trigger_delay: 2,
 };
 
 export default function DispatchQueues() {
@@ -106,14 +112,47 @@ export default function DispatchQueues() {
       respect_tier_limit: q.respect_tier_limit, safety_pct: q.safety_pct,
       schedule_start: q.schedule_start || "08:00", schedule_end: q.schedule_end || "20:00",
       active_days: q.active_days || [1, 2, 3, 4, 5],
+      attachment_url: q.attachment_url || "",
+      auto_trigger_enabled: q.auto_trigger?.on_call_qualified ?? false,
+      auto_trigger_delay: q.auto_trigger?.delay_minutes ?? 2,
     });
     setDialogOpen(true);
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowed = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      toast.error("Apenas PDF, PNG, JPG ou WebP");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Arquivo máximo 10MB");
+      return;
+    }
+    setUploading(true);
+    const ext = file.name.split(".").pop();
+    const path = `${company_id}/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("dispatch-attachments").upload(path, file);
+    if (error) {
+      toast.error("Erro no upload: " + error.message);
+    } else {
+      const { data: urlData } = supabase.storage.from("dispatch-attachments").getPublicUrl(path);
+      setForm(f => ({ ...f, attachment_url: urlData.publicUrl }));
+      toast.success("Anexo enviado");
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const save = async () => {
     if (!form.name.trim()) { toast.error("Nome obrigatório"); return; }
     setSaving(true);
-    const payload = {
+    const payload: any = {
       company_id, name: form.name.trim(),
       template_name: form.template_name || null, template_slot: form.template_slot || null,
       segment: form.segment || null,
@@ -123,6 +162,10 @@ export default function DispatchQueues() {
       respect_tier_limit: form.respect_tier_limit, safety_pct: form.safety_pct,
       schedule_start: form.schedule_start, schedule_end: form.schedule_end,
       active_days: form.active_days,
+      attachment_url: form.attachment_url || null,
+      auto_trigger: form.auto_trigger_enabled
+        ? { on_call_qualified: true, delay_minutes: form.auto_trigger_delay }
+        : null,
     };
     const { error } = editId
       ? await supabase.from("dispatch_queues").update(payload).eq("id", editId)
@@ -288,6 +331,64 @@ export default function DispatchQueues() {
                   <label htmlFor={`dday-${i}`} className="text-xs">{d}</label>
                 </div>
               ))}</div>
+            </div>
+
+            {/* Attachment Upload */}
+            <div className="space-y-1.5">
+              <Label className="text-xs flex items-center gap-1.5">
+                <Paperclip className="h-3.5 w-3.5" /> Anexo (PDF/Imagem)
+              </Label>
+              {form.attachment_url ? (
+                <div className="flex items-center gap-2 bg-muted/30 rounded-md p-2 text-xs">
+                  <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <a href={form.attachment_url} target="_blank" rel="noreferrer" className="truncate text-primary hover:underline flex-1">
+                    {form.attachment_url.split("/").pop()}
+                  </a>
+                  <Button type="button" variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => setForm(f => ({ ...f, attachment_url: "" }))}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className="hidden" onChange={handleFileUpload} />
+                  <Button type="button" variant="outline" size="sm" className="text-xs" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+                    {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Upload className="h-3.5 w-3.5 mr-1" />}
+                    {uploading ? "Enviando..." : "Upload"}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Auto-trigger after call */}
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs flex items-center gap-1.5">
+                  <PhoneForwarded className="h-3.5 w-3.5" /> Disparo automático pós-ligação
+                </Label>
+                <Switch
+                  checked={form.auto_trigger_enabled}
+                  onCheckedChange={v => setForm(f => ({ ...f, auto_trigger_enabled: v }))}
+                />
+              </div>
+              {form.auto_trigger_enabled && (
+                <div className="space-y-1">
+                  <p className="text-[11px] text-muted-foreground">
+                    Leads qualificados na ligação entram automaticamente nesta fila
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs whitespace-nowrap">Aguardar</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={60}
+                      className="h-7 text-xs w-16"
+                      value={form.auto_trigger_delay}
+                      onChange={e => setForm(f => ({ ...f, auto_trigger_delay: +e.target.value }))}
+                    />
+                    <span className="text-xs text-muted-foreground">min após ligação</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
