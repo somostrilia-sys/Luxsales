@@ -134,6 +134,8 @@ export default function GestaoUsuarios() {
   // Edit permissions modal
   const [editTarget, setEditTarget] = useState<CollabRow | null>(null);
   const [editPerms, setEditPerms] = useState<PermissionRow[]>([]);
+  const [editRoleId, setEditRoleId] = useState("");
+  const [editCompanyId, setEditCompanyId] = useState("");
   const [saving, setSaving] = useState(false);
 
   // Create invite modal
@@ -234,23 +236,50 @@ export default function GestaoUsuarios() {
   useEffect(() => { fetchInvites(); }, [fetchInvites]);
 
   // Open edit permissions modal
-  const openEdit = (c: CollabRow) => {
+  const openEdit = async (c: CollabRow) => {
     const existing = c.permissions;
     const merged = MODULES.map(m => {
       const found = existing.find(p => p.module === m.key);
       return found || { module: m.key, can_view: false, can_edit: false, can_delete: false };
     });
     setEditPerms(merged);
+
+    // Load current role_id and company_id for this collaborator
+    const { data } = await supabase
+      .from("collaborators")
+      .select("role_id, company_id")
+      .eq("id", c.id)
+      .maybeSingle();
+    setEditRoleId(data?.role_id || "");
+    setEditCompanyId(data?.company_id || "");
     setEditTarget(c);
   };
 
   const savePermissions = async () => {
     if (!editTarget) return;
     setSaving(true);
+
+    // Update role and company on collaborator
+    const updates: Record<string, string> = {};
+    if (editRoleId) updates.role_id = editRoleId;
+    if (editCompanyId) updates.company_id = editCompanyId;
+
+    if (Object.keys(updates).length > 0) {
+      const { error: collabError } = await supabase
+        .from("collaborators")
+        .update(updates)
+        .eq("id", editTarget.id);
+      if (collabError) {
+        toast.error("Erro ao atualizar colaborador: " + collabError.message);
+        setSaving(false);
+        return;
+      }
+    }
+
     // Upsert permissions
     const rows = editPerms.map(p => ({
       collaborator_id: editTarget.id,
-      company_id: companyId || collaborator?.company_id,
+      company_id: editCompanyId || companyId || collaborator?.company_id,
       module: p.module,
       can_view: p.can_view,
       can_edit: p.can_edit,
@@ -264,7 +293,7 @@ export default function GestaoUsuarios() {
     if (error) {
       toast.error("Erro ao salvar permissões");
     } else {
-      toast.success("Permissões atualizadas");
+      toast.success("Colaborador e permissões atualizados");
       setEditTarget(null);
       fetchCollabs();
     }
@@ -543,6 +572,38 @@ export default function GestaoUsuarios() {
             <DialogTitle>Permissões — {editTarget?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {/* Empresa e Cargo */}
+            <div className="grid grid-cols-2 gap-3">
+              {isCEO && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Empresa</Label>
+                  <Select value={editCompanyId} onValueChange={setEditCompanyId}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar empresa" /></SelectTrigger>
+                    <SelectContent>
+                      {allCompanies.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Cargo / Função</Label>
+                <Select value={editRoleId} onValueChange={(v) => {
+                  setEditRoleId(v);
+                  const r = roles.find(r => r.id === v);
+                  if (r) setEditPerms(defaultPerms(r.level));
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar cargo" /></SelectTrigger>
+                  <SelectContent>
+                    {roles.map(r => (
+                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="grid grid-cols-4 gap-2 text-xs font-medium text-muted-foreground px-1 mb-1">
               <span>Módulo</span>
               <span className="text-center">Ver</span>

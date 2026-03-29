@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
-  const { selectedCompanyId } = useCompanyFilter();import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
@@ -44,7 +44,8 @@ const originIcons: Record<string, string> = {
 
 export default function OptIns() {
   const { collaborator } = useCollaborator();
-  const { selectedCompanyId } = useCompanyFilter();  const [optIns, setOptIns] = useState<OptIn[]>([]);
+  const { selectedCompanyId } = useCompanyFilter();
+  const [optIns, setOptIns] = useState<OptIn[]>([]);
   const [stats, setStats] = useState<OptInStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
