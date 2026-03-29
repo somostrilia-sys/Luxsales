@@ -8,7 +8,6 @@ import { Loader2 } from "lucide-react";
 // Lazy-loaded pages
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
-const Registro = lazy(() => import("./pages/Registro"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const CriarConta = lazy(() => import("./pages/CriarConta"));
@@ -72,7 +71,6 @@ const App = () => (
           {/* Public */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/registro" element={<Registro />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/criar-conta" element={<CriarConta />} />
@@ -98,7 +96,6 @@ const App = () => (
           {/* WB — All roles */}
           <Route path="/my-leads" element={<ProtectedRoute><MyLeads /></ProtectedRoute>} />
           <Route path="/conversations" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
-          <Route path="/conversas" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
 
           {/* VoIP */}
           <Route path="/calls" element={<ProtectedRoute minLevel={0}><DashboardCalls /></ProtectedRoute>} />
