@@ -286,10 +286,19 @@ export default function Conversas() {
         body: JSON.stringify({
           to: normalizePhone(selectedPhone),
           message: messageText,
-          company_id: FALLBACK_COMPANY_ID,
+          company_id: companyId,
         }),
       });
       if (res.ok) {
+        // Adicionar mensagem enviada na lista local imediatamente
+        const sentMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          conversation_id: selectedConvId || "",
+          role: "assistant",
+          content: messageText,
+          created_at: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, sentMsg]);
         setMessageText("");
         inputRef.current?.focus();
       } else {
