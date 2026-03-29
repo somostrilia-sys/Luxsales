@@ -178,7 +178,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
           });
           if (cfgRes.ok) {
             const cfgJson = await cfgRes.json();
-            const cfg = cfgJson?.data || cfgJson;
+            const cfg = cfgJson?.config || cfgJson?.data || cfgJson;
             setCompanyConfig(cfg);
             setCompanyName(cfg?.company_name || collaborator?.company?.name || null);
             setSegment(cfg?.segment || null);

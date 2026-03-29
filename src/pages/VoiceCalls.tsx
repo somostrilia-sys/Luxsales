@@ -15,6 +15,8 @@ import { Download, Eye, CalendarIcon, Loader2, ChevronLeft, ChevronRight, Messag
 import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useCompany } from "@/contexts/CompanyContext";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
 
 const API_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/dashboard-calls";
 const AUTH_HEADER = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4";
@@ -66,6 +68,8 @@ function getTranscriptSummary(transcript: any): string {
 }
 
 export default function VoiceCalls() {
+  const { company_id: selectedCompanyId } = useCompany();
+  const { collaborator } = useCollaborator();
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -109,7 +113,7 @@ export default function VoiceCalls() {
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, search, dateRange]);
+  }, [page, statusFilter, search, dateRange, selectedCompanyId, collaborator]);
 
   useEffect(() => { fetchCalls(); }, [fetchCalls]);
 
