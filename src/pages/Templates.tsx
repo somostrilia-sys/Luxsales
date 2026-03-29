@@ -17,7 +17,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
   Loader2, CheckCircle, Clock, XCircle, Search, Sparkles,
-  AlertTriangle, Users, Send, History,
+  AlertTriangle, Users, Send, History, Pencil,
 } from "lucide-react";
 
 interface Template {
@@ -36,6 +36,7 @@ interface Template {
   total_sent?: number;
   rejection_reason?: string;
   rejection_suggestion?: string;
+  components?: any[];
 }
 
 interface GeneratedTemplate {
@@ -67,6 +68,7 @@ const statusConfig: Record<string, { icon: any; color: string; label: string }> 
   APPROVED: { icon: CheckCircle, color: "text-green-400", label: "Aprovado" },
   PENDING: { icon: Clock, color: "text-yellow-400", label: "Pendente" },
   REJECTED: { icon: XCircle, color: "text-red-400", label: "Rejeitado" },
+  draft: { icon: Pencil, color: "text-gray-400", label: "Rascunho" },
 };
 
 const qualityBadge = (q?: string) => {

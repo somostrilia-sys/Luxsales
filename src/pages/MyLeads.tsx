@@ -177,21 +177,20 @@ export default function MyLeads() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        (
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="assigned">Atribuído</SelectItem>
-              <SelectItem value="in_progress">Em contato</SelectItem>
-              <SelectItem value="contacted">Contatado</SelectItem>
-              <SelectItem value="follow_up">Follow-up</SelectItem>
-              <SelectItem value="converted">Convertido</SelectItem>
-              <SelectItem value="lost">Perdido</SelectItem>
-            </SelectContent>
-          </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="assigned">Atribuído</SelectItem>
+            <SelectItem value="in_progress">Em contato</SelectItem>
+            <SelectItem value="contacted">Contatado</SelectItem>
+            <SelectItem value="follow_up">Follow-up</SelectItem>
+            <SelectItem value="converted">Convertido</SelectItem>
+            <SelectItem value="lost">Perdido</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <Card>

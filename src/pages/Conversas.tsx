@@ -37,6 +37,8 @@ interface ConversationItem {
   status: string | null;
   human_mode: boolean;
   window_open: boolean;
+  is_typing: boolean;
+  typing_updated_at: string | null;
 }
 
 interface ChatMessage {
@@ -115,7 +117,7 @@ export default function Conversas() {
     try {
       const { data } = await supabase
         .from("wa_conversations")
-        .select("id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode")
+        .select("id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, is_typing, typing_updated_at")
         .order("last_message_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .limit(50)
@@ -137,6 +139,8 @@ export default function Conversas() {
             status: row.status,
             human_mode: (row as any).human_mode ?? false,
             window_open: false,
+            is_typing: (row as any).is_typing ?? false,
+            typing_updated_at: (row as any).typing_updated_at ?? null,
           });
         }
       }
@@ -593,6 +597,9 @@ export default function Conversas() {
     const selected = conversations.find((c) => c.id === selectedConvId);
     const title = selected?.lead_name || formatPhone(selectedPhone);
     const avatar = getAvatarTone(selectedPhone);
+    const isTyping = selected?.is_typing === true &&
+      selected?.typing_updated_at != null &&
+      (new Date().getTime() - new Date(selected.typing_updated_at).getTime()) < 10000;
 
     return (
       <div className="flex h-full flex-1 flex-col">
@@ -609,7 +616,10 @@ export default function Conversas() {
             </div>
             <div>
               <p className="text-[16px] wa-text-main" style={{ fontWeight: 500 }}>{title}</p>
-              <p className="text-[12px] wa-text-muted">{formatPhone(selectedPhone)}</p>
+              {isTyping
+                ? <p className="text-[12px]" style={{ color: "#008069" }}>digitando...</p>
+                : <p className="text-[12px] wa-text-muted">{formatPhone(selectedPhone)}</p>
+              }
             </div>
           </div>
           <div className="flex items-center gap-3">
