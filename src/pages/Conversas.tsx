@@ -105,10 +105,9 @@ export default function Conversas() {
     try {
       const { data } = await supabase
         .from("wa_conversations")
-        .select("id, phone, lead_name, last_message, last_message_at, status, human_mode")
-        .eq("company_id", companyId)
-        .order("last_message_at", { ascending: false })
-        .limit(20)
+        .select("id, phone, status, turn_count, created_at")
+        .order("created_at", { ascending: false })
+        .limit(50)
         .abortSignal(controller.signal);
 
       if (!data) { setLoadingList(false); return; }
