@@ -105,6 +105,7 @@ const App = () => (
           <Route path="/compliance-voz" element={<ProtectedRoute minLevel={0}><ComplianceVoz /></ProtectedRoute>} />
           <Route path="/configuracoes-voz" element={<ProtectedRoute minLevel={0}><ConfiguracoesVoz /></ProtectedRoute>} />
           <Route path="/meta-rules" element={<ProtectedRoute minLevel={0}><MetaRules /></ProtectedRoute>} />
+          <Route path="/voice/dialer" element={<ProtectedRoute minLevel={0}><VoiceDialer /></ProtectedRoute>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
