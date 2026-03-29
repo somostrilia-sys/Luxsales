@@ -95,6 +95,7 @@ export default function CallQueues() {
   const openCreate = () => { setEditId(null); setForm(emptyForm); setDialogOpen(true); };
   const openEdit = (q: CallQueue) => {
     setEditId(q.id);
+    const vc = q.voice_config;
     setForm({
       name: q.name, segment: q.segment || "", filter_tags: (q.filter_tags || []).join(", "),
       max_attempts: q.max_attempts, calls_per_hour: q.calls_per_hour, daily_limit: q.daily_limit,
@@ -103,6 +104,9 @@ export default function CallQueues() {
       retry_no_answer_min: q.retry_no_answer_min, retry_busy_min: q.retry_busy_min,
       voice_key: q.voice_key || "", system_prompt: q.system_prompt || "",
       opening_script: q.opening_script || "", priority_min: q.priority_min, priority_max: q.priority_max,
+      vc_system_prompt: vc?.system_prompt || "", vc_opening_script: vc?.opening_script || "",
+      vc_objection_tree: vc?.objection_tree || "", vc_forbidden_phrases: vc?.forbidden_phrases || "",
+      vc_tone: vc?.tone || "consultivo", vc_conversation_example: vc?.conversation_example || "",
     });
     setDialogOpen(true);
   };
