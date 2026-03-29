@@ -7,12 +7,17 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/lib/supabase";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { toast } from "sonner";
 import { Search, Loader2, ChevronLeft, ChevronRight, Users } from "lucide-react";
 
 const PAGE_SIZE = 20;
 
 export default function TeamManagement() {
+  const { collaborator } = useCollaborator();
+  const { selectedCompanyId } = useCompanyFilter();
+  const companyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : collaborator?.company_id;
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -36,6 +41,7 @@ export default function TeamManagement() {
       let countQuery = supabase
         .from("collaborators")
         .select("*", { count: "exact", head: true });
+      if (companyId) countQuery = countQuery.eq("company_id", companyId);
       if (debouncedSearch.length >= 3) countQuery = countQuery.or(`name.ilike.%${debouncedSearch}%,email.ilike.%${debouncedSearch}%`);
       const { count } = await countQuery.abortSignal(controller.signal);
       setTotal(count || 0);
@@ -44,6 +50,7 @@ export default function TeamManagement() {
       let query = supabase
         .from("collaborators")
         .select("id, name, email, phone, active, telegram_id, role:roles(name, slug), created_at");
+      if (companyId) query = query.eq("company_id", companyId);
       if (debouncedSearch.length >= 3) query = query.or(`name.ilike.%${debouncedSearch}%,email.ilike.%${debouncedSearch}%`);
 
       const { data, error } = await query
@@ -59,7 +66,7 @@ export default function TeamManagement() {
       clearTimeout(timer);
       setLoading(false);
     }
-  }, [page, debouncedSearch]);
+  }, [page, debouncedSearch, companyId]);
 
   useEffect(() => { fetchMembers(); }, [fetchMembers]);
 
