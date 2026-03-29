@@ -3611,6 +3611,63 @@ export type Database = {
         }
         Relationships: []
       }
+      company_whatsapp_config: {
+        Row: {
+          access_token: string | null
+          company_id: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          phone_number_id: string | null
+          updated_at: string | null
+          verify_token: string | null
+          waba_id: string | null
+          webhook_url: string | null
+          whatsapp_number: string | null
+        }
+        Insert: {
+          access_token?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          phone_number_id?: string | null
+          updated_at?: string | null
+          verify_token?: string | null
+          waba_id?: string | null
+          webhook_url?: string | null
+          whatsapp_number?: string | null
+        }
+        Update: {
+          access_token?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          phone_number_id?: string | null
+          updated_at?: string | null
+          verify_token?: string | null
+          waba_id?: string | null
+          webhook_url?: string | null
+          whatsapp_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_whatsapp_config_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_whatsapp_config_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "v_company_whatsapp_health"
+            referencedColumns: ["company_id"]
+          },
+        ]
+      }
       consultant_lead_pool: {
         Row: {
           assigned_at: string | null
