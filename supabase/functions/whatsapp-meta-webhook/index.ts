@@ -137,6 +137,17 @@ Deno.serve(async (req: Request) => {
                 })
                 .eq("idempotency_key", idempotencyKey);
 
+              // Atualizar indicador de digitando em wa_conversations
+              if (message.type === "text" || message.type === "interactive") {
+                await supabase
+                  .from("wa_conversations")
+                  .update({
+                    is_typing: true,
+                    typing_updated_at: new Date().toISOString(),
+                  })
+                  .eq("phone", message.from);
+              }
+
               // Log de auditoria
               await supabase.from("audit_logs").insert({
                 company_id: companyId,

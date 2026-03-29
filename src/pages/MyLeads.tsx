@@ -122,7 +122,7 @@ export default function MyLeads() {
     } finally {
       setLoading(false);
     }
-  }, [collaborator, isCEO, selectedCompanyId, statusFilter, debouncedSearch, page]);
+  }, [collaborator, selectedCompanyId, statusFilter, debouncedSearch, page]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
@@ -203,11 +203,7 @@ export default function MyLeads() {
             <div className="py-16 text-center">
               <Users className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
               <p className="text-muted-foreground text-sm">
-                {isCEO
-                  ? "Nenhum lead encontrado"
-                  : isCEO
-                    ? "Você é CEO — use Leads Master para a base completa. Esta tela é para leads distribuídos aos consultores."
-                    : "Nenhum lead atribuído. Peça ao gestor."}
+                Nenhum lead atribuído. Peça ao gestor para distribuir leads.
               </p>
             </div>
           ) : (
