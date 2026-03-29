@@ -65,7 +65,7 @@ export default function OptIns() {
         .order("created_at", { ascending: false });
 
       // CEO vê todos; outros colaboradores veem só da própria empresa
-      if (collaborator.level < 5) {
+      if (collaborator.role.level < 5) {
         query = query.eq("company_id", collaborator.company_id);
       }
 
