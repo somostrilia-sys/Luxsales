@@ -226,7 +226,7 @@ export default function Templates() {
   const pending = templates.filter((t) => (t.status === "PENDING" || t.status === "REJECTED") && (!search || t.name.toLowerCase().includes(search.toLowerCase())));
 
   const handleGenerate = async () => {
-    if (!objective.trim()) return;
+    if (!objective.trim() || !collaborator) return;
     setGenerating(true);
     setGenerated([]);
     try {
@@ -246,7 +246,30 @@ export default function Templates() {
       });
       const data = await res.json();
       if (res.ok) {
-        setGenerated(data.templates || []);
+        const templates: GeneratedTemplate[] = data.templates || [];
+        setGenerated(templates);
+
+        // Auto-salvar cada template como rascunho — NÃO submeter à Meta
+        const savePromises = templates.map((tmpl) =>
+          supabase.from("wa_templates").upsert({
+            company_id: effectiveCompanyId,
+            name: tmpl.name,
+            category: (tmpl.category || "MARKETING").toUpperCase(),
+            language: "pt_BR",
+            body: tmpl.body,
+            header: tmpl.header || null,
+            footer: tmpl.footer || null,
+            buttons: tmpl.buttons || [],
+            strategy_notes: tmpl.strategy_notes || null,
+            confidence_score: tmpl.confidence_score || null,
+            status: "draft",
+          }, { onConflict: "name,company_id" })
+        );
+        await Promise.all(savePromises);
+        toast.success(`${templates.length} variações geradas e salvas como rascunho`);
+        // Navegar para aba de rascunhos para submeter à Meta quando desejar
+        setTab("drafts");
+        fetchDrafts();
       } else {
         toast.error(data.error || "Erro ao gerar");
       }

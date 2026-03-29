@@ -95,7 +95,7 @@ export default function MyLeads() {
           .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
         if (error) throw error;
 
-        let items: LeadRow[] = (data ?? []).map((r: any) => ({
+        const rawItems: LeadRow[] = (data ?? []).map((r: any) => ({
           poolId: r.id,
           leadId: r.lead?.id ?? r.id,
           name: r.lead?.lead_name ?? null,
@@ -106,6 +106,14 @@ export default function MyLeads() {
           lastContact: r.last_contact_at,
           notes: r.notes,
         }));
+
+        // Deduplicação por lead_id (mantém o primeiro, que tem maior priority)
+        const seenLeadIds = new Set<string>();
+        let items: LeadRow[] = rawItems.filter((r) => {
+          if (seenLeadIds.has(r.leadId)) return false;
+          seenLeadIds.add(r.leadId);
+          return true;
+        });
 
         if (debouncedSearch.length >= 2) {
           const s = debouncedSearch.toLowerCase();
