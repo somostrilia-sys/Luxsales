@@ -80,8 +80,8 @@ const tempEmoji: Record<string, string> = { hot: "🔥", warm: "🌡️", cold: 
 
 // ── types ──
 interface Lead {
-  phone: string; name: string; status: string; lead_score: number; temperature: string;
-  segment: string; call_count: number; last_contact_at: string | null;
+  id: string; phone: string; name: string; status: string; score: number; temperature: string;
+  segment: string; call_count: number; last_contact_at: string | null; created_at: string;
   email?: string; tags?: string[]; extra_data?: Record<string, unknown>;
 }
 interface Stats {
@@ -135,26 +135,51 @@ export default function LeadsMaster() {
   const fetchLeads = useCallback(async (silent = false) => {
     if (!company_id) return;
     if (!silent) setLoading(true); else setRefreshing(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
     try {
-      const body: Record<string, unknown> = {
-        action: "list-master", ...base, limit: PAGE_SIZE, offset: page * PAGE_SIZE,
-        sort_by: fSort,
-      };
-      if (fStatus !== "all") body.status_filter = fStatus;
-      if (fTemp !== "all") body.temperature_filter = fTemp;
-      if (fSegment !== "all") body.segment_filter = fSegment;
-      if (fSearch.length >= 3) body.search = fSearch;
-      body.sort_order = fSort === "lead_score" ? "desc" : "desc";
+      // Count query (separate, head-only)
+      let countQ = supabase
+        .from("leads_master")
+        .select("*", { count: "exact", head: true })
+        .eq("company_id", company_id);
+      if (fStatus !== "all") countQ = countQ.eq("status", fStatus);
+      if (fTemp !== "all") countQ = countQ.eq("temperature", fTemp);
+      if (fSegment !== "all") countQ = countQ.eq("segment", fSegment);
+      if (fSearch.length >= 3) countQ = countQ.or(`name.ilike.%${fSearch}%,phone.ilike.%${fSearch}%`);
+      const { count } = await countQ.abortSignal(controller.signal);
+      setTotalRows(count || 0);
 
-      const data = await callEdge("lead-distributor", body);
-      setLeads(data.leads || []);
-      setTotalRows(data.total || 0);
-      if (data.stats) setStats({ ...defaultStats, ...data.stats });
-    } catch {
-      if (!silent) toast.error("Erro ao carregar leads");
+      // Data query
+      let query = supabase
+        .from("leads_master")
+        .select("id, name, phone, status, score, temperature, segment, call_count, last_contact_at, created_at")
+        .eq("company_id", company_id);
+      if (fStatus !== "all") query = query.eq("status", fStatus);
+      if (fTemp !== "all") query = query.eq("temperature", fTemp);
+      if (fSegment !== "all") query = query.eq("segment", fSegment);
+      if (fSearch.length >= 3) query = query.or(`name.ilike.%${fSearch}%,phone.ilike.%${fSearch}%`);
+
+      const offset = page * PAGE_SIZE;
+      const { data, error } = await query
+        .order("created_at", { ascending: false })
+        .range(offset, offset + 19)
+        .abortSignal(controller.signal);
+
+      if (error) throw error;
+      setLeads((data as Lead[]) || []);
+
+      // Stats via edge function (silent, non-blocking)
+      callEdge("lead-distributor", { action: "stats", company_id, requester_role: user_role || "ceo" })
+        .then(d => { if (d.stats) setStats({ ...defaultStats, ...d.stats }); })
+        .catch(() => {});
+    } catch (e: any) {
+      if (e.name !== "AbortError" && !silent) toast.error("Erro ao carregar leads");
+    } finally {
+      clearTimeout(timer);
+      setLoading(false);
+      setRefreshing(false);
     }
-    setLoading(false);
-    setRefreshing(false);
   }, [company_id, user_role, page, fStatus, fTemp, fSegment, fSearch, fSort]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
