@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Phone, MessageSquare, LogOut, Settings,
   FileText, Send, UserCog, Users, ShieldCheck, Sparkles,
-  ClipboardList, PhoneCall, Upload, Loader2,
+  ClipboardList, PhoneCall, Upload, Loader2, Mic, FlaskConical, History,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -52,6 +52,14 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
       { title: "Meus Leads", url: "/my-leads", icon: ClipboardList, levels: [0, 1, 2, 3] },
       { title: "Conversas", url: "/conversations", icon: MessageSquare, levels: [0, 1, 2, 3], badgeKey: "conversas" },
       { title: "Templates", url: "/templates", icon: FileText, levels: [0] },
+    ],
+  },
+  {
+    label: "Venda por Voz",
+    items: [
+      { title: "Discador", url: "/voice/dialer", icon: PhoneCall, levels: [0] },
+      { title: "Simulação", url: "/voice/simulate", icon: FlaskConical, levels: [0] },
+      { title: "Histórico", url: "/voice/calls", icon: History, levels: [0] },
     ],
   },
   {
