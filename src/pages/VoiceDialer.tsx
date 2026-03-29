@@ -11,7 +11,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 
-const ORCH = import.meta.env.VITE_ORCHESTRATOR_URL || "http://192.168.0.206:3002";
+const ORCH = import.meta.env.VITE_ORCHESTRATOR_URL || "http://134.122.17.106:3099";
 
 type QueueItem = {
   lead_id: string;
@@ -40,6 +40,7 @@ export default function VoiceDialer() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [simMode, setSimMode] = useState(true);
+  const [offline, setOffline] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -47,8 +48,9 @@ export default function VoiceDialer() {
       if (!res.ok) throw new Error("Erro ao buscar status");
       const json = await res.json();
       setData(json);
+      setOffline(false);
     } catch {
-      // silent on poll
+      setOffline(true);
     } finally {
       setLoading(false);
     }
@@ -78,8 +80,10 @@ export default function VoiceDialer() {
     }
   };
 
-  const st = data?.status ?? "stopped";
-  const badge = statusConfig[st];
+  const st = offline ? "stopped" : (data?.status ?? "stopped");
+  const badge = offline
+    ? { label: "Offline", className: "bg-destructive/15 text-destructive border-destructive/30" }
+    : statusConfig[st];
 
   return (
     <DashboardLayout>
