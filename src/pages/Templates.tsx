@@ -435,7 +435,52 @@ export default function Templates() {
     setSavingAssign(false);
   };
 
-  const TemplateCard = ({ t, showAssign }: { t: Template; showAssign?: boolean }) => {
+  const [resubmitting, setResubmitting] = useState<string | null>(null);
+
+  const handleResubmitTemplate = async (t: Template) => {
+    if (!collaborator) return;
+    setResubmitting(t.name);
+    try {
+      const headers = await getHeaders();
+      const components: any[] = [];
+      if (t.body) components.push({ type: "BODY", text: t.body });
+      if (t.header) components.push({ type: "HEADER", format: "TEXT", text: t.header });
+      if (t.footer) components.push({ type: "FOOTER", text: t.footer });
+      if (t.buttons && t.buttons.length > 0) {
+        components.push({
+          type: "BUTTONS",
+          buttons: t.buttons.map((b: any) => typeof b === "string"
+            ? { type: "QUICK_REPLY", text: b }
+            : { type: b.type || "QUICK_REPLY", text: b.text }
+          ),
+        });
+      }
+      const res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          action: "create",
+          company_id: effectiveCompanyId,
+          name: t.name,
+          category: (t.category || "MARKETING").toUpperCase(),
+          language: t.language || "pt_BR",
+          components,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Template enviado para análise da Meta");
+        fetchTemplates();
+      } else {
+        toast.error(data.error || "Erro ao submeter");
+      }
+    } catch {
+      toast.error("Erro de conexão");
+    }
+    setResubmitting(null);
+  };
+
+  const TemplateCard = ({ t, showAssign, showSubmit }: { t: Template; showAssign?: boolean; showSubmit?: boolean }) => {
     const st = statusConfig[t.status] || statusConfig.PENDING;
     const StIcon = st.icon;
     return (
@@ -466,11 +511,19 @@ export default function Templates() {
               {t.rejection_suggestion && <p className="text-muted-foreground mt-1">Sugestão: {t.rejection_suggestion}</p>}
             </div>
           )}
-          {showAssign && (
-            <Button size="sm" variant="outline" onClick={() => openAssignModal(t)} className="mt-2">
-              <Users className="h-3.5 w-3.5 mr-1" /> Atribuir a vendedores
-            </Button>
-          )}
+          <div className="flex flex-wrap gap-2 mt-2">
+            {showAssign && (
+              <Button size="sm" variant="outline" onClick={() => openAssignModal(t)}>
+                <Users className="h-3.5 w-3.5 mr-1" /> Atribuir a vendedores
+              </Button>
+            )}
+            {showSubmit && (t.status === "REJECTED" || t.status === "PENDING") && (
+              <Button size="sm" variant="default" disabled={resubmitting === t.name} onClick={() => handleResubmitTemplate(t)}>
+                {resubmitting === t.name ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                {t.status === "REJECTED" ? "Resubmeter à Meta" : "Enviar para análise"}
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
     );
@@ -517,7 +570,7 @@ export default function Templates() {
             <Card><CardContent className="py-12 text-center text-muted-foreground">Nenhum template pendente ou rejeitado.</CardContent></Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {pending.map((t) => <TemplateCard key={t.name} t={t} />)}
+              {pending.map((t) => <TemplateCard key={t.name} t={t} showSubmit />)}
             </div>
           )}
 

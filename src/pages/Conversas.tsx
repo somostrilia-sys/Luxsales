@@ -262,10 +262,11 @@ export default function Conversas() {
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
   useEffect(() => { if (windowOpen) inputRef.current?.focus(); }, [selectedPhone, windowOpen]);
 
-  // ── Realtime subscription for wa_messages ──
+  // ── Realtime subscription for wa_messages + wa_conversations ──
   useEffect(() => {
     const channel = supabase
-      .channel("wa-messages-rt")
+      .channel("wa-realtime")
+      // Novas mensagens → atualiza chat + lista
       .on("postgres_changes", {
         event: "INSERT",
         schema: "public",
@@ -278,6 +279,22 @@ export default function Conversas() {
             return [...prev, msg];
           });
         }
+        loadConversations(true);
+      })
+      // Nova conversa → atualiza lista imediatamente
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "wa_conversations",
+      }, () => {
+        loadConversations(true);
+      })
+      // Conversa atualizada (last_message, status, typing, etc.) → atualiza lista
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "wa_conversations",
+      }, () => {
         loadConversations(true);
       })
       .subscribe();
