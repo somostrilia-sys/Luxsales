@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 
 const PROXY = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/orchestrator-proxy";
-const AUTH_HEADER = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.pF2XU3pFDc98GSJzA1xyf7d4pHbkrxf3sRDX1jh5Vrg";
+const AUTH_HEADER = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4";
 const proxyUrl = (path: string) => `${PROXY}?path=${encodeURIComponent(path)}`;
 
 type QueueItem = {
