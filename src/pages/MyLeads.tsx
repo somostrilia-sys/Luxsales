@@ -42,29 +42,36 @@ export default function MyLeads() {
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
     try {
+      // Separate count query
+      let countQuery = supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true });
+      if (statusFilter !== "all") countQuery = countQuery.eq("status", statusFilter);
+      if (debouncedSearch.length >= 3) countQuery = countQuery.or(`name.ilike.%${debouncedSearch}%,phone.ilike.%${debouncedSearch}%`);
+      const { count } = await countQuery.abortSignal(controller.signal);
+      setTotal(count || 0);
+
+      // Data query
       let query = supabase
         .from("leads")
-        .select("id, name, phone, email, status, source, city, category, created_at", { count: "exact" });
+        .select("id, name, phone, email, status, source, city, category, created_at");
+      if (statusFilter !== "all") query = query.eq("status", statusFilter);
+      if (debouncedSearch.length >= 3) query = query.or(`name.ilike.%${debouncedSearch}%,phone.ilike.%${debouncedSearch}%`);
 
-      if (statusFilter !== "all") {
-        query = query.eq("status", statusFilter);
-      }
-
-      if (debouncedSearch.length >= 3) {
-        query = query.or(`name.ilike.%${debouncedSearch}%,phone.ilike.%${debouncedSearch}%`);
-      }
-
-      const { data, count, error } = await query
+      const { data, error } = await query
         .order("created_at", { ascending: false })
-        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+        .abortSignal(controller.signal);
 
       if (error) throw error;
       setLeads(data || []);
-      setTotal(count || 0);
     } catch (e: any) {
-      toast.error(e.message || "Erro ao buscar leads");
+      if (e.name !== "AbortError") toast.error(e.message || "Erro ao buscar leads");
     } finally {
+      clearTimeout(timer);
       setLoading(false);
     }
   }, [page, debouncedSearch, statusFilter]);

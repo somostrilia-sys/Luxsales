@@ -111,7 +111,7 @@ export default function LeadsMaster() {
   const [collabs, setCollabs] = useState<{ id: string; name: string }[]>([]);
 
   const base = { company_id, requester_role: user_role || "ceo" };
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 20;
 
   const fetchLeads = useCallback(async (silent = false) => {
     if (!company_id) return;

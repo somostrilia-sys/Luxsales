@@ -110,55 +110,67 @@ export default function Conversas() {
   // ── Load conversation list ──
   const loadConversations = useCallback(async () => {
     setLoadingList(true);
-    const { data: msgs } = await supabase
-      .from("whatsapp_meta_messages")
-      .select("phone_from, body, created_at, status")
-      .eq("company_id", companyId)
-      .eq("direction", "inbound")
-      .order("created_at", { ascending: false })
-      .limit(500);
-
-    if (!msgs) { setLoadingList(false); return; }
-
-    // Group by phone_from, keep latest
-    const map = new Map<string, ConversationItem>();
-    for (const m of msgs) {
-      if (!map.has(m.phone_from)) {
-        map.set(m.phone_from, {
-          phone_from: m.phone_from,
-          body: m.body,
-          created_at: m.created_at,
-          lead_name: null,
-          window_open: false,
-          ai_status: undefined,
-        });
-      }
-    }
-
-    const phones = Array.from(map.keys());
-
-    // Enrich with lifecycle data
-    if (phones.length > 0) {
-      const { data: lifecycles } = await supabase
-        .from("lead_whatsapp_lifecycle")
-        .select("phone_number, lead_name, window_open, ai_conversation_active")
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+      const { data: msgs } = await supabase
+        .from("whatsapp_meta_messages")
+        .select("phone_from, body, created_at, status")
         .eq("company_id", companyId)
-        .in("phone_number", phones);
+        .eq("direction", "inbound")
+        .order("created_at", { ascending: false })
+        .limit(200)
+        .abortSignal(controller.signal);
 
-      if (lifecycles) {
-        for (const lc of lifecycles) {
-          const item = map.get((lc as any).phone_number);
-          if (item) {
-            item.lead_name = (lc as any).lead_name || null;
-            item.window_open = (lc as any).window_open ?? false;
-            item.ai_status = (lc as any).ai_conversation_active ? "ia" : undefined;
+      if (!msgs) { setLoadingList(false); return; }
+
+      // Group by phone_from, keep latest — max 20 conversations
+      const map = new Map<string, ConversationItem>();
+      for (const m of msgs) {
+        if (map.size >= 20 && !map.has(m.phone_from)) continue;
+        if (!map.has(m.phone_from)) {
+          map.set(m.phone_from, {
+            phone_from: m.phone_from,
+            body: m.body,
+            created_at: m.created_at,
+            lead_name: null,
+            window_open: false,
+            ai_status: undefined,
+          });
+        }
+      }
+
+      const phones = Array.from(map.keys());
+
+      // Enrich with lifecycle data
+      if (phones.length > 0) {
+        const { data: lifecycles } = await supabase
+          .from("lead_whatsapp_lifecycle")
+          .select("phone_number, lead_name, window_open, ai_conversation_active")
+          .eq("company_id", companyId)
+          .in("phone_number", phones)
+          .limit(20)
+          .abortSignal(controller.signal);
+
+        if (lifecycles) {
+          for (const lc of lifecycles) {
+            const item = map.get((lc as any).phone_number);
+            if (item) {
+              item.lead_name = (lc as any).lead_name || null;
+              item.window_open = (lc as any).window_open ?? false;
+              item.ai_status = (lc as any).ai_conversation_active ? "ia" : undefined;
+            }
           }
         }
       }
-    }
 
-    setConversations(Array.from(map.values()));
-    setLoadingList(false);
+      setConversations(Array.from(map.values()));
+    } catch (e: any) {
+      if (e.name !== "AbortError") toast.error("Erro ao carregar conversas");
+    } finally {
+      clearTimeout(timer);
+      setLoadingList(false);
+    }
   }, [companyId]);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
@@ -175,17 +187,16 @@ export default function Conversas() {
 
     const load = async () => {
       setLoadingChat(true);
+      const chatController = new AbortController();
+      const chatTimer = setTimeout(() => chatController.abort(), 10000);
       try {
         const { data, error } = await supabase
           .from("whatsapp_meta_messages")
           .select("*")
           .or(`phone_from.eq.${selectedPhone},phone_to.eq.${selectedPhone}`)
           .order("created_at", { ascending: true })
-          .limit(200);
-
-        console.log("Query result - error:", error);
-        console.log("Query result - count:", data?.length);
-        console.log("Query result - first:", data?.[0]);
+          .limit(20)
+          .abortSignal(chatController.signal);
 
         if (data && data.length > 0) {
           setMessages(data as ChatMessage[]);
@@ -195,11 +206,12 @@ export default function Conversas() {
             .select("*")
             .eq("phone_from", selectedPhone)
             .order("created_at", { ascending: true })
-            .limit(200);
+            .limit(20)
+            .abortSignal(chatController.signal);
 
-          console.log("Fallback result:", data2?.length);
           setMessages((data2 || []) as ChatMessage[]);
         }
+        clearTimeout(chatTimer);
       } catch (err) {
         console.error("Erro ao buscar mensagens:", err);
         setMessages([]);

@@ -18,7 +18,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
   Send, Play, Pause, Pencil, Plus, RefreshCw,
-  Loader2, ChevronLeft, Eye, MessageSquare, Reply,
+  Loader2, ChevronLeft, ChevronRight, Eye, MessageSquare, Reply,
   Upload, Paperclip, X, PhoneForwarded,
 } from "lucide-react";
 
@@ -67,6 +67,8 @@ const emptyForm = {
   auto_trigger_delay: 2,
 };
 
+const DQ_PAGE_SIZE = 20;
+
 export default function DispatchQueues() {
   const { company_id } = useCompany();
   const navigate = useNavigate();
@@ -78,18 +80,37 @@ export default function DispatchQueues() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
 
   const load = useCallback(async () => {
     if (!company_id) return;
     setLoading(true);
-    const { data } = await supabase
-      .from("dispatch_queues")
-      .select("*")
-      .eq("company_id", company_id)
-      .order("created_at", { ascending: false });
-    setQueues((data as any[]) || []);
-    setLoading(false);
-  }, [company_id]);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+      const { count } = await supabase
+        .from("dispatch_queues")
+        .select("*", { count: "exact", head: true })
+        .eq("company_id", company_id)
+        .abortSignal(controller.signal);
+      setTotal(count || 0);
+
+      const { data } = await supabase
+        .from("dispatch_queues")
+        .select("*")
+        .eq("company_id", company_id)
+        .order("created_at", { ascending: false })
+        .range(page * DQ_PAGE_SIZE, (page + 1) * DQ_PAGE_SIZE - 1)
+        .abortSignal(controller.signal);
+      setQueues((data as any[]) || []);
+    } catch (e: any) {
+      if (e.name !== "AbortError") toast.error("Erro ao carregar filas");
+    } finally {
+      clearTimeout(timer);
+      setLoading(false);
+    }
+  }, [company_id, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -97,6 +118,7 @@ export default function DispatchQueues() {
     if (!company_id) return;
     supabase.from("whatsapp_meta_templates").select("name, status")
       .eq("company_id", company_id).eq("status", "APPROVED")
+      .limit(20)
       .then(({ data }) => setTemplates((data as Template[]) || []));
   }, [company_id]);
 
@@ -257,6 +279,22 @@ export default function DispatchQueues() {
           </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {Math.ceil(total / DQ_PAGE_SIZE) > 1 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>{page * DQ_PAGE_SIZE + 1}–{Math.min((page + 1) * DQ_PAGE_SIZE, total)} de {total}</span>
+          <div className="flex gap-1">
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="flex items-center px-3 text-xs">{page + 1} / {Math.ceil(total / DQ_PAGE_SIZE)}</span>
+            <Button variant="outline" size="sm" disabled={page >= Math.ceil(total / DQ_PAGE_SIZE) - 1} onClick={() => setPage(p => p + 1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Form Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
