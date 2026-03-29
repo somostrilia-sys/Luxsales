@@ -219,7 +219,7 @@ export default function LeadsMaster() {
     setDetailLoading(true);
     setDetailHistory(null);
     try {
-      const data = await callEdge("lead-distributor", { action: "lead-detail", ...base, phone_number: lead.phone });
+      const data = await callEdge("lead-distributor", { action: "lead-detail", ...base, phone_number: lead.phone_number });
       setDetailHistory(data);
     } catch { /* silent */ }
     setDetailLoading(false);
@@ -505,7 +505,7 @@ export default function LeadsMaster() {
                   <Badge variant="outline" className={`text-xs ${(statusLabels[detailLead.status] || { cls: "" }).cls}`}>
                     {(statusLabels[detailLead.status] || { label: detailLead.status }).label}
                   </Badge>
-                  {detailLead.name || detailLead.phone}
+                  {detailLead.lead_name || detailLead.phone_number}
                 </SheetTitle>
               </SheetHeader>
 
@@ -514,18 +514,13 @@ export default function LeadsMaster() {
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase">Dados</h4>
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div><span className="text-muted-foreground">Telefone:</span> <span className="font-mono">{fmtPhone(detailLead.phone)}</span></div>
-                    <div><span className="text-muted-foreground">Nome:</span> {detailLead.name || "—"}</div>
-                    <div><span className="text-muted-foreground">Email:</span> {detailLead.email || "—"}</div>
-                    <div><span className="text-muted-foreground">Score:</span> {detailLead.score}</div>
-                    <div><span className="text-muted-foreground">Temp:</span> {tempEmoji[detailLead.temperature]} {detailLead.temperature}</div>
+                    <div><span className="text-muted-foreground">Telefone:</span> <span className="font-mono">{fmtPhone(detailLead.phone_number)}</span></div>
+                    <div><span className="text-muted-foreground">Nome:</span> {detailLead.lead_name || "—"}</div>
+                    <div><span className="text-muted-foreground">Score:</span> {detailLead.lead_score || 0}</div>
+                    <div><span className="text-muted-foreground">Temp:</span> {tempEmoji[detailLead.lead_temperature] || "—"} {detailLead.lead_temperature || "—"}</div>
                     <div><span className="text-muted-foreground">Segmento:</span> {detailLead.segment || "—"}</div>
+                    <div><span className="text-muted-foreground">Ligações:</span> {detailLead.total_call_attempts || 0}</div>
                   </div>
-                  {detailLead.tags && detailLead.tags.length > 0 && (
-                    <div className="flex gap-1 flex-wrap">
-                      {detailLead.tags.map(t => <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>)}
-                    </div>
-                  )}
                 </div>
 
                 {/* Timeline */}
@@ -587,10 +582,10 @@ export default function LeadsMaster() {
 
                 {/* Quick actions */}
                 <div className="flex gap-2 pt-2">
-                  <Button size="sm" onClick={() => singleCall(detailLead.phone)}>
+                  <Button size="sm" onClick={() => singleCall(detailLead.phone_number)}>
                     <Phone className="h-3.5 w-3.5 mr-1.5" /> Ligar
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => singleDispatch(detailLead.phone)}>
+                  <Button size="sm" variant="outline" onClick={() => singleDispatch(detailLead.phone_number)}>
                     <Send className="h-3.5 w-3.5 mr-1.5" /> Disparar
                   </Button>
                 </div>
