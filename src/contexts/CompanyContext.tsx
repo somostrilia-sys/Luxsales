@@ -75,22 +75,25 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
       // 1. Fetch dispatch permissions
       let permData: any = null;
-      try {
-        const permRes = await fetch(`${EDGE_BASE}/dispatch-permissions`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            action: "get",
-            company_id: baseCompanyId,
-            collaborator_id: user.id,
-          }),
-        });
-        if (permRes.ok) {
-          const json = await permRes.json();
-          permData = json?.data || json;
+      // Only call edge function if both IDs are valid UUIDs (not null)
+      if (baseCompanyId && user.id) {
+        try {
+          const permRes = await fetch(`${EDGE_BASE}/dispatch-permissions`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              action: "get",
+              company_id: baseCompanyId,
+              collaborator_id: user.id,
+            }),
+          });
+          if (permRes.ok) {
+            const json = await permRes.json();
+            permData = json?.data || json;
+          }
+        } catch {
+          // Edge function may not exist yet — fall back to direct query
         }
-      } catch {
-        // Edge function may not exist yet — fall back to direct query
       }
 
       // Fallback: query dispatch_permissions table directly
