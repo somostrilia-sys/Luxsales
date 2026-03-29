@@ -172,9 +172,13 @@ export default function LeadsMaster() {
       if (error) throw error;
       setLeads((data as Lead[]) || []);
 
-      // Stats via edge function (silent, non-blocking)
-      callEdge("lead-distributor", { action: "stats", company_id, requester_role: user_role || "ceo" })
-        .then(d => { if (d.stats) setStats({ ...defaultStats, ...d.stats }); })
+      // Stats via dashboard-calls (leads_master breakdown)
+      callEdge("dashboard-calls", { action: "overview", company_id, requester_role: user_role || "ceo" })
+        .then(d => {
+          if (d.leads_master) {
+            setStats({ ...defaultStats, ...d.leads_master });
+          }
+        })
         .catch(() => {});
     } catch (e: any) {
       if (e.name !== "AbortError" && !silent) toast.error("Erro ao carregar leads");
