@@ -114,7 +114,7 @@ export default function CallQueues() {
   const save = async () => {
     if (!form.name.trim()) { toast.error("Nome obrigatório"); return; }
     setSaving(true);
-    const payload = {
+    const payload: any = {
       company_id,
       name: form.name.trim(),
       segment: form.segment || null,
@@ -126,6 +126,14 @@ export default function CallQueues() {
       voice_key: form.voice_key || null, system_prompt: form.system_prompt || null,
       opening_script: form.opening_script || null,
       priority_min: form.priority_min, priority_max: form.priority_max,
+      voice_config: {
+        system_prompt: form.vc_system_prompt,
+        opening_script: form.vc_opening_script,
+        objection_tree: form.vc_objection_tree,
+        forbidden_phrases: form.vc_forbidden_phrases,
+        tone: form.vc_tone,
+        conversation_example: form.vc_conversation_example,
+      },
     };
     const { error } = editId
       ? await supabase.from("call_queues").update(payload).eq("id", editId)
