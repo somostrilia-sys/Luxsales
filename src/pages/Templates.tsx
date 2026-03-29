@@ -39,12 +39,14 @@ interface Template {
 
 interface GeneratedTemplate {
   name: string;
+  category?: string;
   body: string;
   header?: string;
   footer?: string;
-  buttons?: string[];
-  confidence_score: number;
-  issues: { type: string; message: string }[];
+  buttons?: { type: string; text: string; url?: string; phone_number?: string }[];
+  strategy_notes?: string;
+  confidence_score?: number;
+  issues?: { type: string; message: string }[];
 }
 
 interface Rejection {
@@ -174,6 +176,7 @@ export default function Templates() {
           objective,
           company_id: "70967469-9a9b-4e29-a744-410e41eb47a5",
           count: 3,
+          quantity: 3,
         }),
       });
       const data = await res.json();
@@ -396,21 +399,34 @@ export default function Templates() {
           {generated.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {generated.map((g, idx) => {
-                const sb = scoreBadge(g.confidence_score);
+                const score = g.confidence_score || 0;
+                const sb = score > 0 ? scoreBadge(score) : null;
                 const isEditing = editIdx === idx;
+                const catColor = (g.category || "").toUpperCase() === "MARKETING"
+                  ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+                  : "bg-green-500/10 text-green-400 border-green-500/30";
                 return (
                   <Card key={idx} className="hover:border-primary/30 transition-colors">
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
                         <CardTitle className="text-sm">{g.name}</CardTitle>
-                        <Badge variant="outline" className={`text-xs ${sb.color}`}>{sb.label}</Badge>
+                        <div className="flex gap-1">
+                          {g.category && (
+                            <Badge variant="outline" className={`text-xs ${catColor}`}>
+                              {g.category.toUpperCase()}
+                            </Badge>
+                          )}
+                          {sb && <Badge variant="outline" className={`text-xs ${sb.color}`}>{sb.label}</Badge>}
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-lg font-bold ${scoreColor(g.confidence_score)}`}>{g.confidence_score}</span>
-                        <span className="text-xs text-muted-foreground">confiança</span>
-                      </div>
+                      {score > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className={`text-lg font-bold ${scoreColor(score)}`}>{score}</span>
+                          <span className="text-xs text-muted-foreground">confiança</span>
+                        </div>
+                      )}
 
                       {isEditing ? (
                         <div className="space-y-2">
@@ -426,7 +442,22 @@ export default function Templates() {
                           </div>
                         </div>
                       ) : (
-                        <p className="text-sm text-muted-foreground bg-muted/30 p-2 rounded">{g.body}</p>
+                        <p className="text-sm text-muted-foreground bg-muted/30 p-2 rounded whitespace-pre-wrap">{g.body}</p>
+                      )}
+
+                      {g.strategy_notes && (
+                        <p className="text-xs italic text-muted-foreground border-l-2 border-primary/30 pl-2">{g.strategy_notes}</p>
+                      )}
+
+                      {g.buttons && g.buttons.length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground">Botões:</p>
+                          {g.buttons.map((btn, bi) => (
+                            <Badge key={bi} variant="secondary" className="text-xs mr-1">
+                              {typeof btn === "string" ? btn : btn.text}
+                            </Badge>
+                          ))}
+                        </div>
                       )}
 
                       {(g.issues || []).length > 0 && (
@@ -443,12 +474,10 @@ export default function Templates() {
                         <Button size="sm" variant="outline" onClick={() => { setEditIdx(idx); setEditBody(g.body); }}>
                           Editar
                         </Button>
-                        {g.confidence_score >= 70 && (
-                          <Button size="sm" disabled={submitting === g.name} onClick={() => handleSubmitTemplate(g)}>
-                            {submitting === g.name ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
-                            Submeter à Meta
-                          </Button>
-                        )}
+                        <Button size="sm" disabled={submitting === g.name} onClick={() => handleSubmitTemplate(g)}>
+                          {submitting === g.name ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
+                          Submeter à Meta
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
