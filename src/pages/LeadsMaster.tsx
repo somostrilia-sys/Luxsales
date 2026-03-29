@@ -121,10 +121,11 @@ export default function LeadsMaster() {
         action: "list-master", ...base, limit: PAGE_SIZE, offset: page * PAGE_SIZE,
         sort_by: fSort,
       };
-      if (fStatus !== "all") body.status = fStatus;
-      if (fTemp !== "all") body.temperature = fTemp;
-      if (fSegment !== "all") body.segment = fSegment;
+      if (fStatus !== "all") body.status_filter = fStatus;
+      if (fTemp !== "all") body.temperature_filter = fTemp;
+      if (fSegment !== "all") body.segment_filter = fSegment;
       if (fSearch.length >= 3) body.search = fSearch;
+      body.sort_order = fSort === "lead_score" ? "desc" : "desc";
 
       const data = await callEdge("lead-distributor", body);
       setLeads(data.leads || []);
@@ -442,7 +443,7 @@ export default function LeadsMaster() {
               <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="text-xs flex items-center px-2">Pg {page + 1}</span>
+              <span className="text-xs flex items-center px-2">Página {page + 1} de {Math.ceil(totalRows / PAGE_SIZE)}</span>
               <Button variant="ghost" size="icon" className="h-8 w-8" disabled={(page + 1) * PAGE_SIZE >= totalRows} onClick={() => setPage(p => p + 1)}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
