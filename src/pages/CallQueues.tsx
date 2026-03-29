@@ -19,8 +19,14 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
   Phone, Play, Pause, Pencil, Trash2, Plus, RefreshCw,
-  Loader2, ChevronLeft, CheckCircle, Users, Target,
+  Loader2, ChevronLeft, CheckCircle, Users, Target, Mic,
 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
+interface VoiceConfig {
+  system_prompt: string; opening_script: string; objection_tree: string;
+  forbidden_phrases: string; tone: string; conversation_example: string;
+}
 
 interface CallQueue {
   id: string; name: string; status: string; segment: string | null;
@@ -32,6 +38,7 @@ interface CallQueue {
   total_leads: number; leads_called: number; leads_answered: number;
   leads_opted_in: number; leads_converted: number;
   created_at: string;
+  voice_config: VoiceConfig | null;
 }
 
 interface VoiceProfile { voice_key: string; voice_name: string; }
@@ -50,6 +57,8 @@ const emptyForm = {
   schedule_end: "20:00", active_days: [1, 2, 3, 4, 5],
   retry_no_answer_min: 120, retry_busy_min: 30, voice_key: "",
   system_prompt: "", opening_script: "", priority_min: 1, priority_max: 10,
+  vc_system_prompt: "", vc_opening_script: "", vc_objection_tree: "",
+  vc_forbidden_phrases: "", vc_tone: "consultivo", vc_conversation_example: "",
 };
 
 export default function CallQueues() {
@@ -86,6 +95,7 @@ export default function CallQueues() {
   const openCreate = () => { setEditId(null); setForm(emptyForm); setDialogOpen(true); };
   const openEdit = (q: CallQueue) => {
     setEditId(q.id);
+    const vc = q.voice_config;
     setForm({
       name: q.name, segment: q.segment || "", filter_tags: (q.filter_tags || []).join(", "),
       max_attempts: q.max_attempts, calls_per_hour: q.calls_per_hour, daily_limit: q.daily_limit,
@@ -94,6 +104,9 @@ export default function CallQueues() {
       retry_no_answer_min: q.retry_no_answer_min, retry_busy_min: q.retry_busy_min,
       voice_key: q.voice_key || "", system_prompt: q.system_prompt || "",
       opening_script: q.opening_script || "", priority_min: q.priority_min, priority_max: q.priority_max,
+      vc_system_prompt: vc?.system_prompt || "", vc_opening_script: vc?.opening_script || "",
+      vc_objection_tree: vc?.objection_tree || "", vc_forbidden_phrases: vc?.forbidden_phrases || "",
+      vc_tone: vc?.tone || "consultivo", vc_conversation_example: vc?.conversation_example || "",
     });
     setDialogOpen(true);
   };
@@ -101,7 +114,7 @@ export default function CallQueues() {
   const save = async () => {
     if (!form.name.trim()) { toast.error("Nome obrigatório"); return; }
     setSaving(true);
-    const payload = {
+    const payload: any = {
       company_id,
       name: form.name.trim(),
       segment: form.segment || null,
@@ -113,6 +126,14 @@ export default function CallQueues() {
       voice_key: form.voice_key || null, system_prompt: form.system_prompt || null,
       opening_script: form.opening_script || null,
       priority_min: form.priority_min, priority_max: form.priority_max,
+      voice_config: {
+        system_prompt: form.vc_system_prompt,
+        opening_script: form.vc_opening_script,
+        objection_tree: form.vc_objection_tree,
+        forbidden_phrases: form.vc_forbidden_phrases,
+        tone: form.vc_tone,
+        conversation_example: form.vc_conversation_example,
+      },
     };
     const { error } = editId
       ? await supabase.from("call_queues").update(payload).eq("id", editId)
@@ -261,6 +282,49 @@ export default function CallQueues() {
             </div>
             <div><Label className="text-xs">System Prompt</Label><Textarea className="text-xs h-16" value={form.system_prompt} onChange={e => setForm(f => ({ ...f, system_prompt: e.target.value }))} /></div>
             <div><Label className="text-xs">Script de abertura</Label><Textarea className="text-xs h-16" value={form.opening_script} onChange={e => setForm(f => ({ ...f, opening_script: e.target.value }))} /></div>
+
+            {/* Voice Config Section */}
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full text-xs gap-1.5">
+                  <Mic className="h-3.5 w-3.5" /> Configuração Avançada de Voz
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-3 mt-3">
+                <div>
+                  <Label className="text-xs">System Prompt (Voz IA)</Label>
+                  <Textarea className="text-xs" rows={10} placeholder="Você é um assistente de vendas especializado em..." value={form.vc_system_prompt} onChange={e => setForm(f => ({ ...f, vc_system_prompt: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Script de Abertura</Label>
+                  <Textarea className="text-xs" rows={5} placeholder="Olá, meu nome é... Estou ligando da..." value={form.vc_opening_script} onChange={e => setForm(f => ({ ...f, vc_opening_script: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Árvore de Objeções</Label>
+                  <Textarea className="text-xs" rows={8} placeholder="Se o lead disser 'não tenho interesse': responder com...&#10;Se disser 'já tenho fornecedor': responder com..." value={form.vc_objection_tree} onChange={e => setForm(f => ({ ...f, vc_objection_tree: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Frases Proibidas</Label>
+                  <Textarea className="text-xs" rows={3} placeholder="Nunca diga: 'garantia total', 'sem risco'..." value={form.vc_forbidden_phrases} onChange={e => setForm(f => ({ ...f, vc_forbidden_phrases: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Tom de Voz</Label>
+                  <Select value={form.vc_tone} onValueChange={v => setForm(f => ({ ...f, vc_tone: v }))}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="consultivo">Consultivo</SelectItem>
+                      <SelectItem value="amigavel">Amigável</SelectItem>
+                      <SelectItem value="urgente">Urgente</SelectItem>
+                      <SelectItem value="formal">Formal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Exemplo de Conversa Ideal</Label>
+                  <Textarea className="text-xs" rows={8} placeholder="Agente: Olá, João! Tudo bem?&#10;Lead: Oi, tudo sim...&#10;Agente: Que bom! Estou ligando porque..." value={form.vc_conversation_example} onChange={e => setForm(f => ({ ...f, vc_conversation_example: e.target.value }))} />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="text-xs">Prioridade mín: {form.priority_min}</Label><Slider value={[form.priority_min]} onValueChange={v => setForm(f => ({ ...f, priority_min: v[0] }))} min={1} max={10} /></div>
               <div><Label className="text-xs">Prioridade máx: {form.priority_max}</Label><Slider value={[form.priority_max]} onValueChange={v => setForm(f => ({ ...f, priority_max: v[0] }))} min={1} max={10} /></div>
