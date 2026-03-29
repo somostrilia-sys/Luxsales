@@ -11,7 +11,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 
-const ORCH = import.meta.env.VITE_ORCHESTRATOR_URL || "http://134.122.17.106:3099";
+const PROXY = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/orchestrator-proxy";
+const AUTH_HEADER = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.pF2XU3pFDc98GSJzA1xyf7d4pHbkrxf3sRDX1jh5Vrg";
+const proxyUrl = (path: string) => `${PROXY}?path=${encodeURIComponent(path)}`;
 
 type QueueItem = {
   lead_id: string;
@@ -44,7 +46,9 @@ export default function VoiceDialer() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${ORCH}/queue/status`);
+      const res = await fetch(proxyUrl("/queue/status"), {
+        headers: { Authorization: AUTH_HEADER },
+      });
       if (!res.ok) throw new Error("Erro ao buscar status");
       const json = await res.json();
       setData(json);
@@ -65,9 +69,9 @@ export default function VoiceDialer() {
   const doAction = async (path: string, label: string) => {
     setActionLoading(path);
     try {
-      const res = await fetch(`${ORCH}${path}`, {
+      const res = await fetch(proxyUrl(path), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: AUTH_HEADER },
         body: JSON.stringify({ simulation: simMode }),
       });
       if (!res.ok) throw new Error();
