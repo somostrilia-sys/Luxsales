@@ -49,6 +49,9 @@ const WhatsAppMeta = lazy(() => import("./pages/WhatsAppMeta"));
 const ConfigWhatsApp = lazy(() => import("./pages/ConfigWhatsApp"));
 const MetaRules = lazy(() => import("./pages/MetaRules"));
 
+const GestaoUsuarios = lazy(() => import("./pages/GestaoUsuarios"));
+const AceitarConvite = lazy(() => import("./pages/AceitarConvite"));
+
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function PageLoader() {
@@ -74,6 +77,7 @@ const App = () => (
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/criar-conta" element={<CriarConta />} />
           <Route path="/venda" element={<Venda />} />
+          <Route path="/convite/:token" element={<AceitarConvite />} />
 
           {/* WB Core — CEO */}
           <Route path="/" element={<ProtectedRoute><DashboardGeral /></ProtectedRoute>} />
@@ -89,6 +93,7 @@ const App = () => (
           <Route path="/opt-ins" element={<ProtectedRoute minLevel={0}><OptIns /></ProtectedRoute>} />
           <Route path="/config" element={<ProtectedRoute minLevel={0}><CompanySetup /></ProtectedRoute>} />
           <Route path="/configuracoes" element={<ProtectedRoute minLevel={0}><Configuracoes /></ProtectedRoute>} />
+          <Route path="/gestao-usuarios" element={<ProtectedRoute minLevel={1}><GestaoUsuarios /></ProtectedRoute>} />
 
           {/* WB — All roles */}
           <Route path="/my-leads" element={<ProtectedRoute><MyLeads /></ProtectedRoute>} />

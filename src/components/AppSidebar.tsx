@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Phone, MessageSquare, LogOut, Settings,
   FileText, Send, UserCog, Users, ShieldCheck, Sparkles,
-  ClipboardList, PhoneCall, Upload, Loader2, Mic, FlaskConical, History,
+  ClipboardList, PhoneCall, Upload, Loader2, Mic, FlaskConical, History, Users2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -74,6 +74,7 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
     ceoOnly: true,
     items: [
       { title: "Equipe", url: "/team", icon: UserCog, levels: [0] },
+      { title: "Gestão de Usuários", url: "/gestao-usuarios", icon: Users2, levels: [0, 1] },
       { title: "Opt-ins", url: "/opt-ins", icon: ShieldCheck, levels: [0] },
       { title: "Regras Meta", url: "/meta-rules", icon: ClipboardList, levels: [0] },
       { title: "Configuração", url: "/config", icon: Sparkles, levels: [0] },
@@ -176,7 +177,6 @@ export function AppSidebar() {
         {sections.map((section) => {
           const visible = filterByLevel(section.items);
           if (visible.length === 0) return null;
-          if (section.ceoOnly && roleLevel !== 0) return null;
           return (
             <SidebarGroup key={section.label}>
               <SectionLabel>{section.label}</SectionLabel>
