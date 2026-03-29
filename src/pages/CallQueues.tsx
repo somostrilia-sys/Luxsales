@@ -22,6 +22,11 @@ import {
   Loader2, ChevronLeft, CheckCircle, Users, Target,
 } from "lucide-react";
 
+interface VoiceConfig {
+  system_prompt: string; opening_script: string; objection_tree: string;
+  forbidden_phrases: string; tone: string; conversation_example: string;
+}
+
 interface CallQueue {
   id: string; name: string; status: string; segment: string | null;
   filter_tags: string[]; max_attempts: number; calls_per_hour: number;
@@ -32,6 +37,7 @@ interface CallQueue {
   total_leads: number; leads_called: number; leads_answered: number;
   leads_opted_in: number; leads_converted: number;
   created_at: string;
+  voice_config: VoiceConfig | null;
 }
 
 interface VoiceProfile { voice_key: string; voice_name: string; }

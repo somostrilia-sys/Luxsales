@@ -1,0 +1,1 @@
+ALTER TABLE public.call_queues ADD COLUMN IF NOT EXISTS voice_config jsonb DEFAULT null;

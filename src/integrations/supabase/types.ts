@@ -1835,6 +1835,7 @@ export type Database = {
           system_prompt: string | null
           total_leads: number | null
           updated_at: string | null
+          voice_config: Json | null
           voice_key: string | null
         }
         Insert: {
@@ -1863,6 +1864,7 @@ export type Database = {
           system_prompt?: string | null
           total_leads?: number | null
           updated_at?: string | null
+          voice_config?: Json | null
           voice_key?: string | null
         }
         Update: {
@@ -1891,6 +1893,7 @@ export type Database = {
           system_prompt?: string | null
           total_leads?: number | null
           updated_at?: string | null
+          voice_config?: Json | null
           voice_key?: string | null
         }
         Relationships: [
