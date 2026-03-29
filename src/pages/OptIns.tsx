@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
-import { EDGE_BASE } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
@@ -54,47 +53,58 @@ export default function OptIns() {
   const [revokeReason, setRevokeReason] = useState("");
   const [revokeSaving, setRevokeSaving] = useState(false);
 
-  const getHeaders = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session?.access_token}`,
-    };
-  }, []);
-
   const fetchData = useCallback(async () => {
     if (!collaborator) return;
     setLoading(true);
     try {
-      const headers = await getHeaders();
-      const [listRes, statsRes] = await Promise.all([
-        fetch(`${EDGE_BASE}/opt-in-manager`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            action: "list",
-            company_id: collaborator.company_id,
-            status: statusFilter,
-          }),
-        }),
-        fetch(`${EDGE_BASE}/opt-in-manager`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            action: "stats",
-            company_id: collaborator.company_id,
-          }),
-        }),
-      ]);
-      const listData = await listRes.json();
-      const statsData = await statsRes.json();
-      if (listRes.ok) setOptIns(listData.opt_ins || []);
-      if (statsRes.ok) setStats(statsData.stats || null);
-    } catch {
-      toast.error("Erro ao buscar dados");
+      // Busca direto do Supabase — lead_whatsapp_lifecycle tem opt_in_id preenchido = opt-in ativo
+      let query = supabase
+        .from("lead_whatsapp_lifecycle")
+        .select("id, phone_number, lead_name, stage, created_at, updated_at, opt_in_id, window_open")
+        .not("opt_in_id", "is", null)
+        .order("created_at", { ascending: false });
+
+      // CEO vê todos; outros colaboradores veem só da própria empresa
+      if (collaborator.level < 5) {
+        query = query.eq("company_id", collaborator.company_id);
+      }
+
+      if (statusFilter === "active") {
+        query = query.not("stage", "eq", "opted_out");
+      } else if (statusFilter === "inactive") {
+        query = query.eq("stage", "opted_out");
+      }
+
+      const { data, error } = await query.limit(200);
+      if (error) throw error;
+
+      const mapped: OptIn[] = (data || []).map((row) => ({
+        name: row.lead_name && row.lead_name !== row.phone_number ? row.lead_name : "",
+        phone: row.phone_number ?? "",
+        origin: "ai_call",
+        date: row.created_at ?? "",
+        status: row.stage === "opted_out" ? "inactive" : "active",
+      }));
+      setOptIns(mapped);
+
+      // Stats calculados localmente
+      const thisMonth = new Date();
+      thisMonth.setDate(1);
+      thisMonth.setHours(0, 0, 0, 0);
+      const optOuts = (data || []).filter(r => r.stage === "opted_out").length;
+      const total = mapped.filter(o => o.status === "active").length;
+      setStats({
+        total_active: total,
+        opt_outs_this_month: optOuts,
+        opt_out_rate: total > 0 ? Math.round((optOuts / (total + optOuts)) * 100) : 0,
+        by_origin: { ai_call: total },
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Erro ao buscar dados";
+      toast.error(msg);
     }
     setLoading(false);
-  }, [collaborator, statusFilter, getHeaders]);
+  }, [collaborator, statusFilter]);
 
   useEffect(() => {
     fetchData();
@@ -104,25 +114,17 @@ export default function OptIns() {
     if (!revoking || !collaborator) return;
     setRevokeSaving(true);
     try {
-      const headers = await getHeaders();
-      const res = await fetch(`${EDGE_BASE}/opt-in-manager`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          action: "revoke",
-          company_id: collaborator.company_id,
-          phone_number: revoking.phone,
-          reason: revokeReason,
-        }),
-      });
-      if (res.ok) {
+      const { error } = await supabase
+        .from("lead_whatsapp_lifecycle")
+        .update({ stage: "opted_out", window_open: false })
+        .eq("phone_number", revoking.phone);
+      if (!error) {
         toast.success("Opt-in revogado com sucesso");
         setRevoking(null);
         setRevokeReason("");
         fetchData();
       } else {
-        const data = await res.json();
-        toast.error(data.error || "Erro ao revogar");
+        toast.error(error.message || "Erro ao revogar");
       }
     } catch {
       toast.error("Erro de conexão");
