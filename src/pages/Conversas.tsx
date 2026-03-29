@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { supabase } from "@/lib/supabase";
 import { EDGE_BASE } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
@@ -72,7 +73,8 @@ const normalizePhone = (phone: string): string => {
 export default function Conversas() {
   const { collaborator } = useCollaborator();
   const isMobile = useIsMobile();
-  const companyId = collaborator?.company_id || FALLBACK_COMPANY_ID;
+  const { selectedCompanyId } = useCompanyFilter();
+  const companyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : (collaborator?.company_id || FALLBACK_COMPANY_ID);
 
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loadingList, setLoadingList] = useState(true);

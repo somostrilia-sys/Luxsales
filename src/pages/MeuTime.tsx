@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { toast } from "sonner";
 import { Plus, Loader2, Trash2, Users, UserCheck, UserX, Copy, Check } from "lucide-react";
 import { format } from "date-fns";
@@ -44,7 +45,8 @@ export default function MeuTime() {
   const [copied, setCopied] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const companyId = collaborator?.company_id;
+  const { selectedCompanyId } = useCompanyFilter();
+  const companyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : collaborator?.company_id;
 
   async function fetchMembers() {
     if (!companyId || !collaborator) return;

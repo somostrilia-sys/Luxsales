@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
+  const { selectedCompanyId } = useCompanyFilter();import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
@@ -43,7 +44,7 @@ const originIcons: Record<string, string> = {
 
 export default function OptIns() {
   const { collaborator } = useCollaborator();
-  const [optIns, setOptIns] = useState<OptIn[]>([]);
+  const { selectedCompanyId } = useCompanyFilter();  const [optIns, setOptIns] = useState<OptIn[]>([]);
   const [stats, setStats] = useState<OptInStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -66,7 +67,7 @@ export default function OptIns() {
 
       // CEO vê todos; outros colaboradores veem só da própria empresa
       if (collaborator.role.level < 5) {
-        query = query.eq("company_id", collaborator.company_id);
+        query = query.eq("company_id", ((selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : collaborator?.company_id));
       }
 
       if (statusFilter === "active") {

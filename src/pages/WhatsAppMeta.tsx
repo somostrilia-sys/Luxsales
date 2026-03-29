@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -313,7 +314,8 @@ export default function WhatsAppMeta() {
   const [testVars, setTestVars] = useState<string[]>([]);
   const [testSending, setTestSending] = useState(false);
 
-  const companyId = collaborator?.company_id;
+  const { selectedCompanyId } = useCompanyFilter();
+  const companyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : collaborator?.company_id;
 
   // Body variables detection for builder
   const bodyVariables = useMemo(() => extractVariables(templateForm.body), [templateForm.body]);

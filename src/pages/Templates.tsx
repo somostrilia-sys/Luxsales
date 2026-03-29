@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { EDGE_BASE } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -84,7 +85,8 @@ const scoreBadge = (s: number) => {
 
 export default function Templates() {
   const { collaborator } = useCollaborator();
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const { selectedCompanyId } = useCompanyFilter();
+  const effectiveCompanyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : collaborator?.company_id;  const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("approved");
@@ -123,7 +125,7 @@ export default function Templates() {
       const res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ action: "list", company_id: collaborator.company_id }),
+        body: JSON.stringify({ action: "list", company_id: effectiveCompanyId }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -162,7 +164,7 @@ export default function Templates() {
       const res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ action: "list", company_id: collaborator.company_id }),
+        body: JSON.stringify({ action: "list", company_id: effectiveCompanyId }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -205,7 +207,7 @@ export default function Templates() {
         body: JSON.stringify({
           action: "generate",
           objective,
-          company_id: "70967469-9a9b-4e29-a744-410e41eb47a5",
+          company_id: effectiveCompanyId,
           count: 3,
           quantity: 3,
         }),
@@ -246,7 +248,7 @@ export default function Templates() {
         headers,
         body: JSON.stringify({
           action: "create",
-          company_id: collaborator.company_id,
+          company_id: effectiveCompanyId,
           name: tmpl.name,
           category: (tmpl.category || "UTILITY").toUpperCase(),
           language: "pt_BR",
