@@ -282,6 +282,49 @@ export default function CallQueues() {
             </div>
             <div><Label className="text-xs">System Prompt</Label><Textarea className="text-xs h-16" value={form.system_prompt} onChange={e => setForm(f => ({ ...f, system_prompt: e.target.value }))} /></div>
             <div><Label className="text-xs">Script de abertura</Label><Textarea className="text-xs h-16" value={form.opening_script} onChange={e => setForm(f => ({ ...f, opening_script: e.target.value }))} /></div>
+
+            {/* Voice Config Section */}
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full text-xs gap-1.5">
+                  <Mic className="h-3.5 w-3.5" /> Configuração Avançada de Voz
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-3 mt-3">
+                <div>
+                  <Label className="text-xs">System Prompt (Voz IA)</Label>
+                  <Textarea className="text-xs" rows={10} placeholder="Você é um assistente de vendas especializado em..." value={form.vc_system_prompt} onChange={e => setForm(f => ({ ...f, vc_system_prompt: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Script de Abertura</Label>
+                  <Textarea className="text-xs" rows={5} placeholder="Olá, meu nome é... Estou ligando da..." value={form.vc_opening_script} onChange={e => setForm(f => ({ ...f, vc_opening_script: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Árvore de Objeções</Label>
+                  <Textarea className="text-xs" rows={8} placeholder="Se o lead disser 'não tenho interesse': responder com...&#10;Se disser 'já tenho fornecedor': responder com..." value={form.vc_objection_tree} onChange={e => setForm(f => ({ ...f, vc_objection_tree: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Frases Proibidas</Label>
+                  <Textarea className="text-xs" rows={3} placeholder="Nunca diga: 'garantia total', 'sem risco'..." value={form.vc_forbidden_phrases} onChange={e => setForm(f => ({ ...f, vc_forbidden_phrases: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Tom de Voz</Label>
+                  <Select value={form.vc_tone} onValueChange={v => setForm(f => ({ ...f, vc_tone: v }))}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="consultivo">Consultivo</SelectItem>
+                      <SelectItem value="amigavel">Amigável</SelectItem>
+                      <SelectItem value="urgente">Urgente</SelectItem>
+                      <SelectItem value="formal">Formal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Exemplo de Conversa Ideal</Label>
+                  <Textarea className="text-xs" rows={8} placeholder="Agente: Olá, João! Tudo bem?&#10;Lead: Oi, tudo sim...&#10;Agente: Que bom! Estou ligando porque..." value={form.vc_conversation_example} onChange={e => setForm(f => ({ ...f, vc_conversation_example: e.target.value }))} />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="text-xs">Prioridade mín: {form.priority_min}</Label><Slider value={[form.priority_min]} onValueChange={v => setForm(f => ({ ...f, priority_min: v[0] }))} min={1} max={10} /></div>
               <div><Label className="text-xs">Prioridade máx: {form.priority_max}</Label><Slider value={[form.priority_max]} onValueChange={v => setForm(f => ({ ...f, priority_max: v[0] }))} min={1} max={10} /></div>
