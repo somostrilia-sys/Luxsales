@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,27 +11,30 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Phone, Download, Eye, CalendarIcon, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, Eye, CalendarIcon, Loader2, ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { EDGE_BASE } from "@/lib/constants";
 
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.pF2XU3pFDc98GSJzA1xyf7d4pHbkrxf3sRDX1jh5Vrg";
+const API_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/dashboard-calls";
+const AUTH_HEADER = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4";
 const PAGE_SIZE = 20;
 
 type CallRecord = {
   id: string;
   lead_name?: string;
-  lead_phone: string;
+  destination_number?: string;
+  lead_phone?: string;
   status: string;
-  duration_sec?: number;
-  created_at: string;
   result?: string;
-  sentiment_overall?: string;
+  duration_seconds?: number;
+  duration_sec?: number;
+  whatsapp_sent?: boolean;
+  started_at?: string;
+  created_at?: string;
   transcript?: any;
+  sentiment_overall?: string;
   goal_achieved?: boolean;
-  lead_temperature?: string;
 };
 
 const statusMap: Record<string, { label: string; cls: string }> = {
@@ -49,6 +52,17 @@ function fmtDuration(s?: number) {
   const m = Math.floor(s / 60);
   const sec = s % 60;
   return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+function getTranscriptSummary(transcript: any): string {
+  if (!transcript) return "—";
+  if (typeof transcript === "string") return transcript.slice(0, 80) + (transcript.length > 80 ? "…" : "");
+  if (Array.isArray(transcript)) {
+    const first = transcript.slice(0, 2).map((t: any) => t.text || t.content || "").join(" ");
+    return first.slice(0, 80) + (first.length > 80 ? "…" : "");
+  }
+  if (transcript.summary) return String(transcript.summary).slice(0, 80);
+  return "Ver detalhes";
 }
 
 export default function VoiceCalls() {
@@ -79,9 +93,12 @@ export default function VoiceCalls() {
       if (dateRange.from) body.date_from = format(dateRange.from, "yyyy-MM-dd");
       if (dateRange.to) body.date_to = format(dateRange.to, "yyyy-MM-dd");
 
-      const res = await fetch(`${EDGE_BASE}/dashboard-calls`, {
+      const res = await fetch(API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": AUTH_HEADER,
+        },
         body: JSON.stringify(body),
       });
       const json = await res.json();
@@ -100,10 +117,13 @@ export default function VoiceCalls() {
 
   const exportCSV = () => {
     if (!calls.length) return;
-    const header = "ID,Lead,Telefone,Status,Duração,Data\n";
-    const rows = calls.map(c =>
-      `${c.id},"${c.lead_name || "—"}",${c.lead_phone},${c.status},${fmtDuration(c.duration_sec)},${c.created_at}`
-    ).join("\n");
+    const header = "Lead,Telefone,Status,Resultado,Duração,WhatsApp,Data\n";
+    const rows = calls.map(c => {
+      const phone = c.destination_number || c.lead_phone || "";
+      const dur = fmtDuration(c.duration_seconds ?? c.duration_sec);
+      const dt = c.started_at || c.created_at || "";
+      return `"${c.lead_name || "—"}",${phone},${c.status},"${c.result || "—"}",${dur},${c.whatsapp_sent ? "Sim" : "Não"},${dt}`;
+    }).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -167,40 +187,57 @@ export default function VoiceCalls() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12">#</TableHead>
                 <TableHead>Lead</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Resultado</TableHead>
                 <TableHead>Duração</TableHead>
+                <TableHead>WhatsApp</TableHead>
                 <TableHead>Data/Hora</TableHead>
+                <TableHead>Resumo</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-10">
+                  <TableCell colSpan={9} className="text-center py-10">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : !calls.length ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
                     Nenhuma chamada encontrada
                   </TableCell>
                 </TableRow>
               ) : (
-                calls.map((c, i) => {
+                calls.map((c) => {
                   const st = statusMap[c.status] ?? statusMap["failed"];
+                  const phone = c.destination_number || c.lead_phone || "—";
+                  const dur = c.duration_seconds ?? c.duration_sec;
+                  const dt = c.started_at || c.created_at;
                   return (
                     <TableRow key={c.id}>
-                      <TableCell className="text-muted-foreground">{page * PAGE_SIZE + i + 1}</TableCell>
                       <TableCell className="font-medium">{c.lead_name || "—"}</TableCell>
-                      <TableCell className="font-mono text-sm">{c.lead_phone}</TableCell>
+                      <TableCell className="font-mono text-sm">{phone}</TableCell>
                       <TableCell><Badge className={st.cls}>{st.label}</Badge></TableCell>
-                      <TableCell>{fmtDuration(c.duration_sec)}</TableCell>
+                      <TableCell className="text-sm max-w-[120px] truncate">{c.result || "—"}</TableCell>
+                      <TableCell>{fmtDuration(dur)}</TableCell>
+                      <TableCell>
+                        {c.whatsapp_sent ? (
+                          <Badge variant="outline" className="text-green-500 border-green-500/30 text-xs gap-1">
+                            <MessageSquare className="h-3 w-3" /> Sim
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">Não</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-sm">
-                        {format(new Date(c.created_at), "dd/MM HH:mm", { locale: ptBR })}
+                        {dt ? format(new Date(dt), "dd/MM HH:mm", { locale: ptBR }) : "—"}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">
+                        {getTranscriptSummary(c.transcript)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => setSelected(c)}>
@@ -245,11 +282,11 @@ export default function VoiceCalls() {
                 </div>
                 <div>
                   <p className="text-muted-foreground">Telefone</p>
-                  <p className="font-mono">{selected.lead_phone}</p>
+                  <p className="font-mono">{selected.destination_number || selected.lead_phone || "—"}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Duração</p>
-                  <p>{fmtDuration(selected.duration_sec)}</p>
+                  <p>{fmtDuration(selected.duration_seconds ?? selected.duration_sec)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Status</p>
@@ -262,14 +299,30 @@ export default function VoiceCalls() {
                   <p className="text-xl">{sentimentEmoji[selected.sentiment_overall ?? ""] ?? "—"}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">WA Autorizado?</p>
-                  <p>{selected.goal_achieved ? "✅ Sim" : "❌ Não"}</p>
+                  <p className="text-muted-foreground">WhatsApp Enviado</p>
+                  <p>{selected.whatsapp_sent ? "✅ Sim" : "❌ Não"}</p>
                 </div>
               </div>
               {selected.result && (
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Resumo</p>
+                  <p className="text-sm text-muted-foreground mb-1">Resultado</p>
                   <p className="text-sm bg-muted/50 rounded-lg p-3">{selected.result}</p>
+                </div>
+              )}
+              {selected.transcript && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Transcrição</p>
+                  <div className="text-sm bg-muted/50 rounded-lg p-3 max-h-[200px] overflow-y-auto whitespace-pre-wrap">
+                    {typeof selected.transcript === "string"
+                      ? selected.transcript
+                      : Array.isArray(selected.transcript)
+                        ? selected.transcript.map((t: any, i: number) => (
+                            <p key={i} className="mb-1">
+                              <span className="font-medium text-primary">{t.role || t.speaker || ""}:</span> {t.text || t.content || ""}
+                            </p>
+                          ))
+                        : JSON.stringify(selected.transcript, null, 2)}
+                  </div>
                 </div>
               )}
             </div>
