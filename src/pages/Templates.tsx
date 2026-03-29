@@ -431,7 +431,7 @@ export default function Templates() {
 
                       {(g.issues || []).length > 0 && (
                         <div className="space-y-1">
-                          {g.issues.map((issue, ii) => (
+                          {(g.issues || []).map((issue, ii) => (
                             <p key={ii} className={`text-xs flex items-center gap-1 ${issue.type === "error" ? "text-red-400" : "text-yellow-400"}`}>
                               <AlertTriangle className="h-3 w-3" /> {issue.message}
                             </p>
