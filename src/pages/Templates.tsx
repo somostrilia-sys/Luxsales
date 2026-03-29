@@ -120,13 +120,33 @@ export default function Templates() {
     setLoading(true);
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${EDGE_BASE}/template-intelligence`, {
+      const res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ action: "list-all", company_id: collaborator.company_id }),
+        body: JSON.stringify({ action: "list", company_id: collaborator.company_id }),
       });
       const data = await res.json();
-      if (res.ok) setTemplates(data.templates || []);
+      if (res.ok) {
+        const mapped = (data.templates || []).map((t: any) => {
+          const bodyComp = (t.components || []).find((c: any) => c.type === "BODY");
+          const headerComp = (t.components || []).find((c: any) => c.type === "HEADER");
+          const footerComp = (t.components || []).find((c: any) => c.type === "FOOTER");
+          const buttonsComp = (t.components || []).find((c: any) => c.type === "BUTTONS");
+          return {
+            name: t.name,
+            category: t.category,
+            language: t.language,
+            status: t.status,
+            body: bodyComp?.text || "",
+            header: headerComp?.text,
+            footer: footerComp?.text,
+            buttons: buttonsComp?.buttons?.map((b: any) => b.text) || [],
+            quality: t.quality_score,
+            rejection_reason: t.rejection_reason,
+          } as Template;
+        });
+        setTemplates(mapped);
+      }
     } catch {
       toast.error("Erro ao buscar templates");
     }
