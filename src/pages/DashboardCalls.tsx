@@ -147,7 +147,7 @@ export default function DashboardCalls() {
       const body: Record<string, unknown> = { action: "call-history", ...base, limit: 20, offset: histPage * 20 };
       if (histStatus !== "all") body.status = histStatus;
       const result = await callEdge(body);
-      setHistory({ rows: result?.rows || [], total: result?.total || 0 });
+      setHistory({ rows: result?.rows || result?.calls || [], total: result?.total || 0 });
     } catch { toast.error("Erro ao carregar histórico"); }
     setHistLoading(false);
   }, [company_id, user_role, histPage, histStatus]);
