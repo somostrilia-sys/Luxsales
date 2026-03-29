@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Rocket, Phone, Clock, Activity, AlertTriangle, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-const ORCH = import.meta.env.VITE_ORCHESTRATOR_URL || "http://192.168.0.206:3002";
+const ORCH = import.meta.env.VITE_ORCHESTRATOR_URL || "http://134.122.17.106:3099";
 
 type LogEntry = { ts: string; level: "success" | "simulated" | "error"; message: string };
 
@@ -28,6 +28,7 @@ export default function VoiceSimulate() {
   const [dispatching, setDispatching] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [status, setStatus] = useState<{ active_calls: number; status: string } | null>(null);
+  const [offline, setOffline] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
 
   const now = new Date();
@@ -47,7 +48,10 @@ export default function VoiceSimulate() {
       if (!res.ok) throw new Error();
       const json = await res.json();
       setStatus(json);
-    } catch { /* silent */ }
+      setOffline(false);
+    } catch {
+      setOffline(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -114,12 +118,16 @@ export default function VoiceSimulate() {
       <PageHeader
         title="Simulação de Chamadas"
         badge={
-          <Badge className={simEnabled
-            ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
-            : "bg-destructive/15 text-destructive border-destructive/30"
-          }>
-            {simEnabled ? "Simulação" : "Real"}
-          </Badge>
+          offline ? (
+            <Badge className="bg-destructive/15 text-destructive border-destructive/30">Offline</Badge>
+          ) : (
+            <Badge className={simEnabled
+              ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+              : "bg-destructive/15 text-destructive border-destructive/30"
+            }>
+              {simEnabled ? "Simulação" : "Real"}
+            </Badge>
+          )
         }
       />
 

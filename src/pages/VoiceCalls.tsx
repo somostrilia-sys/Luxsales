@@ -69,7 +69,7 @@ export default function VoiceCalls() {
     try {
       const body: any = {
         action: "call-history",
-        company_id: "objetivo",
+        company_id: "70967469-9a9b-4e29-a744-410e41eb47a5",
         requester_role: "ceo",
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
