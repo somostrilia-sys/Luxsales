@@ -445,12 +445,12 @@ export default function LeadsMaster() {
                             <Checkbox checked={selected.has(l.phone)} onCheckedChange={() => toggleSelect(l.phone)} />
                           </td>
                           <td className="py-2 px-2"><Badge variant="outline" className={`text-xs ${st.cls}`}>{st.label}</Badge></td>
-                          <td className="py-2 px-2 font-mono text-xs">{l.phone}</td>
+                          <td className="py-2 px-2 font-mono text-xs">{fmtPhone(l.phone)}</td>
                           <td className="py-2 px-2">{l.name || "—"}</td>
                           <td className="py-2 px-2">
                             <div className="flex items-center gap-1.5 justify-center">
-                              <Progress value={l.lead_score} className="w-12 h-1.5" />
-                              <span className="text-xs text-muted-foreground w-6">{l.lead_score}</span>
+                              <Progress value={l.score} className="w-12 h-1.5" />
+                              <span className="text-xs text-muted-foreground w-6">{l.score}</span>
                             </div>
                           </td>
                           <td className="py-2 px-2 text-center text-base">{tempEmoji[l.temperature] || "—"}</td>
@@ -515,10 +515,10 @@ export default function LeadsMaster() {
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase">Dados</h4>
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div><span className="text-muted-foreground">Telefone:</span> <span className="font-mono">{detailLead.phone}</span></div>
+                    <div><span className="text-muted-foreground">Telefone:</span> <span className="font-mono">{fmtPhone(detailLead.phone)}</span></div>
                     <div><span className="text-muted-foreground">Nome:</span> {detailLead.name || "—"}</div>
                     <div><span className="text-muted-foreground">Email:</span> {detailLead.email || "—"}</div>
-                    <div><span className="text-muted-foreground">Score:</span> {detailLead.lead_score}</div>
+                    <div><span className="text-muted-foreground">Score:</span> {detailLead.score}</div>
                     <div><span className="text-muted-foreground">Temp:</span> {tempEmoji[detailLead.temperature]} {detailLead.temperature}</div>
                     <div><span className="text-muted-foreground">Segmento:</span> {detailLead.segment || "—"}</div>
                   </div>
