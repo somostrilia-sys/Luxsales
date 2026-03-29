@@ -666,7 +666,7 @@ export default function Conversas() {
           {loadingChat ? (
             <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" style={{ color: "#008069" }} /></div>
           ) : messages.length === 0 ? (
-            <div className="flex justify-center py-10 text-gray-500">Nenhuma mensagem ainda</div>
+            <div className="flex justify-center py-10 text-gray-500">Nenhuma mensagem</div>
           ) : (
             messages.map((msg, index) => {
               const isOutbound = msg.direction === "outbound";
