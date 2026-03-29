@@ -112,14 +112,47 @@ export default function DispatchQueues() {
       respect_tier_limit: q.respect_tier_limit, safety_pct: q.safety_pct,
       schedule_start: q.schedule_start || "08:00", schedule_end: q.schedule_end || "20:00",
       active_days: q.active_days || [1, 2, 3, 4, 5],
+      attachment_url: q.attachment_url || "",
+      auto_trigger_enabled: q.auto_trigger?.on_call_qualified ?? false,
+      auto_trigger_delay: q.auto_trigger?.delay_minutes ?? 2,
     });
     setDialogOpen(true);
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowed = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      toast.error("Apenas PDF, PNG, JPG ou WebP");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Arquivo máximo 10MB");
+      return;
+    }
+    setUploading(true);
+    const ext = file.name.split(".").pop();
+    const path = `${company_id}/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("dispatch-attachments").upload(path, file);
+    if (error) {
+      toast.error("Erro no upload: " + error.message);
+    } else {
+      const { data: urlData } = supabase.storage.from("dispatch-attachments").getPublicUrl(path);
+      setForm(f => ({ ...f, attachment_url: urlData.publicUrl }));
+      toast.success("Anexo enviado");
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const save = async () => {
     if (!form.name.trim()) { toast.error("Nome obrigatório"); return; }
     setSaving(true);
-    const payload = {
+    const payload: any = {
       company_id, name: form.name.trim(),
       template_name: form.template_name || null, template_slot: form.template_slot || null,
       segment: form.segment || null,
@@ -129,6 +162,10 @@ export default function DispatchQueues() {
       respect_tier_limit: form.respect_tier_limit, safety_pct: form.safety_pct,
       schedule_start: form.schedule_start, schedule_end: form.schedule_end,
       active_days: form.active_days,
+      attachment_url: form.attachment_url || null,
+      auto_trigger: form.auto_trigger_enabled
+        ? { on_call_qualified: true, delay_minutes: form.auto_trigger_delay }
+        : null,
     };
     const { error } = editId
       ? await supabase.from("dispatch_queues").update(payload).eq("id", editId)
