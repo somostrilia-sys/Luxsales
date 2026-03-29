@@ -39,6 +39,7 @@ const Discador = lazy(() => import("./pages/Discador"));
 const CallCampaigns = lazy(() => import("./pages/CallCampaigns"));
 const LeadsDiscador = lazy(() => import("./pages/LeadsDiscador"));
 const VoiceAI = lazy(() => import("./pages/VoiceAI"));
+const VoiceDialer = lazy(() => import("./pages/VoiceDialer"));
 const RelatoriosVoz = lazy(() => import("./pages/RelatoriosVoz"));
 const ComplianceVoz = lazy(() => import("./pages/ComplianceVoz"));
 const ConfiguracoesVoz = lazy(() => import("./pages/ConfiguracoesVoz"));
