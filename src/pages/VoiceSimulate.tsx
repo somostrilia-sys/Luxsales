@@ -59,6 +59,9 @@ export default function VoiceSimulate() {
   // Pipeline
   const [pipelineOnline, setPipelineOnline] = useState<boolean | null>(null);
 
+  // Knowledge base context
+  const [knowledgeContext, setKnowledgeContext] = useState("");
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -250,7 +253,6 @@ export default function VoiceSimulate() {
   }, []);
 
   // Carregar base de conhecimento da empresa
-  const [knowledgeContext, setKnowledgeContext] = useState("");
   useEffect(() => {
     if (!companyId) return;
     (async () => {
