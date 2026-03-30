@@ -219,9 +219,6 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [targetPhone, setTargetPhone] = useState<string | null>(null);
   const [sendingTemplate, setSendingTemplate] = useState(false);
-  const [searchFilter, setSearchFilter] = useState("");
-  const [expandedSummary, setExpandedSummary] = useState<string | null>(null);
-  const [targetLeadName, setTargetLeadName] = useState<string | null>(null);
 
   const fetchCalls = useCallback(async () => {
     setLoading(true);
@@ -282,9 +279,8 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
     fetchCalls();
   }, [fetchCalls]);
 
-  const openTemplateDialog = async (phone: string, leadName?: string | null) => {
+  const openTemplateDialog = async (phone: string) => {
     setTargetPhone(phone);
-    setTargetLeadName(leadName || null);
     const { data } = await supabase
       .from("whatsapp_meta_templates")
       .select("name, status, language")
@@ -316,15 +312,6 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
       if (!res.ok) throw new Error(d.error || "Erro ao enviar");
       toast.success("Template enviado com sucesso!");
       setTemplateOpen(false);
-      // Registra conversa reativada
-      await supabase.from("wa_conversations").insert({
-        phone: targetPhone,
-        lead_name: targetLeadName,
-        company_id: companyId,
-        status: "template_sent",
-        last_message_at: new Date().toISOString(),
-        turn_count: 0,
-      });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Erro ao enviar template");
     } finally {
@@ -335,28 +322,9 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
   const toggleExpand = (id: string) =>
     setExpanded((prev) => (prev === id ? null : id));
 
-  const filteredCalls = searchFilter.trim()
-    ? calls.filter((c) => {
-        const q = searchFilter.toLowerCase();
-        return (
-          (c.lead_name || "").toLowerCase().includes(q) ||
-          (c.lead_phone || "").replace(/\D/g, "").includes(searchFilter.replace(/\D/g, ""))
-        );
-      })
-    : calls;
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2 items-center">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Nome ou telefone..."
-            value={searchFilter}
-            onChange={(e) => setSearchFilter(e.target.value)}
-            className="h-8 text-xs pl-7 w-44"
-          />
-        </div>
         <Select value={period} onValueChange={setPeriod}>
           <SelectTrigger className="w-36 h-8 text-xs">
             <SelectValue />
@@ -384,7 +352,7 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
           <RefreshCw className="h-3.5 w-3.5 mr-1" /> Atualizar
         </Button>
         <span className="text-xs text-muted-foreground ml-auto">
-          {filteredCalls.length} ligações
+          {calls.length} ligações
         </span>
       </div>
 
@@ -394,7 +362,7 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
             <Skeleton key={i} className="h-16 w-full" />
           ))}
         </div>
-      ) : filteredCalls.length === 0 ? (
+      ) : calls.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
             <Phone className="h-8 w-8 mx-auto mb-2 opacity-40" />
@@ -403,7 +371,7 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
         </Card>
       ) : (
         <div className="space-y-2">
-          {filteredCalls.map((call) => {
+          {calls.map((call) => {
             const isExpanded = expanded === call.id;
             const status =
               callStatusConfig[call.status || ""] || {
@@ -458,45 +426,21 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
                       ) : (
                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
                       )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs"
-                        onClick={(e) => { e.stopPropagation(); openTemplateDialog(phone, call.lead_name); }}
-                      >
-                        <Send className="h-3 w-3 mr-1" /> Reativar Lead
-                      </Button>
                     </div>
                   </div>
 
                   {isExpanded && (
                     <div className="mt-3 space-y-3 border-t pt-3">
-                      {/* Resumo IA expandível */}
-                      <div className="rounded-lg border overflow-hidden">
-                        <button
-                          className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/40 transition-colors"
-                          onClick={() => setExpandedSummary(expandedSummary === call.id ? null : call.id)}
-                        >
-                          <span className="text-xs font-semibold text-primary flex items-center gap-1">
-                            <Mic className="h-3.5 w-3.5" /> Resumo IA
-                          </span>
-                          {expandedSummary === call.id ? (
-                            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      {/* lucas_summary direto do campo (fallback para transcript) */}
+                      <div className="rounded-lg bg-muted/60 p-3">
+                        <p className="text-xs font-semibold text-primary mb-1 flex items-center gap-1">
+                          <Mic className="h-3.5 w-3.5" /> Resumo do Lucas
+                        </p>
+                        <p className="text-sm text-foreground leading-relaxed">
+                          {call.lucas_summary || summaryText || (
+                            <span className="text-muted-foreground italic">Aguardando análise do Lucas</span>
                           )}
-                        </button>
-                        {expandedSummary === call.id && (
-                          <div className="px-3 pb-3 bg-muted/40">
-                            {call.lucas_summary || summaryText ? (
-                              <p className="text-sm text-foreground leading-relaxed">
-                                {call.lucas_summary || summaryText}
-                              </p>
-                            ) : (
-                              <p className="text-sm text-muted-foreground italic">Sem análise disponível</p>
-                            )}
-                          </div>
-                        )}
+                        </p>
                       </div>
 
                       {transcriptText && (
@@ -596,10 +540,6 @@ function TabConversasEncerradas({
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [targetConv, setTargetConv] = useState<WaConversation | null>(null);
   const [sendingTemplate, setSendingTemplate] = useState(false);
-  const [searchFilter, setSearchFilter] = useState("");
-  const [convStatusFilter, setConvStatusFilter] = useState("all");
-  const [convDateFilter, setConvDateFilter] = useState("all");
-  const [expandedSummary, setExpandedSummary] = useState<string | null>(null);
 
   const fetchConvs = useCallback(async () => {
     setLoading(true);
@@ -706,13 +646,6 @@ function TabConversasEncerradas({
       if (!res.ok) throw new Error(d.error || "Erro");
       toast.success("Template de reativação enviado!");
       setReactivateOpen(false);
-      // Atualiza status da conversa para template_sent
-      if (targetConv) {
-        await supabase
-          .from("wa_conversations")
-          .update({ status: "template_sent" })
-          .eq("id", targetConv.id);
-      }
       fetchConvs();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Erro ao reativar");
@@ -721,75 +654,14 @@ function TabConversasEncerradas({
     }
   };
 
-  const filteredConvs = convs.filter((c) => {
-    if (searchFilter.trim()) {
-      const q = searchFilter.toLowerCase();
-      if (
-        !(c.lead_name || "").toLowerCase().includes(q) &&
-        !(c.phone || "").replace(/\D/g, "").includes(searchFilter.replace(/\D/g, ""))
-      ) return false;
-    }
-    if (convStatusFilter !== "all") {
-      if (convStatusFilter === "interesse" && c.status !== "converted") return false;
-      if (convStatusFilter === "sem_interesse" && c.status === "converted") return false;
-    }
-    if (convDateFilter !== "all") {
-      const ref = c.last_message_at || c.window_expires_at;
-      if (!ref) return false;
-      const d = new Date(ref);
-      const now = new Date();
-      if (convDateFilter === "today") {
-        const s = new Date(now); s.setHours(0, 0, 0, 0);
-        if (d < s) return false;
-      } else if (convDateFilter === "week") {
-        const s = new Date(now); s.setDate(now.getDate() - 7);
-        if (d < s) return false;
-      } else if (convDateFilter === "month") {
-        const s = new Date(now); s.setDate(now.getDate() - 30);
-        if (d < s) return false;
-      }
-    }
-    return true;
-  });
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 items-center">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Nome ou telefone..."
-            value={searchFilter}
-            onChange={(e) => setSearchFilter(e.target.value)}
-            className="h-8 text-xs pl-7 w-44"
-          />
-        </div>
-        <Select value={convDateFilter} onValueChange={setConvDateFilter}>
-          <SelectTrigger className="w-36 h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os períodos</SelectItem>
-            <SelectItem value="today">Hoje</SelectItem>
-            <SelectItem value="week">Última semana</SelectItem>
-            <SelectItem value="month">Último mês</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={convStatusFilter} onValueChange={setConvStatusFilter}>
-          <SelectTrigger className="w-40 h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os status</SelectItem>
-            <SelectItem value="interesse">Com interesse</SelectItem>
-            <SelectItem value="sem_interesse">Sem interesse</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="flex items-center justify-between">
         <Button variant="outline" size="sm" onClick={fetchConvs} className="h-8">
           <RefreshCw className="h-3.5 w-3.5 mr-1" /> Atualizar
         </Button>
-        <span className="text-xs text-muted-foreground ml-auto">
-          {filteredConvs.length} conversas encerradas
+        <span className="text-xs text-muted-foreground">
+          {convs.length} conversas encerradas
         </span>
       </div>
 
@@ -799,16 +671,16 @@ function TabConversasEncerradas({
             <Skeleton key={i} className="h-16 w-full" />
           ))}
         </div>
-      ) : filteredConvs.length === 0 ? (
+      ) : convs.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
             <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-40" />
-            <p>Nenhuma conversa encerrada encontrada</p>
+            <p>Nenhuma conversa encerrada no momento</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-2">
-          {filteredConvs.map((conv) => {
+          {convs.map((conv) => {
             const isExpanded = expanded === conv.id;
             const convMessages = messages[conv.id] || [];
 
@@ -853,39 +725,18 @@ function TabConversasEncerradas({
                       ) : (
                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
                       )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs"
-                        onClick={(e) => { e.stopPropagation(); openReactivate(conv); }}
-                      >
-                        <Send className="h-3 w-3 mr-1" /> Reativar Lead
-                      </Button>
                     </div>
                   </div>
 
                   {isExpanded && (
                     <div className="mt-3 space-y-3 border-t pt-3">
-                      {/* Resumo IA expandível */}
-                      <div className="rounded-lg border overflow-hidden">
-                        <button
-                          className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/40 transition-colors"
-                          onClick={() => setExpandedSummary(expandedSummary === conv.id ? null : conv.id)}
-                        >
-                          <span className="text-xs font-semibold text-primary flex items-center gap-1">
-                            <Mic className="h-3.5 w-3.5" /> Resumo IA
-                          </span>
-                          {expandedSummary === conv.id ? (
-                            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                          )}
-                        </button>
-                        {expandedSummary === conv.id && (
-                          <div className="px-3 pb-3 bg-muted/40">
-                            {conv.lucas_summary ? (
-                              <p className="text-sm text-foreground leading-relaxed">
-                                {conv.lucas_summary}
+                      {conv.lucas_summary && (
+                        <div className="rounded-lg bg-muted/60 p-3">
+                          <p className="text-xs font-semibold text-primary mb-1">
+                            Resumo do Lucas
+                          </p>
+                          <p className="text-sm text-foreground">
+                            {conv.lucas_summary}
                           </p>
                         </div>
                       )}
