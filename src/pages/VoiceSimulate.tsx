@@ -178,53 +178,68 @@ export default function VoiceSimulate() {
 
   // Pausar mic, tocar áudio XTTS, retomar mic
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+  const XTTS_LOCAL = "http://192.168.0.206:8300/tts";
+
+  const playAudioBlob = (blob: Blob): Promise<void> => {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.volume = 1.0;
+      ttsAudioRef.current = audio;
+      audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+      audio.onerror = () => resolve();
+      audio.play().catch(() => resolve());
+      setTimeout(resolve, 20000);
+    });
+  };
 
   const playXTTS = useCallback(async (text: string) => {
-    // Pausar Speech Recognition enquanto TTS toca
     ttsPlayingRef.current = true;
     try { recognitionRef.current?.stop(); } catch {}
     setListening(false);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
+      // Tentativa 1: XTTS direto na rede local (mais rápido, ~1s)
+      const localRes = await fetch(XTTS_LOCAL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
-        },
-        body: JSON.stringify({ action: "tts", text, tts_url: "http://134.122.17.106/api/tts" }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(12000),
       });
-      if (!res.ok) throw new Error(`TTS ${res.status}`);
-      const data = await res.json();
-      if (data.audio) {
-        const byteChars = atob(data.audio);
-        const byteArray = new Uint8Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-        const blob = new Blob([byteArray], { type: "audio/wav" });
-        const url = URL.createObjectURL(blob);
-
-        // Criar novo Audio element dedicado para TTS (não reusar audioRef)
-        await new Promise<void>((resolve) => {
-          const audio = new Audio(url);
-          audio.volume = 1.0;
-          ttsAudioRef.current = audio;
-          audio.onended = () => {
-            URL.revokeObjectURL(url);
-            resolve();
-          };
-          audio.onerror = () => resolve();
-          audio.play().catch(() => resolve());
-          // Safety timeout
-          setTimeout(resolve, 20000);
-        });
+      if (localRes.ok) {
+        const blob = await localRes.blob();
+        await playAudioBlob(blob);
+      } else {
+        throw new Error("local failed");
       }
-    } catch (err) {
-      console.error("XTTS error:", err);
+    } catch {
+      // Tentativa 2: via Edge Function proxy (mais lento, ~3-5s)
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+          },
+          body: JSON.stringify({ action: "tts", text, tts_url: "http://134.122.17.106/api/tts" }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.audio) {
+            const byteChars = atob(data.audio);
+            const byteArray = new Uint8Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+            await playAudioBlob(new Blob([byteArray], { type: "audio/wav" }));
+          }
+        }
+      } catch (err) {
+        console.error("TTS proxy error:", err);
+      }
     }
 
-    // Retomar mic após TTS terminar
+    // Retomar mic
     ttsPlayingRef.current = false;
     if (sessionRef.current === "browser" && recognitionRef.current) {
       try {
