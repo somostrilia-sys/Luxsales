@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { EDGE_BASE } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Bell } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -27,6 +28,7 @@ import {
   Clock,
   History,
   MessageCircle,
+  Bell,
 } from "lucide-react";
 import {
   format,
@@ -133,6 +135,49 @@ export default function Conversas() {
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [templateTargetPhone, setTemplateTargetPhone] = useState<string | null>(null);
+
+  // Notificações de novas mensagens
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [totalUnread, setTotalUnread] = useState(0);
+  const knownConvIdsRef = useRef<Set<string>>(new Set());
+  const notifAudioRef = useRef<HTMLAudioElement | null>(null);
+  const originalTitleRef = useRef<string>(document.title);
+  const titleBlinkRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Som de notificação (beep sintético via Web Audio API)
+  const playNotifSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (_) {}
+  }, []);
+
+  // Piscar título da aba
+  const startTitleBlink = useCallback((count: number) => {
+    if (titleBlinkRef.current) clearInterval(titleBlinkRef.current);
+    let show = true;
+    titleBlinkRef.current = setInterval(() => {
+      document.title = show ? `(${count}) Nova mensagem — LuxSales` : originalTitleRef.current;
+      show = !show;
+    }, 1000);
+  }, []);
+
+  const stopTitleBlink = useCallback(() => {
+    if (titleBlinkRef.current) {
+      clearInterval(titleBlinkRef.current);
+      titleBlinkRef.current = null;
+    }
+    document.title = originalTitleRef.current;
+  }, []);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -349,14 +394,82 @@ export default function Conversas() {
             if (prev.some((m) => m.id === msg.id)) return prev;
             return [...prev, msg];
           });
+        } else if (msg.role === "user") {
+          // Nova mensagem em conversa não selecionada → notificar
+          setUnreadCounts((prev) => {
+            const next = { ...prev, [msg.conversation_id]: (prev[msg.conversation_id] ?? 0) + 1 };
+            const total = Object.values(next).reduce((a, b) => a + b, 0);
+            setTotalUnread(total);
+            if (total > 0) startTitleBlink(total);
+            return next;
+          });
+          playNotifSound();
+          const conv = conversations.find((c) => c.id === msg.conversation_id);
+          const name = conv?.lead_name || conv?.phone || "Lead";
+          toast(`💬 Nova mensagem de ${name}`, {
+            description: typeof msg.content === "string" ? msg.content.slice(0, 60) : "",
+            duration: 5000,
+            action: {
+              label: "Ver",
+              onClick: () => {
+                setSelectedConvId(msg.conversation_id);
+                setSelectedPhone(conv?.phone ?? null);
+                setUnreadCounts((prev) => {
+                  const next = { ...prev };
+                  delete next[msg.conversation_id];
+                  const total = Object.values(next).reduce((a, b) => a + b, 0);
+                  setTotalUnread(total);
+                  if (total === 0) stopTitleBlink();
+                  return next;
+                });
+              },
+            },
+          });
         }
         loadConversations(true);
       })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wa_conversations" }, () => loadConversations(true))
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wa_conversations" }, (payload: any) => {
+        const conv = payload.new;
+        if (!knownConvIdsRef.current.has(conv.id)) {
+          knownConvIdsRef.current.add(conv.id);
+          if (knownConvIdsRef.current.size > 1) {
+            // Nova conversa real (não o carregamento inicial)
+            playNotifSound();
+            toast(`🆕 Nova conversa: ${conv.lead_name || conv.phone}`, {
+              description: "Lead iniciou contato",
+              duration: 6000,
+            });
+          }
+        }
+        loadConversations(true);
+      })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "wa_conversations" }, () => loadConversations(true))
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [selectedConvId, loadConversations]);
+  }, [selectedConvId, loadConversations, conversations, playNotifSound, startTitleBlink, stopTitleBlink]);
+
+  // Ao selecionar conversa → limpar unread dela
+  useEffect(() => {
+    if (!selectedConvId) return;
+    setUnreadCounts((prev) => {
+      const next = { ...prev };
+      delete next[selectedConvId];
+      const total = Object.values(next).reduce((a, b) => a + b, 0);
+      setTotalUnread(total);
+      if (total === 0) stopTitleBlink();
+      return next;
+    });
+  }, [selectedConvId, stopTitleBlink]);
+
+  // Inicializar knownConvIds quando conversas carregam
+  useEffect(() => {
+    conversations.forEach((c) => knownConvIdsRef.current.add(c.id));
+  }, [conversations]);
+
+  // Cleanup título ao desmontar
+  useEffect(() => {
+    return () => stopTitleBlink();
+  }, [stopTitleBlink]);
 
   // Polling de fallback: recarrega lista a cada 10s independente do realtime
   useEffect(() => {
@@ -618,8 +731,17 @@ export default function Conversas() {
 
   const renderConversationList = () => (
     <div className="flex h-full flex-col wa-surface" style={{ borderRight: "1px solid #e9edef" }}>
-      <div className="wa-header-green flex h-14 items-center px-4">
-        <h2 className="text-base font-semibold text-white">Conversas</h2>
+      <div className="wa-header-green flex h-14 items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold text-white">Conversas</h2>
+          {totalUnread > 0 && (
+            <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-bold animate-pulse"
+              style={{ background: "#25d366", color: "#fff" }}>
+              <Bell className="h-3 w-3" />
+              {totalUnread}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="px-2 py-1.5" style={{ background: "#f0f2f5" }}>
@@ -746,11 +868,15 @@ export default function Conversas() {
                           ? "Janela encerrada — reativar com template"
                           : c.last_message || "..."}
                       </p>
-                      {c.ia_mode === false && !isHistorico && (
+                      {!isHistorico && unreadCounts[c.id] ? (
+                        <span className="shrink-0 flex items-center justify-center rounded-full min-w-[20px] h-5 px-1 text-[11px] font-bold" style={{ background: "#25d366", color: "#fff" }}>
+                          {unreadCounts[c.id]}
+                        </span>
+                      ) : c.ia_mode === false && !isHistorico ? (
                         <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ background: "#fef3c7", color: "#92400e" }}>
                           Humano
                         </span>
-                      )}
+                      ) : null}
                     </div>
                     {isHistorico && (
                       <button
