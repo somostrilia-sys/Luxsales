@@ -153,12 +153,49 @@ export default function VoiceSimulate() {
   // ── MODO BROWSER: Web Speech + AI Simulator ──
   // ══════════════════════════════════════════════
 
+  const playAudioBase64 = useCallback((base64: string, format: string = "mp3") => {
+    try {
+      const byteChars = atob(base64);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: `audio/${format}` });
+      const url = URL.createObjectURL(blob);
+      if (audioRef.current) {
+        audioRef.current.src = url;
+        audioRef.current.play().catch(() => {});
+      }
+    } catch {
+      // fallback silencioso
+    }
+  }, []);
+
+  const fallbackBrowserTTS = useCallback((text: string) => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "pt-BR";
+      utterance.rate = 1.05;
+      const voices = window.speechSynthesis.getVoices();
+      const ptVoice = voices.find(v => v.lang === "pt-BR" && /google|microsoft|luciana|daniel/i.test(v.name))
+        || voices.find(v => v.lang === "pt-BR")
+        || voices.find(v => v.lang.startsWith("pt"));
+      if (ptVoice) utterance.voice = ptVoice;
+      window.speechSynthesis.speak(utterance);
+    }
+  }, []);
+
   const callAiSimulator = useCallback(async (userMessage: string) => {
     setAiThinking(true);
     conversationRef.current.push({ role: "user", content: userMessage });
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      const history = conversationRef.current.map(m => ({
+        role: m.role === "user" ? "user" : "agent",
+        content: m.content,
+      }));
+
       const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
         method: "POST",
         headers: {
@@ -167,9 +204,11 @@ export default function VoiceSimulate() {
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
         },
         body: JSON.stringify({
-          messages: conversationRef.current,
-          company_id: companyId,
-          context: { phone_number: phoneNumber },
+          action: "respond",
+          text: userMessage,
+          history,
+          voice_key: "default",
+          context: { phone_number: phoneNumber, company_id: companyId },
         }),
       });
 
@@ -178,27 +217,17 @@ export default function VoiceSimulate() {
       conversationRef.current.push({ role: "assistant", content: aiText });
       addEntry("ai", aiText);
 
-      // TTS via browser — seleciona melhor voz pt-BR disponível
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(aiText);
-        utterance.lang = "pt-BR";
-        utterance.rate = 1.05;
-        utterance.pitch = 1.0;
-        // Tentar encontrar voz masculina pt-BR de qualidade
-        const voices = window.speechSynthesis.getVoices();
-        const ptVoice = voices.find(v => v.lang === "pt-BR" && /google|microsoft|luciana|daniel/i.test(v.name))
-          || voices.find(v => v.lang === "pt-BR")
-          || voices.find(v => v.lang.startsWith("pt"));
-        if (ptVoice) utterance.voice = ptVoice;
-        synthRef.current = utterance;
-        window.speechSynthesis.speak(utterance);
+      // Usar áudio do pipeline se disponível, senão fallback browser TTS
+      if (data.audio) {
+        playAudioBase64(data.audio, data.format || "mp3");
+      } else {
+        fallbackBrowserTTS(aiText);
       }
     } catch (err: any) {
       addSystem(`❌ Erro IA: ${err.message || "falha na conexão"}`);
     }
     setAiThinking(false);
-  }, [companyId, phoneNumber, addEntry, addSystem]);
+  }, [companyId, phoneNumber, addEntry, addSystem, playAudioBase64, fallbackBrowserTTS]);
 
   const startBrowserCall = useCallback(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
