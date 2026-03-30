@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Users } from "lucide-react";
+import { Loader2, Users, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
@@ -89,9 +89,21 @@ export default function Configuracoes() {
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [savingLeadDist, setSavingLeadDist] = useState(false);
 
+  // FASE 2: VoIP config
+  interface VoipConfig {
+    ramal: string;
+    servidor: string;
+    porta: string;
+    ativo: boolean;
+  }
+  const VOIP_DEFAULTS: VoipConfig = { ramal: "", servidor: "192.168.0.206", porta: "5060", ativo: false };
+  const [voipConfig, setVoipConfig] = useState<VoipConfig>(VOIP_DEFAULTS);
+  const [savingVoip, setSavingVoip] = useState(false);
+
   useEffect(() => {
     loadConfig();
     if (companyId) loadLeadDistConfig(companyId);
+    if (collaborator?.id) loadVoipConfig(collaborator.id);
   }, [companyId]);
 
   const loadConfig = async () => {
@@ -121,6 +133,41 @@ export default function Configuracoes() {
       toast.error("Erro ao carregar configurações: " + e.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // FASE 2: Carregar configurações VoIP
+  const loadVoipConfig = async (colabId: string) => {
+    try {
+      const { data } = await supabase
+        .from("system_configs")
+        .select("value")
+        .eq("key", `voip_config_${colabId}`)
+        .maybeSingle();
+      if (data?.value) {
+        try {
+          const parsed = JSON.parse(data.value);
+          setVoipConfig({ ...VOIP_DEFAULTS, ...parsed });
+        } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+  };
+
+  const salvarVoip = async () => {
+    if (!collaborator?.id) return;
+    setSavingVoip(true);
+    try {
+      const key = `voip_config_${collaborator.id}`;
+      const value = JSON.stringify(voipConfig);
+      const { error } = await supabase
+        .from("system_configs")
+        .upsert({ key, value, company_id: companyId }, { onConflict: "key" });
+      if (error) throw error;
+      toast.success("Configuração VoIP salva!");
+    } catch (e: any) {
+      toast.error("Erro ao salvar VoIP: " + e.message);
+    } finally {
+      setSavingVoip(false);
     }
   };
 
@@ -408,6 +455,58 @@ export default function Configuracoes() {
 
             <Button onClick={salvarLeadDist} disabled={savingLeadDist} variant="outline" className="w-full sm:w-auto">
               {savingLeadDist ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Salvando...</> : "Salvar Distribuição de Leads"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* FASE 2: Configuração VoIP por consultor */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Phone className="h-4 w-4 text-primary" />
+              Configuração VoIP
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="voip-ramal">Ramal / Número SIP</Label>
+                <Input
+                  id="voip-ramal"
+                  placeholder="Ex: 1001"
+                  value={voipConfig.ramal}
+                  onChange={e => setVoipConfig(v => ({ ...v, ramal: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="voip-servidor">Servidor SIP</Label>
+                <Input
+                  id="voip-servidor"
+                  placeholder="192.168.0.206"
+                  value={voipConfig.servidor}
+                  onChange={e => setVoipConfig(v => ({ ...v, servidor: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="voip-porta">Porta</Label>
+                <Input
+                  id="voip-porta"
+                  placeholder="5060"
+                  value={voipConfig.porta}
+                  onChange={e => setVoipConfig(v => ({ ...v, porta: e.target.value }))}
+                />
+              </div>
+              <div className="flex items-center gap-3 pt-5">
+                <Switch
+                  id="voip-ativo"
+                  checked={voipConfig.ativo}
+                  onCheckedChange={val => setVoipConfig(v => ({ ...v, ativo: val }))}
+                />
+                <Label htmlFor="voip-ativo">Canal ativo</Label>
+              </div>
+            </div>
+            <Button onClick={salvarVoip} disabled={savingVoip} variant="outline" className="w-full sm:w-auto">
+              {savingVoip ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Salvando...</> : "Salvar Configuração VoIP"}
             </Button>
           </CardContent>
         </Card>
