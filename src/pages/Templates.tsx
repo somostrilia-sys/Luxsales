@@ -17,7 +17,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
   Loader2, CheckCircle, Clock, XCircle, Search, Sparkles,
-  AlertTriangle, Users, Send, History, Pencil,
+  AlertTriangle, Users, Send, History, Pencil, ChevronDown, ChevronUp, Info,
 } from "lucide-react";
 
 interface Template {
@@ -85,6 +85,28 @@ const scoreBadge = (s: number) => {
   return { label: "REESCREVER", color: "bg-red-500/10 text-red-400 border-red-500/30" };
 };
 
+const FORBIDDEN_WORDS = ["oferta", "desconto", "promoção", "promoção", "compre", "comprar", "preço especial", "condição especial", "você se interessou", "demonstrou interesse"];
+
+const approvalBadge = (category: string, body: string) => {
+  const cat = (category || "").toUpperCase();
+  const bodyLower = (body || "").toLowerCase();
+  const hasForbidden = FORBIDDEN_WORDS.some(w => bodyLower.includes(w));
+
+  if (cat === "MARKETING" || hasForbidden) {
+    return { emoji: "🔴", label: "Pode ser rejeitado", color: "bg-red-500/10 text-red-400 border-red-500/30" };
+  }
+  if (cat === "UTILITY" && !hasForbidden) {
+    // Check for questionable patterns even in UTILITY
+    const questionable = ["proposta", "simulação", "cotação", "interesse", "pensando"];
+    const hasQuestionable = questionable.some(w => bodyLower.includes(w));
+    if (hasQuestionable) {
+      return { emoji: "🟡", label: "Chance moderada", color: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" };
+    }
+    return { emoji: "🟢", label: "Alta chance de aprovação", color: "bg-green-500/10 text-green-400 border-green-500/30" };
+  }
+  return { emoji: "🟡", label: "Chance moderada", color: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" };
+};
+
 interface VarMapping {
   variable_index: number;
   label: string;
@@ -104,7 +126,7 @@ const SOURCE_OPTIONS = [
 ];
 
 export default function Templates() {
-  const { collaborator } = useCollaborator();
+  const { collaborator, isCEO } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
   const effectiveCompanyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : collaborator?.company_id;
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -135,6 +157,9 @@ export default function Templates() {
 
   // Submit draft
   const [submittingDraft, setSubmittingDraft] = useState<string | null>(null);
+
+  // Meta rules accordion
+  const [metaRulesOpen, setMetaRulesOpen] = useState(false);
 
   // Rejection history
   const [rejections, setRejections] = useState<Rejection[]>([]);
@@ -616,10 +641,14 @@ export default function Templates() {
               </Button>
             )}
             {showSubmit && (t.status === "REJECTED" || t.status === "PENDING") && (
-              <Button size="sm" variant="default" disabled={resubmitting === t.name} onClick={() => handleResubmitTemplate(t)}>
-                {resubmitting === t.name ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Send className="h-3.5 w-3.5 mr-1" />}
-                {t.status === "REJECTED" ? "Resubmeter à Meta" : "Enviar para análise"}
-              </Button>
+              isCEO ? (
+                <Button size="sm" variant="default" disabled={resubmitting === t.name} onClick={() => handleResubmitTemplate(t)}>
+                  {resubmitting === t.name ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                  {t.status === "REJECTED" ? "Resubmeter à Meta" : "Enviar para análise"}
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">Aguardando aprovação do administrador</p>
+              )
             )}
           </div>
         </CardContent>
@@ -715,12 +744,13 @@ export default function Templates() {
                 const catColor = (d.category || "").toUpperCase() === "MARKETING"
                   ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
                   : "bg-green-500/10 text-green-400 border-green-500/30";
+                const ab = approvalBadge(d.category || "MARKETING", d.body);
                 return (
                   <Card key={d.name} className="hover:border-primary/30 transition-colors">
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
                         <CardTitle className="text-sm">{d.name}</CardTitle>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-wrap justify-end">
                           {d.category && (
                             <Badge variant="outline" className={`text-xs ${catColor}`}>
                               {d.category.toUpperCase()}
@@ -728,6 +758,9 @@ export default function Templates() {
                           )}
                           <Badge variant="outline" className="text-xs bg-muted/30 text-muted-foreground">Rascunho</Badge>
                           {sb && <Badge variant="outline" className={`text-xs ${sb.color}`}>{sb.label}</Badge>}
+                          <Badge variant="outline" className={`text-xs ${ab.color}`} title={ab.label}>
+                            {ab.emoji} {ab.label}
+                          </Badge>
                         </div>
                       </div>
                     </CardHeader>
@@ -736,10 +769,14 @@ export default function Templates() {
                       {d.strategy_notes && (
                         <p className="text-xs italic text-muted-foreground border-l-2 border-primary/30 pl-2">{d.strategy_notes}</p>
                       )}
-                      <Button size="sm" disabled={submittingDraft === d.name} onClick={() => handleSubmitDraft(d)}>
-                        {submittingDraft === d.name ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
-                        Submeter à Meta
-                      </Button>
+                      {isCEO ? (
+                        <Button size="sm" disabled={submittingDraft === d.name} onClick={() => handleSubmitDraft(d)}>
+                          {submittingDraft === d.name ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
+                          Submeter à Meta
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">Aguardando aprovação do administrador</p>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -750,6 +787,74 @@ export default function Templates() {
 
         {/* CREATE TAB */}
         <TabsContent value="create" className="space-y-6">
+          {/* Regras Meta - base de conhecimento colapsável */}
+          <Card className="border-blue-500/20 bg-blue-500/5">
+            <CardHeader className="pb-2 cursor-pointer" onClick={() => setMetaRulesOpen(o => !o)}>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <span>📋 Regras Meta — Guia de Aprovação</span>
+                  <span
+                    className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 cursor-help text-[10px]"
+                    title="A IA usa estas regras automaticamente para maximizar aprovação"
+                  >
+                    <Info className="h-3 w-3" />
+                  </span>
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-blue-400">A IA usa estas regras automaticamente para maximizar aprovação</span>
+                  {metaRulesOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                </div>
+              </div>
+            </CardHeader>
+            {metaRulesOpen && (
+              <CardContent className="space-y-4 pt-0">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold text-green-400 flex items-center gap-1">✅ UTILITY — Use quando:</h4>
+                    <ul className="text-xs text-muted-foreground space-y-1">
+                      <li>• Confirmação de transação já realizada</li>
+                      <li>• Atualização de pedido/serviço em andamento</li>
+                      <li>• Lembrete de pagamento de obrigação <strong>EXISTENTE</strong></li>
+                      <li>• Notificação operacional (código, senha, status)</li>
+                      <li>• <strong>ALERTA</strong> sobre situação que afeta o lead diretamente</li>
+                      <li>• Informação que o lead precisa agir para proteger interesse próprio</li>
+                    </ul>
+                    <div className="space-y-1 mt-2">
+                      <p className="text-[11px] font-medium text-green-400">Exemplos corretos como UTILITY:</p>
+                      <p className="text-[11px] text-muted-foreground bg-green-500/5 border border-green-500/20 p-2 rounded">✅ "⚠️ {`{{1}}`}, seu veículo {`{{2}}`} está sem proteção há {`{{3}}`} dias. Regularize: {`{{4}}`}"</p>
+                      <p className="text-[11px] text-muted-foreground bg-green-500/5 border border-green-500/20 p-2 rounded">✅ "🔔 Lembrete: a proteção do seu {`{{1}}`} vence em {`{{2}}`} dias. Renove: {`{{3}}`}"</p>
+                      <p className="text-[11px] text-muted-foreground bg-green-500/5 border border-green-500/20 p-2 rounded">✅ "⚡ {`{{1}}`}, identificamos pendência no cadastro do seu veículo {`{{2}}`}. Regularize: {`{{3}}`}"</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold text-yellow-400 flex items-center gap-1">⚠️ MARKETING — Obrigatório se contiver:</h4>
+                    <ul className="text-xs text-muted-foreground space-y-1">
+                      <li>• Proposta de preço ou oferta direta</li>
+                      <li>• "Você pode se interessar por..."</li>
+                      <li>• Convite para conhecer produto</li>
+                      <li>• Reengajamento sem contexto de utilidade</li>
+                      <li>• Qualquer CTA comercial direto</li>
+                    </ul>
+                    <div className="space-y-1 mt-2">
+                      <p className="text-[11px] font-medium text-red-400">Exemplos incorretos como UTILITY:</p>
+                      <p className="text-[11px] text-muted-foreground bg-red-500/5 border border-red-500/20 p-2 rounded">❌ "Temos uma oferta especial de proteção veicular para você!"</p>
+                      <p className="text-[11px] text-muted-foreground bg-red-500/5 border border-red-500/20 p-2 rounded">❌ "{`{{1}}`}, você demonstrou interesse. Podemos enviar uma proposta?"</p>
+                      <p className="text-[11px] text-muted-foreground bg-red-500/5 border border-red-500/20 p-2 rounded">❌ "Quer economizar no seguro do seu {`{{1}}`}? Temos o melhor preço!"</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/20 rounded p-3">
+                  <Info className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
+                  <p className="text-xs text-blue-300">
+                    <strong>Estratégia ISCA DE UTILIDADE:</strong> A IA transforma intenções comerciais em alertas/notificações de utilidade genuína.
+                    Ex: "quero vender proteção" → "⚠️ Alerta: seu veículo pode estar desprotegido. Acesse: {`{{1}}`}".
+                    Templates UTILITY aprovados têm custo menor e maior alcance.
+                  </p>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
           {/* Configuração de variáveis Meta */}
           <Card className="border-primary/20 bg-primary/5">
             <CardHeader className="pb-2">
@@ -843,18 +948,22 @@ export default function Templates() {
                 const catColor = (g.category || "").toUpperCase() === "MARKETING"
                   ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
                   : "bg-green-500/10 text-green-400 border-green-500/30";
+                const ab = approvalBadge(g.category || "MARKETING", g.body);
                 return (
                   <Card key={idx} className="hover:border-primary/30 transition-colors">
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
                         <CardTitle className="text-sm">{g.name}</CardTitle>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-wrap justify-end">
                           {g.category && (
                             <Badge variant="outline" className={`text-xs ${catColor}`}>
                               {g.category.toUpperCase()}
                             </Badge>
                           )}
                           {sb && <Badge variant="outline" className={`text-xs ${sb.color}`}>{sb.label}</Badge>}
+                          <Badge variant="outline" className={`text-xs ${ab.color}`} title={ab.label}>
+                            {ab.emoji} {ab.label}
+                          </Badge>
                         </div>
                       </div>
                     </CardHeader>
