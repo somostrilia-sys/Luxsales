@@ -22,8 +22,19 @@ import {
   Phone,
   MessageSquare,
   SendHorizontal,
+  Hand,
+  RefreshCw,
+  Clock,
+  History,
+  MessageCircle,
 } from "lucide-react";
-import { format, formatDistanceToNowStrict, isToday, isYesterday } from "date-fns";
+import {
+  format,
+  formatDistanceToNowStrict,
+  isToday,
+  isYesterday,
+  differenceInMinutes,
+} from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const FALLBACK_COMPANY_ID = "d33b6a84-8f72-4441-b2eb-dd151a31ac12";
@@ -36,9 +47,12 @@ interface ConversationItem {
   last_message_at: string | null;
   status: string | null;
   human_mode: boolean;
+  ia_mode: boolean;
   window_open: boolean;
+  window_expires_at: string | null;
   is_typing: boolean;
   typing_updated_at: string | null;
+  lucas_summary: string | null;
 }
 
 interface ChatMessage {
@@ -72,16 +86,37 @@ const normalizePhone = (phone: string): string => {
   return digits;
 };
 
+const checkWindowOpen = (expiresAt: string | null): boolean => {
+  if (!expiresAt) return false;
+  return new Date(expiresAt) > new Date();
+};
+
+const getWindowCountdown = (expiresAt: string | null): string | null => {
+  if (!expiresAt) return null;
+  const d = new Date(expiresAt);
+  const now = new Date();
+  const minsLeft = differenceInMinutes(d, now);
+  if (minsLeft <= 0) return null;
+  if (minsLeft < 120) {
+    const h = Math.floor(minsLeft / 60);
+    const m = minsLeft % 60;
+    return h > 0 ? `${h}h ${m}min` : `${m}min`;
+  }
+  return null;
+};
 export default function Conversas() {
   const { collaborator } = useCollaborator();
   const isMobile = useIsMobile();
   const { selectedCompanyId } = useCompanyFilter();
-  const companyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : (collaborator?.company_id || FALLBACK_COMPANY_ID);
+  const companyId =
+    selectedCompanyId && selectedCompanyId !== "all"
+      ? selectedCompanyId
+      : collaborator?.company_id || FALLBACK_COMPANY_ID;
 
+  const [activeTab, setActiveTab] = useState<"ativas" | "historico">("ativas");
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -89,171 +124,187 @@ export default function Conversas() {
   const [lifecycle, setLifecycle] = useState<LifecycleData | null>(null);
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
-  const [windowOpen, setWindowOpen] = useState(false);
-  const [windowExpires, setWindowExpires] = useState<string | null>(null);
+  const [togglingIa, setTogglingIa] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const selectedPhoneRef = useRef<string | null>(null);
   const lastMessageTsRef = useRef<string | null>(null);
 
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
+  const [templateTargetPhone, setTemplateTargetPhone] = useState<string | null>(null);
 
-  useEffect(() => { selectedPhoneRef.current = selectedPhone; }, [selectedPhone]);
-
-  // ── Track last message timestamp for polling ──
   useEffect(() => {
     if (messages.length > 0) {
       lastMessageTsRef.current = messages[messages.length - 1].created_at;
     }
   }, [messages]);
 
-  // ── Load conversation list from wa_conversations ──
-  const loadConversations = useCallback(async (silent = false) => {
-    if (!silent) setLoadingList(true);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
-    try {
-      // CEO com "Todas Empresas" vê tudo. Consultores veem apenas suas próprias conversas.
-      const isCeoAllView = collaborator?.role?.level === 0 &&
-        (selectedCompanyId === "all" || !selectedCompanyId);
+  const selectedConv = conversations.find((c) => c.id === selectedConvId) ?? null;
+  const windowIsOpen = selectedConv ? checkWindowOpen(selectedConv.window_expires_at) : false;
 
-      let query = supabase
-        .from("wa_conversations")
-        .select("id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, is_typing, typing_updated_at, collaborator_id, assigned_to")
-        .order("last_message_at", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false })
-        .limit(100)
-        .abortSignal(controller.signal);
+  const loadConversations = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoadingList(true);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      try {
+        const isCeoAllView =
+          collaborator?.role?.level === 0 &&
+          (selectedCompanyId === "all" || !selectedCompanyId);
 
-      // Filtrar por collaborator se não for CEO vendo tudo
-      if (!isCeoAllView && collaborator?.id) {
-        // Try filtering by collaborator_id or assigned_to column
-        query = query.or(`collaborator_id.eq.${collaborator.id},assigned_to.eq.${collaborator.id}`);
-      }
-
-      const { data, error: convError } = await query;
-
-      // If columns don't exist (error), fallback to pool-based filtering
-      let finalData = data;
-      if (convError && (convError.message?.includes("collaborator_id") || convError.message?.includes("assigned_to"))) {
-        // Fallback: filter via consultant_lead_pool
-        if (!isCeoAllView && collaborator?.id) {
-          const { data: poolPhones } = await supabase
-            .from("consultant_lead_pool")
-            .select("phone_number")
-            .eq("collaborator_id", collaborator.id)
-            .limit(200)
-            .abortSignal(controller.signal);
-
-          const phones = (poolPhones || []).map((p: any) => p.phone_number);
-
-          if (phones.length > 0) {
-            const { data: fallbackData } = await supabase
-              .from("wa_conversations")
-              .select("id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, is_typing, typing_updated_at")
-              .in("phone", phones)
-              .order("last_message_at", { ascending: false, nullsFirst: false })
-              .order("created_at", { ascending: false })
-              .limit(100)
-              .abortSignal(controller.signal);
-            finalData = fallbackData;
-          } else {
-            finalData = [];
-          }
-        } else {
-          // CEO fallback: load all without filter
-          const { data: allData } = await supabase
-            .from("wa_conversations")
-            .select("id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, is_typing, typing_updated_at")
-            .order("last_message_at", { ascending: false, nullsFirst: false })
-            .order("created_at", { ascending: false })
-            .limit(50)
-            .abortSignal(controller.signal);
-          finalData = allData;
-        }
-      }
-
-      const dataToProcess = finalData;
-
-      if (!dataToProcess) { if (!silent) setLoadingList(false); return; }
-
-      // Deduplicate by normalized phone — keep most recent
-      const seen = new Map<string, ConversationItem>();
-      for (const row of dataToProcess) {
-        const norm = normalizePhone(row.phone || "");
-        if (!seen.has(norm)) {
-          seen.set(norm, {
-            id: row.id,
-            phone: row.phone,
-            lead_name: (row as any).lead_name ?? null,
-            last_message: (row as any).last_message ?? null,
-            last_message_at: (row as any).last_message_at ?? row.created_at,
-            status: row.status,
-            human_mode: (row as any).human_mode ?? false,
-            window_open: false,
-            is_typing: (row as any).is_typing ?? false,
-            typing_updated_at: (row as any).typing_updated_at ?? null,
-          });
-        }
-      }
-
-      // Enrich with lifecycle window data
-      const phones = Array.from(seen.values()).map((c) => normalizePhone(c.phone));
-      if (phones.length > 0) {
-        const { data: lifecycles } = await supabase
-          .from("lead_whatsapp_lifecycle")
-          .select("phone_number, window_open")
-          .eq("company_id", companyId)
-          .in("phone_number", phones)
-          .limit(50)
+        let query = supabase
+          .from("wa_conversations")
+          .select(
+            "id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, ia_mode, window_expires_at, lucas_summary, is_typing, typing_updated_at, collaborator_id, assigned_to"
+          )
+          .order("last_message_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false })
+          .limit(150)
           .abortSignal(controller.signal);
 
-        if (lifecycles) {
-          for (const lc of lifecycles) {
-            const norm = normalizePhone((lc as any).phone_number || "");
-            const item = seen.get(norm);
-            if (item) item.window_open = (lc as any).window_open ?? false;
+        if (!isCeoAllView && collaborator?.id) {
+          query = query.or(
+            `collaborator_id.eq.${collaborator.id},assigned_to.eq.${collaborator.id}`
+          );
+        }
+
+        const { data, error: convError } = await query;
+        let finalData = data;
+
+        if (
+          convError &&
+          (convError.message?.includes("collaborator_id") ||
+            convError.message?.includes("assigned_to"))
+        ) {
+          if (!isCeoAllView && collaborator?.id) {
+            const { data: poolPhones } = await supabase
+              .from("consultant_lead_pool")
+              .select("phone_number")
+              .eq("collaborator_id", collaborator.id)
+              .limit(200)
+              .abortSignal(controller.signal);
+            const phones = (poolPhones || []).map((p: any) => p.phone_number);
+            if (phones.length > 0) {
+              const { data: fb } = await supabase
+                .from("wa_conversations")
+                .select(
+                  "id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, ia_mode, window_expires_at, lucas_summary, is_typing, typing_updated_at"
+                )
+                .in("phone", phones)
+                .order("last_message_at", { ascending: false, nullsFirst: false })
+                .order("created_at", { ascending: false })
+                .limit(100)
+                .abortSignal(controller.signal);
+              finalData = fb;
+            } else {
+              finalData = [];
+            }
+          } else {
+            const { data: all } = await supabase
+              .from("wa_conversations")
+              .select(
+                "id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, ia_mode, window_expires_at, lucas_summary, is_typing, typing_updated_at"
+              )
+              .order("last_message_at", { ascending: false, nullsFirst: false })
+              .order("created_at", { ascending: false })
+              .limit(50)
+              .abortSignal(controller.signal);
+            finalData = all;
           }
         }
-      }
 
-      setConversations(Array.from(seen.values()));
-    } catch (e: any) {
-      if (e.name !== "AbortError" && !silent) toast.error("Erro ao carregar conversas");
-    } finally {
-      clearTimeout(timer);
-      if (!silent) setLoadingList(false);
-    }
-  }, [companyId]);
+        if (!finalData) {
+          if (!silent) setLoadingList(false);
+          return;
+        }
+
+        const seen = new Map<string, ConversationItem>();
+        for (const row of finalData) {
+          const norm = normalizePhone(row.phone || "");
+          if (!seen.has(norm)) {
+            let expiresAt: string | null = (row as any).window_expires_at ?? null;
+            if (!expiresAt && (row as any).last_message_at) {
+              const lma = new Date((row as any).last_message_at);
+              lma.setHours(lma.getHours() + 24);
+              expiresAt = lma.toISOString();
+            }
+            seen.set(norm, {
+              id: row.id,
+              phone: row.phone,
+              lead_name: (row as any).lead_name ?? null,
+              last_message: (row as any).last_message ?? null,
+              last_message_at: (row as any).last_message_at ?? row.created_at,
+              status: row.status,
+              human_mode: (row as any).human_mode ?? false,
+              ia_mode: (row as any).ia_mode ?? true,
+              window_open: checkWindowOpen(expiresAt),
+              window_expires_at: expiresAt,
+              is_typing: (row as any).is_typing ?? false,
+              typing_updated_at: (row as any).typing_updated_at ?? null,
+              lucas_summary: (row as any).lucas_summary ?? null,
+            });
+          }
+        }
+
+        const phones = Array.from(seen.values()).map((c) => normalizePhone(c.phone));
+        if (phones.length > 0) {
+          const { data: lifecycles } = await supabase
+            .from("lead_whatsapp_lifecycle")
+            .select("phone_number, window_open, window_expires_at")
+            .eq("company_id", companyId)
+            .in("phone_number", phones)
+            .limit(100)
+            .abortSignal(controller.signal);
+
+          if (lifecycles) {
+            for (const lc of lifecycles) {
+              const norm = normalizePhone((lc as any).phone_number || "");
+              const item = seen.get(norm);
+              if (item) {
+                const lcExp = (lc as any).window_expires_at ?? null;
+                const lcOpen = (lc as any).window_open === true && checkWindowOpen(lcExp);
+                item.window_open = lcOpen;
+                if (lcExp) item.window_expires_at = lcExp;
+              }
+            }
+          }
+        }
+
+        setConversations(Array.from(seen.values()));
+      } catch (e: any) {
+        if (e.name !== "AbortError" && !silent)
+          toast.error("Erro ao carregar conversas");
+      } finally {
+        clearTimeout(timer);
+        if (!silent) setLoadingList(false);
+      }
+    },
+    [companyId, collaborator, selectedCompanyId]
+  );
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
-  // ── Polling: conversation list every 5s (silent) ──
   useEffect(() => {
     const interval = setInterval(() => loadConversations(true), 5000);
     return () => clearInterval(interval);
   }, [loadConversations]);
 
-  // ── Load chat messages from wa_messages ──
   useEffect(() => {
     if (!selectedConvId || !selectedPhone) { setMessages([]); return; }
-
     const load = async () => {
       setLoadingChat(true);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 12000);
       try {
-        const { data: waData } = await supabase
+        const { data } = await supabase
           .from("wa_messages")
           .select("id, role, content, created_at")
           .eq("conversation_id", selectedConvId)
           .order("created_at", { ascending: true })
           .limit(500)
           .abortSignal(controller.signal);
-
-        setMessages((waData || []) as ChatMessage[]);
+        setMessages((data || []) as ChatMessage[]);
       } catch (err) {
         console.error("Erro ao buscar mensagens:", err);
         setMessages([]);
@@ -262,70 +313,36 @@ export default function Conversas() {
         setLoadingChat(false);
       }
     };
-
     void load();
   }, [selectedConvId, selectedPhone]);
 
-  // ── Load lifecycle context ──
   useEffect(() => {
     if (!selectedPhone) { setLifecycle(null); return; }
-
     const loadLifecycle = async () => {
       const norm = normalizePhone(selectedPhone);
-      const phonesToTry = [norm, `+${norm}`, selectedPhone];
-
-      for (const tryPhone of Array.from(new Set(phonesToTry))) {
+      for (const tryPhone of Array.from(new Set([norm, "+" + norm, selectedPhone]))) {
         const { data: lc } = await supabase
           .from("lead_whatsapp_lifecycle")
           .select("stage, sentiment, window_open, window_expires_at, interests, objections, messages_sent, messages_received")
           .eq("phone_number", tryPhone)
           .maybeSingle();
-
         if (lc) { setLifecycle(lc as LifecycleData); return; }
       }
       setLifecycle(null);
     };
-
     void loadLifecycle();
   }, [selectedPhone]);
 
-  // ── Window state (24h) ──
-  const fetchWindow = useCallback(async (phone: string) => {
-    const norm = normalizePhone(phone);
-    const { data } = await supabase
-      .from("lead_whatsapp_lifecycle")
-      .select("window_open, window_expires_at")
-      .eq("phone_number", norm)
-      .maybeSingle();
-
-    if (data) {
-      const isOpen = data.window_open === true && new Date(data.window_expires_at) > new Date();
-      setWindowOpen(isOpen);
-      setWindowExpires(data.window_expires_at);
-    } else {
-      setWindowOpen(false);
-      setWindowExpires(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!selectedPhone) { setWindowOpen(false); setWindowExpires(null); return; }
-    fetchWindow(selectedPhone);
-  }, [selectedPhone, fetchWindow]);
-
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-  useEffect(() => { if (windowOpen) inputRef.current?.focus(); }, [selectedPhone, windowOpen]);
 
-  // ── Realtime subscription for wa_messages + wa_conversations ──
   useEffect(() => {
-    const channel = supabase
+    if (windowIsOpen && selectedConv?.ia_mode === false) inputRef.current?.focus();
+  }, [selectedPhone, windowIsOpen, selectedConv?.ia_mode]);
+
+  useEffect(() => {
+    const ch = supabase
       .channel("wa-realtime")
-      // Novas mensagens → atualiza chat + lista
-      .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "wa_messages",
-      }, (payload: any) => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wa_messages" }, (payload: any) => {
         const msg = payload.new as ChatMessage;
         if (msg.conversation_id === selectedConvId) {
           setMessages((prev) => {
@@ -335,28 +352,12 @@ export default function Conversas() {
         }
         loadConversations(true);
       })
-      // Nova conversa → atualiza lista imediatamente
-      .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "wa_conversations",
-      }, () => {
-        loadConversations(true);
-      })
-      // Conversa atualizada (last_message, status, typing, etc.) → atualiza lista
-      .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
-        table: "wa_conversations",
-      }, () => {
-        loadConversations(true);
-      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "wa_conversations" }, () => loadConversations(true))
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "wa_conversations" }, () => loadConversations(true))
       .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    return () => { supabase.removeChannel(ch); };
   }, [selectedConvId, loadConversations]);
 
-  // ── Polling: messages every 3s when conversation is open ──
   useEffect(() => {
     if (!selectedConvId) return;
     const interval = setInterval(async () => {
@@ -380,31 +381,36 @@ export default function Conversas() {
     return () => clearInterval(interval);
   }, [selectedConvId]);
 
-  // ── Send message ──
   const getHeaders = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     return {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${session?.access_token}`,
+      Authorization: "Bearer " + session?.access_token,
       apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
     };
   }, []);
 
   const sendMessage = async () => {
-    if (!messageText.trim() || !selectedPhone || sending || !windowOpen) return;
+    if (!messageText.trim() || !selectedPhone || sending) return;
+    if (!windowIsOpen) {
+      toast.error("Janela encerrada — envie um template aprovado");
+      return;
+    }
+    if (selectedConv?.ia_mode !== false) {
+      toast.error("Assuma a conversa antes de enviar mensagens");
+      return;
+    }
     setSending(true);
     try {
-      const res = await fetch("https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/send-meta-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: normalizePhone(selectedPhone),
-          message: messageText,
-          company_id: companyId,
-        }),
-      });
+      const res = await fetch(
+        "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/send-meta-message",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: normalizePhone(selectedPhone), message: messageText, company_id: companyId }),
+        }
+      );
       if (res.ok) {
-        // Adicionar mensagem enviada na lista local imediatamente
         const sentMsg: ChatMessage = {
           id: crypto.randomUUID(),
           conversation_id: selectedConvId || "",
@@ -425,8 +431,26 @@ export default function Conversas() {
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  // ── Send template ──
-  const loadTemplates = async () => {
+  const toggleIaMode = async (newIaMode: boolean) => {
+    if (!selectedConvId) return;
+    setTogglingIa(true);
+    const { error } = await supabase
+      .from("wa_conversations")
+      .update({ ia_mode: newIaMode, updated_at: new Date().toISOString() })
+      .eq("id", selectedConvId);
+    if (error) {
+      toast.error("Erro ao alterar modo de atendimento");
+    } else {
+      setConversations((prev) =>
+        prev.map((c) => (c.id === selectedConvId ? { ...c, ia_mode: newIaMode } : c))
+      );
+      toast.success(newIaMode ? "🤖 Lucas assumiu a conversa novamente" : "✋ Você assumiu a conversa — Lucas pausado");
+    }
+    setTogglingIa(false);
+  };
+
+  const openTemplateModal = async (targetPhone?: string) => {
+    setTemplateTargetPhone(targetPhone ?? selectedPhone);
     const { data } = await supabase
       .from("whatsapp_meta_templates")
       .select("name, status, language")
@@ -437,32 +461,27 @@ export default function Conversas() {
   };
 
   const sendTemplate = async (templateName: string) => {
-    if (!selectedPhone) return;
+    const phone = templateTargetPhone || selectedPhone;
+    if (!phone) return;
     try {
       const headers = await getHeaders();
-      await fetch(`${EDGE_BASE}/smart-dispatcher`, {
+      const res = await fetch(EDGE_BASE + "/smart-dispatcher", {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          action: "send-by-slot",
-          company_id: companyId,
-          phone_number: selectedPhone,
-          template_name: templateName,
-        }),
+        body: JSON.stringify({ action: "send-by-slot", company_id: companyId, phone_number: phone, template_name: templateName }),
       });
-      toast.success("Template enviado");
-      setTemplateOpen(false);
+      if (res.ok) {
+        toast.success("Template enviado!");
+        setTemplateOpen(false);
+        setTemplateTargetPhone(null);
+        setTimeout(() => loadConversations(true), 1500);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error || "Erro ao enviar template");
+      }
     } catch {
       toast.error("Erro ao enviar template");
     }
-  };
-
-  // ── Helpers ──
-  const formatTs = (ts: string) => {
-    const d = new Date(ts);
-    if (isToday(d)) return format(d, "HH:mm");
-    if (isYesterday(d)) return `Ontem ${format(d, "HH:mm")}`;
-    return format(d, "dd/MM HH:mm");
   };
 
   const formatRelativeListTs = (ts: string) => {
@@ -475,10 +494,10 @@ export default function Conversas() {
   const formatPhone = (phone: string) => {
     const onlyDigits = phone.replace(/\D/g, "");
     if (onlyDigits.length >= 12) {
-      return `+${onlyDigits.slice(0, 2)} ${onlyDigits.slice(2, 4)} ${onlyDigits.slice(4, 9)}-${onlyDigits.slice(9, 13)}`;
+      return "+" + onlyDigits.slice(0, 2) + " " + onlyDigits.slice(2, 4) + " " + onlyDigits.slice(4, 9) + "-" + onlyDigits.slice(9, 13);
     }
     if (onlyDigits.length >= 11) {
-      return `(${onlyDigits.slice(0, 2)}) ${onlyDigits.slice(2, 7)}-${onlyDigits.slice(7, 11)}`;
+      return "(" + onlyDigits.slice(0, 2) + ") " + onlyDigits.slice(2, 7) + "-" + onlyDigits.slice(7, 11);
     }
     return phone;
   };
@@ -503,14 +522,24 @@ export default function Conversas() {
     return format(d, "dd/MM/yyyy");
   };
 
-  // ── Filter conversations ──
-  const filtered = conversations.filter((c) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (c.lead_name?.toLowerCase().includes(q) || c.phone.includes(q));
-  });
+  const filteredAtivas = conversations
+    .filter((c) => c.window_open || checkWindowOpen(c.window_expires_at))
+    .filter((c) => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return c.lead_name?.toLowerCase().includes(q) || c.phone.includes(q);
+    });
 
-  // ── Context panel ──
+  const filteredHistorico = conversations
+    .filter((c) => !c.window_open && !checkWindowOpen(c.window_expires_at))
+    .filter((c) => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return c.lead_name?.toLowerCase().includes(q) || c.phone.includes(q);
+    });
+
+  const displayList = activeTab === "ativas" ? filteredAtivas : filteredHistorico;
+
   const ContextPanel = () => (
     <div className="space-y-4 p-4">
       <h3 className="font-semibold text-sm">Contexto do Lead</h3>
@@ -526,7 +555,9 @@ export default function Conversas() {
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-1">Interesses</p>
               <div className="flex flex-wrap gap-1">
-                {lifecycle.interests.map((i) => <Badge key={i} variant="secondary" className="text-xs">{i}</Badge>)}
+                {lifecycle.interests.map((i) => (
+                  <Badge key={i} variant="secondary" className="text-xs">{i}</Badge>
+                ))}
               </div>
             </div>
           )}
@@ -534,7 +565,9 @@ export default function Conversas() {
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-1">Objeções</p>
               <div className="flex flex-wrap gap-1">
-                {lifecycle.objections.map((o) => <Badge key={o} variant="destructive" className="text-xs">{o}</Badge>)}
+                {lifecycle.objections.map((o) => (
+                  <Badge key={o} variant="destructive" className="text-xs">{o}</Badge>
+                ))}
               </div>
             </div>
           )}
@@ -543,43 +576,93 @@ export default function Conversas() {
         <p className="text-xs text-muted-foreground">Sem dados de lifecycle</p>
       )}
 
+      {selectedConv?.lucas_summary && (
+        <div className="pt-2 border-t border-border">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Resumo do Lucas</p>
+          <p className="text-xs text-foreground leading-relaxed">{selectedConv.lucas_summary}</p>
+        </div>
+      )}
+
       <div className="pt-2 space-y-2">
-        <Button size="sm" variant="outline" className="w-full justify-start gap-2" onClick={async () => {
-          if (selectedPhone) {
-            try {
-              const headers = await getHeaders();
-              await fetch(`${EDGE_BASE}/make-call`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({ action: "dial", to: selectedPhone }),
-              });
-              toast.success("Ligação iniciada");
-            } catch { toast.error("Erro"); }
-          }
-        }}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full justify-start gap-2"
+          onClick={async () => {
+            if (selectedPhone) {
+              try {
+                const headers = await getHeaders();
+                await fetch(EDGE_BASE + "/make-call", {
+                  method: "POST",
+                  headers,
+                  body: JSON.stringify({ action: "dial", to: selectedPhone }),
+                });
+                toast.success("Ligação iniciada");
+              } catch {
+                toast.error("Erro");
+              }
+            }
+          }}
+        >
           <Phone className="h-3.5 w-3.5" /> Ligar
         </Button>
       </div>
     </div>
   );
 
-  // ── Conversation List Panel ──
   const renderConversationList = () => (
     <div className="flex h-full flex-col wa-surface" style={{ borderRight: "1px solid #e9edef" }}>
       <div className="wa-header-green flex h-14 items-center px-4">
         <h2 className="text-base font-semibold text-white">Conversas</h2>
       </div>
+
       <div className="px-2 py-1.5" style={{ background: "#f0f2f5" }}>
         <div className="relative">
           <Search className="absolute left-3 top-2.5 h-4 w-4" style={{ color: "#54656f" }} />
           <input
-            placeholder="Buscar ou começar uma nova conversa"
+            placeholder="Buscar conversa..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-9 w-full rounded-lg border-none pl-9 pr-3 text-[13px] outline-none"
             style={{ background: "#ffffff", color: "#111b21" }}
           />
         </div>
+      </div>
+
+      {/* TAREFA 4.2 — Abas */}
+      <div className="flex" style={{ background: "#f0f2f5", borderBottom: "1px solid #e9edef" }}>
+        <button
+          onClick={() => setActiveTab("ativas")}
+          className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[13px] font-medium transition-colors"
+          style={{
+            borderBottom: activeTab === "ativas" ? "2px solid #005c4b" : "2px solid transparent",
+            color: activeTab === "ativas" ? "#005c4b" : "#667781",
+          }}
+        >
+          <MessageCircle className="h-3.5 w-3.5" />
+          Ativas
+          {filteredAtivas.length > 0 && (
+            <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#005c4b", color: "#fff" }}>
+              {filteredAtivas.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("historico")}
+          className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[13px] font-medium transition-colors"
+          style={{
+            borderBottom: activeTab === "historico" ? "2px solid #005c4b" : "2px solid transparent",
+            color: activeTab === "historico" ? "#005c4b" : "#667781",
+          }}
+        >
+          <History className="h-3.5 w-3.5" />
+          Histórico
+          {filteredHistorico.length > 0 && (
+            <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#667781", color: "#fff" }}>
+              {filteredHistorico.length}
+            </span>
+          )}
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto wa-chat-scrollbar">
@@ -595,16 +678,27 @@ export default function Conversas() {
               </div>
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : displayList.length === 0 ? (
           <div className="p-8 text-center" style={{ color: "#667781" }}>
-            <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">Nenhuma conversa ainda.</p>
-            <p className="text-xs mt-1">Quando leads mandarem mensagem no WhatsApp, aparecerão aqui.</p>
+            {activeTab === "ativas" ? (
+              <>
+                <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                <p className="text-sm">Nenhuma conversa ativa.</p>
+                <p className="text-xs mt-1">Leads respondendo aparecem aqui.</p>
+              </>
+            ) : (
+              <>
+                <History className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                <p className="text-sm">Nenhum histórico.</p>
+                <p className="text-xs mt-1">Conversas encerradas (janela expirada).</p>
+              </>
+            )}
           </div>
         ) : (
           <div>
-            {filtered.map((c) => {
+            {displayList.map((c) => {
               const avatar = getAvatarTone(c.phone);
+              const isHistorico = activeTab === "historico";
               return (
                 <button
                   key={c.id}
@@ -615,7 +709,7 @@ export default function Conversas() {
                   }}
                   className={cn(
                     "wa-row-hover flex w-full items-center gap-3 px-3 py-[10px] text-left transition-colors",
-                    selectedConvId === c.id && "wa-row-selected",
+                    selectedConvId === c.id && "wa-row-selected"
                   )}
                   style={{ borderBottom: "1px solid #e9edef" }}
                 >
@@ -624,23 +718,46 @@ export default function Conversas() {
                     style={{ background: avatar.bg, color: avatar.fg }}
                   >
                     {c.lead_name ? c.lead_name.slice(0, 1).toUpperCase() : "👤"}
-                    {c.window_open && (
+                    {!isHistorico && (
                       <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full wa-window-dot" style={{ border: "2px solid #fff" }} />
+                    )}
+                    {isHistorico && (
+                      <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full" style={{ background: "#ef4444", border: "2px solid #fff" }} />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="truncate text-[15px] wa-text-main" style={{ fontWeight: 500 }}>{c.lead_name || formatPhone(c.phone)}</p>
-                      <span className="shrink-0 text-[12px] wa-text-muted">{c.last_message_at ? formatRelativeListTs(c.last_message_at) : ""}</span>
+                      <p className="truncate text-[15px] wa-text-main" style={{ fontWeight: 500 }}>
+                        {c.lead_name || formatPhone(c.phone)}
+                      </p>
+                      <span className="shrink-0 text-[12px] wa-text-muted">
+                        {c.last_message_at ? formatRelativeListTs(c.last_message_at) : ""}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <p className="truncate text-[13px] wa-text-muted flex-1">{c.last_message || "..."}</p>
-                      {c.human_mode && (
-                        <span className="shrink-0 flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ background: "#fef3c7", color: "#92400e" }}>
+                      <p className="truncate text-[13px] wa-text-muted flex-1">
+                        {isHistorico
+                          ? "Janela encerrada — reativar com template"
+                          : c.last_message || "..."}
+                      </p>
+                      {c.ia_mode === false && !isHistorico && (
+                        <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ background: "#fef3c7", color: "#92400e" }}>
                           Humano
                         </span>
                       )}
                     </div>
+                    {isHistorico && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openTemplateModal(c.phone);
+                        }}
+                        className="mt-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors"
+                        style={{ background: "#005c4b", color: "#fff" }}
+                      >
+                        Reativar
+                      </button>
+                    )}
                   </div>
                 </button>
               );
@@ -651,7 +768,6 @@ export default function Conversas() {
     </div>
   );
 
-  // ── Chat Panel ──
   const renderEmptyState = () => (
     <div className="wa-chat-pattern flex h-full flex-1 items-center justify-center">
       <div className="text-center" style={{ color: "#667781" }}>
@@ -665,24 +781,31 @@ export default function Conversas() {
   const renderChatPanel = () => {
     if (!selectedPhone) return renderEmptyState();
 
-    const selected = conversations.find((c) => c.id === selectedConvId);
-    const title = selected?.lead_name || formatPhone(selectedPhone);
+    const conv = selectedConv;
+    const title = conv?.lead_name || formatPhone(selectedPhone);
     const avatar = getAvatarTone(selectedPhone);
-    const isTyping = selected?.is_typing === true &&
-      selected?.typing_updated_at != null &&
-      (new Date().getTime() - new Date(selected.typing_updated_at).getTime()) < 10000;
+    const isTyping =
+      conv?.is_typing === true &&
+      conv?.typing_updated_at != null &&
+      new Date().getTime() - new Date(conv.typing_updated_at).getTime() < 10000;
+
+    const isHistoricoConv = !windowIsOpen;
+    const iaActive = conv?.ia_mode !== false;
+    const countdown = getWindowCountdown(conv?.window_expires_at ?? null);
 
     return (
       <div className="flex h-full flex-1 flex-col">
-        {/* Chat header */}
-        <div className="sticky top-0 z-10 flex h-[60px] shrink-0 items-center justify-between px-4" style={{ background: "#f0f2f5", borderBottom: "1px solid #e0e0e0" }}>
+        {/* Header */}
+        <div className="sticky top-0 z-10 flex h-[60px] shrink-0 items-center justify-between px-4"
+          style={{ background: "#f0f2f5", borderBottom: "1px solid #e0e0e0" }}>
           <div className="flex items-center gap-3">
             {isMobile && (
               <button onClick={() => { setSelectedPhone(null); setSelectedConvId(null); }} className="mr-1">
                 <ArrowLeft className="h-5 w-5" style={{ color: "#54656f" }} />
               </button>
             )}
-            <div className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-medium" style={{ background: avatar.bg, color: avatar.fg }}>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-medium"
+              style={{ background: avatar.bg, color: avatar.fg }}>
               {title.slice(0, 1).toUpperCase()}
             </div>
             <div>
@@ -693,15 +816,31 @@ export default function Conversas() {
               }
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {lifecycle?.stage && (
-              <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize" style={{ background: "#e1f2fb", color: "#008069" }}>
+              <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize"
+                style={{ background: "#e1f2fb", color: "#008069" }}>
                 {lifecycle.stage.replace("_", " ")}
               </span>
             )}
-            <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", windowOpen ? "wa-window-open" : "wa-window-closed")}>
-              {windowOpen ? "Aberta" : "Fechada"}
-            </span>
+            {/* TAREFA 4.1 — Badge janela Meta */}
+            {windowIsOpen ? (
+              <div className="group relative">
+                <span className="rounded-full px-2 py-0.5 text-[11px] font-medium wa-window-open flex items-center gap-1 cursor-help">
+                  <span className="h-1.5 w-1.5 rounded-full wa-window-dot" />
+                  Janela aberta
+                </span>
+                <div className="absolute right-0 top-7 z-20 hidden group-hover:block w-56 rounded-lg p-2 text-xs shadow-lg"
+                  style={{ background: "#111b21", color: "#e9edef" }}>
+                  <p className="font-medium mb-1">Expira em: {conv?.window_expires_at ? format(new Date(conv.window_expires_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : "—"}</p>
+                  <p className="opacity-70">Se o lead responder, a janela se reabre automaticamente por mais 24h</p>
+                </div>
+              </div>
+            ) : (
+              <span className="rounded-full px-2 py-0.5 text-[11px] font-medium wa-window-closed">
+                Janela encerrada
+              </span>
+            )}
             <button onClick={() => {}} style={{ color: "#54656f" }}>
               <Phone className="h-[18px] w-[18px]" />
             </button>
@@ -719,19 +858,110 @@ export default function Conversas() {
           </div>
         </div>
 
+        {/* TAREFA 4.3 — Banner Lucas / Assumir conversa */}
+        {windowIsOpen && (
+          <div className="shrink-0">
+            {iaActive ? (
+              <div className="flex items-center justify-between px-4 py-2 text-[13px]"
+                style={{ background: "#fef9c3", borderBottom: "1px solid #fde047" }}>
+                <div className="flex items-center gap-2">
+                  <Bot className="h-4 w-4" style={{ color: "#92400e" }} />
+                  <span style={{ color: "#92400e", fontWeight: 500 }}>
+                    Lucas está respondendo automaticamente
+                  </span>
+                </div>
+                <button
+                  onClick={() => toggleIaMode(false)}
+                  disabled={togglingIa}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-[12px] font-semibold transition-colors"
+                  style={{ background: "#92400e", color: "#fff" }}
+                >
+                  {togglingIa ? <Loader2 className="h-3 w-3 animate-spin" /> : <Hand className="h-3 w-3" />}
+                  Assumir conversa
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between px-4 py-2 text-[13px]"
+                style={{ background: "#dcfce7", borderBottom: "1px solid #86efac" }}>
+                <div className="flex items-center gap-2">
+                  <Hand className="h-4 w-4" style={{ color: "#166534" }} />
+                  <span style={{ color: "#166534", fontWeight: 500 }}>
+                    Você está atendendo esta conversa
+                  </span>
+                </div>
+                <button
+                  onClick={() => toggleIaMode(true)}
+                  disabled={togglingIa}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-[12px] font-semibold transition-colors"
+                  style={{ background: "#166534", color: "#fff" }}
+                >
+                  {togglingIa ? <Loader2 className="h-3 w-3 animate-spin" /> : <Bot className="h-3 w-3" />}
+                  Devolver ao Lucas
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAREFA 4.5 — Countdown se janela expira em < 2h */}
+        {windowIsOpen && countdown && (
+          <div className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 text-[12px]"
+            style={{ background: "#fff7ed", borderBottom: "1px solid #fed7aa" }}>
+            <Clock className="h-3 w-3" style={{ color: "#c2410c" }} />
+            <span style={{ color: "#c2410c" }}>
+              Atenção: janela expira em <strong>{countdown}</strong> — responda logo!
+            </span>
+          </div>
+        )}
+
+        {/* TAREFA 4.4 — Banner histórico */}
+        {isHistoricoConv && messages.length > 0 && (
+          <div className="shrink-0 flex items-center justify-between px-4 py-2 text-[13px]"
+            style={{ background: "#fef2f2", borderBottom: "1px solid #fecaca" }}>
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4" style={{ color: "#dc2626" }} />
+              <span style={{ color: "#dc2626" }}>
+                Conversa encerrada — janela de 24h expirada
+              </span>
+            </div>
+            <button
+              onClick={() => openTemplateModal()}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-[12px] font-semibold"
+              style={{ background: "#dc2626", color: "#fff" }}
+            >
+              <RefreshCw className="h-3 w-3" />
+              Reativar lead
+            </button>
+          </div>
+        )}
+
+        {/* TAREFA 4.4 — Resumo Lucas no histórico */}
+        {isHistoricoConv && selectedConv?.lucas_summary && (
+          <div className="shrink-0 mx-4 my-2 rounded-lg p-3 text-[12px]"
+            style={{ background: "#f0fdf4", border: "1px solid #86efac" }}>
+            <p className="font-semibold mb-1" style={{ color: "#166534" }}>
+              <Bot className="inline h-3 w-3 mr-1" />
+              Resumo do Lucas
+            </p>
+            <p style={{ color: "#15803d" }}>{selectedConv.lucas_summary}</p>
+          </div>
+        )}
+
         {/* Messages */}
-        <div className="wa-chat-pattern wa-chat-scrollbar flex-1 overflow-y-auto px-[4%] py-3" style={{ paddingBottom: "8px" }}>
+        <div className="wa-chat-pattern wa-chat-scrollbar flex-1 overflow-y-auto px-[4%] py-3">
           {loadingChat ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" style={{ color: "#008069" }} /></div>
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin" style={{ color: "#008069" }} />
+            </div>
           ) : messages.length === 0 ? (
             <div className="flex justify-center py-10 text-muted-foreground">Nenhuma mensagem</div>
           ) : (
             messages.map((msg, index) => {
-              // role "user" = mensagem do lead → balão direito (verde)
-              // role "assistant" = mensagem do Lucas → balão esquerdo (cinza)
               const isUser = msg.role === "user";
               const previous = messages[index - 1];
-              const showDateSeparator = !previous || new Date(previous.created_at).toDateString() !== new Date(msg.created_at).toDateString();
+              const showDateSeparator =
+                !previous ||
+                new Date(previous.created_at).toDateString() !== new Date(msg.created_at).toDateString();
 
               return (
                 <div key={msg.id} className="mb-1">
@@ -740,18 +970,24 @@ export default function Conversas() {
                       <span className="wa-date-sep">{getDateSeparatorLabel(msg.created_at)}</span>
                     </div>
                   )}
-
                   <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
-                    <div className={cn("max-w-[65%]", isUser ? "wa-bubble-outbound" : "wa-bubble-inbound")} style={{ padding: "6px 7px 8px 9px" }}>
+                    <div
+                      className={cn("max-w-[65%]", isUser ? "wa-bubble-outbound" : "wa-bubble-inbound")}
+                      style={{ padding: "6px 7px 8px 9px" }}
+                    >
                       {!isUser && (
                         <div className="mb-0.5 flex items-center gap-1">
                           <Bot className="h-3 w-3" style={{ color: "#667781" }} />
                           <span className="text-[10px]" style={{ color: "#667781" }}>Lucas</span>
                         </div>
                       )}
-                      <p className="whitespace-pre-wrap" style={{ fontSize: "14.2px", color: "#e9edef", lineHeight: 1.4 }}>{msg.content || "[mensagem]"}</p>
+                      <p className="whitespace-pre-wrap" style={{ fontSize: "14.2px", color: "#e9edef", lineHeight: 1.4 }}>
+                        {msg.content || "[mensagem]"}
+                      </p>
                       <div className="flex items-center justify-end gap-1 -mb-1" style={{ marginLeft: "8px", float: "right", marginTop: "2px" }}>
-                        <span style={{ fontSize: "11px", color: "#667781" }}>{format(new Date(msg.created_at), "HH:mm")}</span>
+                        <span style={{ fontSize: "11px", color: "#667781" }}>
+                          {format(new Date(msg.created_at), "HH:mm")}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -764,27 +1000,34 @@ export default function Conversas() {
 
         {/* Input area */}
         <div className="sticky bottom-0" style={{ background: "#f0f2f5", padding: "5px 10px", borderTop: "1px solid #e0e0e0" }}>
-          {windowOpen ? (
+          {windowIsOpen ? (
             <div>
-              <div className="wa-window-open mb-1.5 flex items-center gap-1.5 rounded px-2 py-1 text-[11px]">
-                <span className="h-2 w-2 rounded-full wa-window-dot"></span>
-                Janela aberta — expira {windowExpires ? new Date(windowExpires).toLocaleString("pt-BR") : ""}
-              </div>
               <div className="flex items-center gap-2">
                 <input
                   ref={inputRef}
                   type="text"
-                  placeholder="Digite uma mensagem"
+                  placeholder={iaActive ? "Lucas está respondendo... assuma para digitar" : "Digite uma mensagem"}
                   className="flex-1 outline-none"
-                  style={{ background: "#ffffff", borderRadius: "8px", border: "none", padding: "9px 12px", fontSize: "15px", color: "#111b21" }}
+                  style={{
+                    background: iaActive ? "#f3f4f6" : "#ffffff",
+                    borderRadius: "8px",
+                    border: "none",
+                    padding: "9px 12px",
+                    fontSize: "15px",
+                    color: iaActive ? "#9ca3af" : "#111b21",
+                    cursor: iaActive ? "not-allowed" : "text",
+                  }}
                   value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void sendMessage(); } }}
-                  disabled={sending}
+                  onChange={(e) => !iaActive && setMessageText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !iaActive) { e.preventDefault(); void sendMessage(); }
+                  }}
+                  disabled={sending || iaActive}
+                  readOnly={iaActive}
                 />
                 <button
                   onClick={sendMessage}
-                  disabled={sending || !messageText.trim()}
+                  disabled={sending || !messageText.trim() || iaActive}
                   className="wa-send-btn flex h-10 w-10 items-center justify-center rounded-full"
                 >
                   {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <SendHorizontal className="h-5 w-5" />}
@@ -793,14 +1036,15 @@ export default function Conversas() {
             </div>
           ) : (
             <div>
-              <div className="wa-window-closed mb-1.5 rounded px-2 py-1 text-[11px]">
-                Janela de 24h expirada
+              <div className="wa-window-closed mb-1.5 rounded px-2 py-1 text-[11px] flex items-center gap-1.5">
+                <span>Janela de 24h encerrada — envie um template aprovado para reativar</span>
               </div>
               <button
-                className="wa-template-btn w-full rounded-lg px-4 py-2.5 text-sm font-medium"
-                onClick={loadTemplates}
+                className="wa-template-btn w-full rounded-lg px-4 py-2.5 text-sm font-medium flex items-center justify-center gap-2"
+                onClick={() => openTemplateModal()}
               >
-                Enviar Template
+                <RefreshCw className="h-4 w-4" />
+                Reativar com template
               </button>
             </div>
           )}
@@ -809,17 +1053,18 @@ export default function Conversas() {
     );
   };
 
-  // ── Template Modal ──
   const renderTemplateModal = () => (
     <Dialog open={templateOpen} onOpenChange={setTemplateOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Selecionar Template</DialogTitle>
+          <DialogTitle>Selecionar Template Aprovado</DialogTitle>
         </DialogHeader>
         <ScrollArea className="max-h-[400px]">
           <div className="space-y-2">
             {templates.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Nenhum template aprovado</p>
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhum template aprovado encontrado
+              </p>
             ) : (
               templates.map((t) => (
                 <button
@@ -838,7 +1083,6 @@ export default function Conversas() {
     </Dialog>
   );
 
-  // ── Main render ──
   if (isMobile) {
     return (
       <DashboardLayout>
