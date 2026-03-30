@@ -116,6 +116,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingTextRef = useRef<string>("");
+  const recognitionRunningRef = useRef(false);
 
   // VAD for interrupt detection (uses echo-cancelled mic stream)
   const vadStreamRef = useRef<MediaStream | null>(null);
@@ -302,25 +303,45 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
     recognition.onerror = (e: any) => {
       console.log("[recognition error]", e.error);
+      recognitionRunningRef.current = false;
       if (e.error === "not-allowed") {
         toast.error("Permissão do microfone negada.");
         setMicActive(false);
         return;
       }
-      // Auto-restart on other errors
+      if (e.error === "aborted" || e.error === "network") {
+        // Transient — don't restart immediately, let onend handle it
+        return;
+      }
+      // Auto-restart on other errors (with guard)
       if (phaseRef.current !== "ended" && phaseRef.current !== "idle") {
         setTimeout(() => {
-          if (phaseRef.current !== "ended" && phaseRef.current !== "idle") {
-            try { recognitionRef.current?.start(); } catch { /* */ }
+          if (phaseRef.current !== "ended" && phaseRef.current !== "idle" && !recognitionRunningRef.current) {
+            try {
+              recognitionRunningRef.current = true;
+              recognitionRef.current?.start();
+            } catch {
+              recognitionRunningRef.current = false;
+            }
           }
         }, 500);
       }
     };
 
     recognition.onend = () => {
-      // Auto-restart if call is still active
+      recognitionRunningRef.current = false;
+      // Auto-restart if call is still active (with guard)
       if (phaseRef.current !== "ended" && phaseRef.current !== "idle" && recognitionRef.current) {
-        try { recognitionRef.current.start(); } catch { /* */ }
+        setTimeout(() => {
+          if (phaseRef.current !== "ended" && phaseRef.current !== "idle" && !recognitionRunningRef.current) {
+            try {
+              recognitionRunningRef.current = true;
+              recognitionRef.current?.start();
+            } catch {
+              recognitionRunningRef.current = false;
+            }
+          }
+        }, 300);
       } else {
         setMicActive(false);
       }
@@ -328,9 +349,11 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
     recognitionRef.current = recognition;
     try {
+      recognitionRunningRef.current = true;
       recognition.start();
       setMicActive(true);
     } catch {
+      recognitionRunningRef.current = false;
       toast.error("Erro ao iniciar microfone.");
     }
   }
@@ -338,6 +361,7 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   function stopRecognition() {
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     pendingTextRef.current = "";
+    recognitionRunningRef.current = false;
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch { /* */ }
       recognitionRef.current = null;
