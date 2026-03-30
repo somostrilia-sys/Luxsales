@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Phone, MessageSquare, LogOut, Settings,
   FileText, Send, UserCog, Users, ShieldCheck, Sparkles, Brain,
-  ClipboardList, PhoneCall, Upload, Loader2, Mic, FlaskConical, History, Users2,
+  ClipboardList, PhoneCall, Upload, Loader2, Mic, FlaskConical, History, Users2, BarChart2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -30,6 +30,7 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
     label: "Visão Geral",
     items: [
       { title: "Dashboard", url: "/", icon: LayoutDashboard, levels: [0, 1, 2, 3] },
+      { title: "Meus Números", url: "/meus-numeros", icon: BarChart2, levels: [1, 2, 3] },
     ],
   },
   {
