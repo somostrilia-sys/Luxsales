@@ -130,6 +130,9 @@ export default function Templates() {
   const [drafts, setDrafts] = useState<GeneratedTemplate[]>([]);
   const [draftsLoading, setDraftsLoading] = useState(false);
 
+  // Resubmit
+  const [resubmitting, setResubmitting] = useState<string | null>(null);
+
   // Variable mappings
   const [varMappings, setVarMappings] = useState<VarMapping[]>([
     { variable_index: 1, label: "Nome do lead", source: "leads_master", source_field: "lead_name", default_value: "" },
@@ -144,19 +147,23 @@ export default function Templates() {
 
   // Load variable mappings
   useEffect(() => {
-    if (!effectiveCompanyId) return;
+    if (!effectiveCompanyId) { setVarMappingsLoading(false); return; }
     (async () => {
-      setVarMappingsLoading(true);
-      const { data } = await supabase
-        .from("template_variable_mappings")
-        .select("variable_index, label, source, source_field, default_value")
-        .eq("company_id", effectiveCompanyId)
-        .order("variable_index");
-      if (data && data.length > 0) {
-        setVarMappings(prev => prev.map(v => {
-          const found = data.find((d: any) => d.variable_index === v.variable_index);
-          return found ? { ...v, ...found } : v;
-        }));
+      try {
+        setVarMappingsLoading(true);
+        const { data, error } = await supabase
+          .from("template_variable_mappings")
+          .select("variable_index, label, source, source_field, default_value")
+          .eq("company_id", effectiveCompanyId)
+          .order("variable_index");
+        if (!error && data && data.length > 0) {
+          setVarMappings(prev => prev.map(v => {
+            const found = data.find((d: any) => d.variable_index === v.variable_index);
+            return found ? { ...v, ...found } : v;
+          }));
+        }
+      } catch {
+        // silencioso — usa defaults
       }
       setVarMappingsLoading(false);
     })();
@@ -526,8 +533,6 @@ export default function Templates() {
     }
     setSavingAssign(false);
   };
-
-  const [resubmitting, setResubmitting] = useState<string | null>(null);
 
   const handleResubmitTemplate = async (t: Template) => {
     if (!collaborator) return;
