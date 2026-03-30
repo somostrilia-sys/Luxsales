@@ -780,17 +780,15 @@ export default function Templates() {
                         placeholder="Ex: Nome do lead"
                         className="h-8 text-xs"
                       />
-                      <Select
-                        value={`${v.source}.${v.source_field}`}
-                        onValueChange={(val) => updateVarMapping(idx, "source_field", val)}
+                      <select
+                        value={`${v.source}.${v.source_field}` || "custom"}
+                        onChange={(e) => updateVarMapping(idx, "source_field", e.target.value)}
+                        className="h-8 text-xs rounded-md border border-border bg-background px-2 text-foreground"
                       >
-                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                        <SelectContent>
-                          {SOURCE_OPTIONS.map(o => (
-                            <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        {SOURCE_OPTIONS.map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
                       <Input
                         value={v.default_value}
                         onChange={(e) => updateVarMapping(idx, "default_value", e.target.value)}
