@@ -209,7 +209,7 @@ export default function Disparos() {
       const configMap: Record<string, string> = {};
       for (const c of configs || []) configMap[c.key] = c.value;
 
-      const metaTierLimit = parseInt(configMap["meta_tier_limit"] || "1000", 10);
+      const metaTierLimit = parseInt(configMap["meta_tier_limit"] || "250", 10);
 
       // Contar consultores ativos da empresa
       const { count: activeCount } = await supabase

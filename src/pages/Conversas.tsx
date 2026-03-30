@@ -105,7 +105,7 @@ const getWindowCountdown = (expiresAt: string | null): string | null => {
   return null;
 };
 export default function Conversas() {
-  const { collaborator } = useCollaborator();
+  const { collaborator, isCEO } = useCollaborator();
   const isMobile = useIsMobile();
   const { selectedCompanyId } = useCompanyFilter();
   const companyId =
@@ -149,9 +149,8 @@ export default function Conversas() {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 10000);
       try {
-        const isCeoAllView =
-          collaborator?.role?.level === 0 &&
-          (selectedCompanyId === "all" || !selectedCompanyId);
+        // CEO vê todas as conversas — sem filtro de empresa ou colaborador
+        const isCeoAllView = isCEO;
 
         let query = supabase
           .from("wa_conversations")
