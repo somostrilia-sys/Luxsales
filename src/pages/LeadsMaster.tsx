@@ -155,6 +155,7 @@ export default function LeadsMaster() {
   const [fSort, setFSort] = useState("created_at");
   // FASE 1: filtro "apenas não distribuídos" (assigned_to IS NULL)
   const [fOnlyUndistributed, setFOnlyUndistributed] = useState(false);
+  const [jumpPage, setJumpPage] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -571,6 +572,14 @@ export default function LeadsMaster() {
             />
             <span className="text-xs text-muted-foreground">Não distribuídos</span>
           </label>
+          {(() => {
+            const active = [fStatus !== "all", fTemp !== "all", fSegment !== "all", fSearch.length >= 3, fOnlyUndistributed].filter(Boolean).length;
+            return active > 0 ? (
+              <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30">
+                {active} filtro{active > 1 ? "s" : ""} ativo{active > 1 ? "s" : ""}
+              </Badge>
+            ) : null;
+          })()}
         </div>
 
         {/* Bulk Actions Bar */}
@@ -680,22 +689,55 @@ export default function LeadsMaster() {
         </Card>
 
         {/* Pagination */}
-        {totalRows > 0 && (
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              {(page * PAGE_SIZE + 1).toLocaleString("pt-BR")}–{Math.min((page + 1) * PAGE_SIZE, totalRows).toLocaleString("pt-BR")} de {totalRows.toLocaleString("pt-BR")}
-            </p>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-xs flex items-center px-2">Página {page + 1} de {Math.ceil(totalRows / PAGE_SIZE)}</span>
-              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={(page + 1) * PAGE_SIZE >= totalRows} onClick={() => setPage(p => p + 1)}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+        {totalRows > 0 && (() => {
+          const totalPages = Math.ceil(totalRows / PAGE_SIZE);
+          return (
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <p className="text-xs text-muted-foreground">
+                Mostrando {(page * PAGE_SIZE + 1).toLocaleString("pt-BR")}–{Math.min((page + 1) * PAGE_SIZE, totalRows).toLocaleString("pt-BR")} de {totalRows.toLocaleString("pt-BR")}
+              </p>
+              <div className="flex items-center gap-1 flex-wrap">
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page === 0} onClick={() => setPage(0)} title="Primeira página">
+                  <ChevronLeft className="h-3 w-3" /><ChevronLeft className="h-3 w-3 -ml-2" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-xs flex items-center px-2">Página {page + 1} de {totalPages.toLocaleString("pt-BR")}</span>
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={(page + 1) * PAGE_SIZE >= totalRows} onClick={() => setPage(p => p + 1)}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={(page + 1) * PAGE_SIZE >= totalRows} onClick={() => setPage(totalPages - 1)} title="Última página">
+                  <ChevronRight className="h-3 w-3" /><ChevronRight className="h-3 w-3 -ml-2" />
+                </Button>
+                <div className="flex items-center gap-1 ml-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={totalPages}
+                    placeholder="Pág."
+                    value={jumpPage}
+                    onChange={e => setJumpPage(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        const n = parseInt(jumpPage, 10);
+                        if (!isNaN(n) && n >= 1 && n <= totalPages) { setPage(n - 1); setJumpPage(""); }
+                      }
+                    }}
+                    className="h-8 w-16 text-xs text-center"
+                  />
+                  <Button variant="outline" size="sm" className="h-8 text-xs px-2"
+                    onClick={() => {
+                      const n = parseInt(jumpPage, 10);
+                      if (!isNaN(n) && n >= 1 && n <= totalPages) { setPage(n - 1); setJumpPage(""); }
+                    }}>
+                    Ir
+                  </Button>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* ═══ Lead Detail Drawer ═══ */}
