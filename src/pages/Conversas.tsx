@@ -635,7 +635,7 @@ export default function Conversas() {
               <p className="text-[16px] wa-text-main" style={{ fontWeight: 500 }}>{title}</p>
               {isTyping
                 ? <p className="text-[12px]" style={{ color: "#008069" }}>digitando...</p>
-                : <p className="text-[12px] wa-text-muted">{formatPhone(selectedPhone)}</p>
+                : <p className="text-[12px]" style={{ color: "#d1d5db" }}>{formatPhone(selectedPhone)}</p>
               }
             </div>
           </div>

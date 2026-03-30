@@ -110,6 +110,89 @@ export default function Templates() {
   // Drafts
   const [drafts, setDrafts] = useState<GeneratedTemplate[]>([]);
   const [draftsLoading, setDraftsLoading] = useState(false);
+
+  // Variable mappings
+  interface VarMapping { variable_index: number; label: string; source: string; source_field: string; default_value: string }
+  const SOURCE_OPTIONS = [
+    { value: "leads_master.lead_name", label: "Nome do lead" },
+    { value: "leads_master.phone_number", label: "Telefone do lead" },
+    { value: "leads_master.email", label: "Email do lead" },
+    { value: "company_config.persona_company", label: "Nome da empresa" },
+    { value: "company_config.persona_name", label: "Nome do vendedor" },
+    { value: "company_config.product_data.base_price", label: "Preço base" },
+    { value: "custom", label: "Valor fixo (custom)" },
+  ];
+  const [varMappings, setVarMappings] = useState<VarMapping[]>([
+    { variable_index: 1, label: "Nome do lead", source: "leads_master", source_field: "lead_name", default_value: "" },
+    { variable_index: 2, label: "Produto / Serviço", source: "custom", source_field: "", default_value: "" },
+    { variable_index: 3, label: "Data / Prazo", source: "custom", source_field: "", default_value: "" },
+    { variable_index: 4, label: "Valor / Preço", source: "custom", source_field: "", default_value: "" },
+    { variable_index: 5, label: "Nome do vendedor", source: "company_config", source_field: "persona_name", default_value: "" },
+    { variable_index: 6, label: "Nome da empresa", source: "company_config", source_field: "persona_company", default_value: "" },
+  ]);
+  const [varMappingsLoading, setVarMappingsLoading] = useState(true);
+  const [varMappingsSaving, setVarMappingsSaving] = useState(false);
+
+  // Load variable mappings
+  useEffect(() => {
+    if (!effectiveCompanyId) return;
+    (async () => {
+      setVarMappingsLoading(true);
+      const { data } = await supabase
+        .from("template_variable_mappings")
+        .select("variable_index, label, source, source_field, default_value")
+        .eq("company_id", effectiveCompanyId)
+        .order("variable_index");
+      if (data && data.length > 0) {
+        setVarMappings(prev => prev.map(v => {
+          const found = data.find((d: any) => d.variable_index === v.variable_index);
+          return found ? { ...v, ...found } : v;
+        }));
+      }
+      setVarMappingsLoading(false);
+    })();
+  }, [effectiveCompanyId]);
+
+  const saveVarMappings = async () => {
+    if (!effectiveCompanyId) return;
+    setVarMappingsSaving(true);
+    const rows = varMappings.map(v => ({
+      company_id: effectiveCompanyId,
+      variable_index: v.variable_index,
+      label: v.label,
+      source: v.source,
+      source_field: v.source_field,
+      default_value: v.default_value,
+      updated_at: new Date().toISOString(),
+    }));
+    const { error } = await supabase
+      .from("template_variable_mappings")
+      .upsert(rows, { onConflict: "company_id,variable_index" });
+    if (error) {
+      toast.error("Erro ao salvar: " + error.message);
+    } else {
+      toast.success("Mapeamento de variáveis salvo");
+    }
+    setVarMappingsSaving(false);
+  };
+
+  const updateVarMapping = (idx: number, field: keyof VarMapping, value: string) => {
+    setVarMappings(prev => prev.map((v, i) => {
+      if (i !== idx) return v;
+      const updated = { ...v, [field]: value };
+      // Auto-fill label and source_field when selecting a source option
+      if (field === "source_field") {
+        const opt = SOURCE_OPTIONS.find(o => o.value === value);
+        if (opt) {
+          updated.label = opt.label;
+          const parts = value.split(".");
+          updated.source = parts[0];
+          updated.source_field = parts.slice(1).join(".");
+        }
+      }
+      return updated;
+    }));
+  };
   const [submittingDraft, setSubmittingDraft] = useState<string | null>(null);
 
   // Rejection history
@@ -652,46 +735,66 @@ export default function Templates() {
 
         {/* CREATE TAB */}
         <TabsContent value="create" className="space-y-6">
-          {/* Referência de variáveis Meta */}
+          {/* Configuração de variáveis Meta */}
           <Card className="border-primary/20 bg-primary/5">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-yellow-400" /> Variáveis de Template — Meta WhatsApp
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground mb-3">
-                Use as variáveis abaixo no corpo do template. Na hora do envio, elas serão substituídas pelos dados reais do lead.
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Configure o que cada variável representa. Na hora do envio, serão substituídas pelos dados reais.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
-                  <code className="font-mono text-primary font-bold">{"{{1}}"}</code>
-                  <span className="text-muted-foreground">Nome do lead</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
-                  <code className="font-mono text-primary font-bold">{"{{2}}"}</code>
-                  <span className="text-muted-foreground">Produto / Serviço</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
-                  <code className="font-mono text-primary font-bold">{"{{3}}"}</code>
-                  <span className="text-muted-foreground">Data / Prazo</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
-                  <code className="font-mono text-primary font-bold">{"{{4}}"}</code>
-                  <span className="text-muted-foreground">Valor / Preço</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
-                  <code className="font-mono text-primary font-bold">{"{{5}}"}</code>
-                  <span className="text-muted-foreground">Nome do vendedor</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
-                  <code className="font-mono text-primary font-bold">{"{{6}}"}</code>
-                  <span className="text-muted-foreground">Nome da empresa</span>
-                </div>
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-2">
-                Exemplo: <code className="text-primary">Olá {"{{1}}"}, aqui é {"{{5}}"} da {"{{6}}"}. Sua proposta de {"{{2}}"} por {"{{4}}"} expira em {"{{3}}"}.</code>
-              </p>
+              {varMappingsLoading ? (
+                <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-[60px_1fr_1fr_1fr] gap-2 text-xs font-medium text-muted-foreground px-1">
+                    <span>Variável</span>
+                    <span>Descrição</span>
+                    <span>Fonte do dado</span>
+                    <span>Valor fixo (se custom)</span>
+                  </div>
+                  {varMappings.map((v, idx) => (
+                    <div key={v.variable_index} className="grid grid-cols-[60px_1fr_1fr_1fr] gap-2 items-center">
+                      <code className="font-mono text-primary font-bold text-sm text-center">{`{{${v.variable_index}}}`}</code>
+                      <Input
+                        value={v.label}
+                        onChange={(e) => updateVarMapping(idx, "label", e.target.value)}
+                        placeholder="Ex: Nome do lead"
+                        className="h-8 text-xs"
+                      />
+                      <Select
+                        value={`${v.source}.${v.source_field}`}
+                        onValueChange={(val) => updateVarMapping(idx, "source_field", val)}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                        <SelectContent>
+                          {SOURCE_OPTIONS.map(o => (
+                            <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={v.default_value}
+                        onChange={(e) => updateVarMapping(idx, "default_value", e.target.value)}
+                        placeholder={v.source === "custom" ? "Valor fixo" : "Fallback (opcional)"}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between pt-1">
+                    <p className="text-[11px] text-muted-foreground">
+                      Exemplo: <code className="text-primary">Olá {"{{1}}"}, aqui é {"{{5}}"} da {"{{6}}"}.</code>
+                    </p>
+                    <Button size="sm" onClick={saveVarMappings} disabled={varMappingsSaving}>
+                      {varMappingsSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                      Salvar Mapeamento
+                    </Button>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
