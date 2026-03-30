@@ -752,7 +752,6 @@ function TabConversasEncerradas({
                       )}
 
                       <div className="pt-1">
-                      <div className="pt-1">
                         <Button
                           size="sm"
                           variant="default"
