@@ -63,8 +63,9 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
     ],
   },
   {
-    label: "Filas",
+    label: "Disparos",
     items: [
+      { title: "Disparos", url: "/disparos", icon: Send, levels: [1, 2, 3] },
       { title: "Filas Disparo", url: "/dispatch-queues", icon: Send, levels: [0] },
     ],
   },

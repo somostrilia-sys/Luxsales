@@ -52,6 +52,7 @@ const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase"));
 const GestaoUsuarios = lazy(() => import("./pages/GestaoUsuarios"));
 const AceitarConvite = lazy(() => import("./pages/AceitarConvite"));
 const Ligacoes = lazy(() => import("./pages/Ligacoes"));
+const Disparos = lazy(() => import("./pages/Disparos"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -92,6 +93,7 @@ const App = () => (
           <Route path="/ligacoes" element={<ProtectedRoute><Ligacoes /></ProtectedRoute>} />
           {/* Redirects para rotas antigas */}
           <Route path="/call-queues" element={<Navigate to="/ligacoes" replace />} />
+          <Route path="/disparos" element={<ProtectedRoute><Disparos /></ProtectedRoute>} />
           <Route path="/dispatch-queues" element={<ProtectedRoute minLevel={0}><DispatchQueues /></ProtectedRoute>} />
           <Route path="/opt-ins" element={<ProtectedRoute minLevel={0}><OptIns /></ProtectedRoute>} />
           <Route path="/config" element={<ProtectedRoute minLevel={0}><CompanySetup /></ProtectedRoute>} />
