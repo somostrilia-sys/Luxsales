@@ -153,35 +153,34 @@ export default function VoiceSimulate() {
   // ── MODO BROWSER: Web Speech + AI Simulator ──
   // ══════════════════════════════════════════════
 
-  const playAudioBase64 = useCallback((base64: string, format: string = "mp3") => {
+  const XTTS_URL = "http://192.168.0.206:8300/tts";
+
+  const playXTTS = useCallback(async (text: string) => {
     try {
-      const byteChars = atob(base64);
-      const byteNumbers = new Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: `audio/${format}` });
+      const res = await fetch(XTTS_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error(`XTTS ${res.status}`);
+      const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       if (audioRef.current) {
         audioRef.current.src = url;
         audioRef.current.play().catch(() => {});
       }
     } catch {
-      // fallback silencioso
-    }
-  }, []);
-
-  const fallbackBrowserTTS = useCallback((text: string) => {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "pt-BR";
-      utterance.rate = 1.05;
-      const voices = window.speechSynthesis.getVoices();
-      const ptVoice = voices.find(v => v.lang === "pt-BR" && /google|microsoft|luciana|daniel/i.test(v.name))
-        || voices.find(v => v.lang === "pt-BR")
-        || voices.find(v => v.lang.startsWith("pt"));
-      if (ptVoice) utterance.voice = ptVoice;
-      window.speechSynthesis.speak(utterance);
+      // Fallback browser TTS se XTTS não alcançável
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "pt-BR";
+        utterance.rate = 1.05;
+        const voices = window.speechSynthesis.getVoices();
+        const ptVoice = voices.find(v => v.lang === "pt-BR") || voices.find(v => v.lang.startsWith("pt"));
+        if (ptVoice) utterance.voice = ptVoice;
+        window.speechSynthesis.speak(utterance);
+      }
     }
   }, []);
 
@@ -191,11 +190,8 @@ export default function VoiceSimulate() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const history = conversationRef.current.map(m => ({
-        role: m.role === "user" ? "user" : "agent",
-        content: m.content,
-      }));
 
+      // Só LLM — sem TTS no cloud, TTS é local via XTTS
       const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
         method: "POST",
         headers: {
@@ -204,11 +200,9 @@ export default function VoiceSimulate() {
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
         },
         body: JSON.stringify({
-          action: "respond",
-          text: userMessage,
-          history,
-          voice_key: "default",
-          context: { phone_number: phoneNumber, company_id: companyId },
+          messages: conversationRef.current,
+          company_id: companyId,
+          context: { phone_number: phoneNumber },
         }),
       });
 
@@ -217,17 +211,13 @@ export default function VoiceSimulate() {
       conversationRef.current.push({ role: "assistant", content: aiText });
       addEntry("ai", aiText);
 
-      // Usar áudio do pipeline se disponível, senão fallback browser TTS
-      if (data.audio) {
-        playAudioBase64(data.audio, data.format || "mp3");
-      } else {
-        fallbackBrowserTTS(aiText);
-      }
+      // TTS via XTTS local (voz do Alex, speed 1.15)
+      await playXTTS(aiText);
     } catch (err: any) {
       addSystem(`❌ Erro IA: ${err.message || "falha na conexão"}`);
     }
     setAiThinking(false);
-  }, [companyId, phoneNumber, addEntry, addSystem, playAudioBase64, fallbackBrowserTTS]);
+  }, [companyId, phoneNumber, addEntry, addSystem, playXTTS]);
 
   const startBrowserCall = useCallback(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
