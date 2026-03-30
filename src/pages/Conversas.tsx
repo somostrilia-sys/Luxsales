@@ -163,10 +163,11 @@ export default function Conversas() {
           .limit(150)
           .abortSignal(controller.signal);
 
-        if (!isCeoAllView && collaborator?.id) {
-          query = query.or(
-            `collaborator_id.eq.${collaborator.id},assigned_to.eq.${collaborator.id}`
-          );
+        // CEO ou "Todas Empresas": sem filtro de colaborador
+        // Outros: tentar filtrar por collaborator_id (se coluna existir e tiver dados)
+        // Por enquanto não filtrar por collaborator — mostrar todas da empresa
+        if (!isCeoAllView && companyId && companyId !== "all") {
+          query = query.eq("company_id", companyId);
         }
 
         const { data, error: convError } = await query;
