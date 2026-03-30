@@ -132,6 +132,8 @@ function TabLigacoes({
   companyId: string | undefined;
 }) {
   const { online: voipOnline } = useVoipStatus();
+  const [voipConfig, setVoipConfig] = useState<{ ramal: string; servidor: string; porta: string; ativo: boolean } | null>(null);
+  const [invalidPhoneCount, setInvalidPhoneCount] = useState(0);
   const [dialerState, setDialerState] = useState<DialerState>("idle");
   const [batchSize, setBatchSize] = useState<string>("100");
   const [queue, setQueue] = useState<PoolLead[]>([]);
@@ -171,7 +173,19 @@ function TabLigacoes({
     });
   }, [collaboratorId]);
 
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => {
+    fetchStats();
+    (async () => {
+      const { data } = await supabase
+        .from("system_configs")
+        .select("value")
+        .eq("key", `voip_config_${collaboratorId}`)
+        .maybeSingle();
+      if (data?.value) {
+        try { setVoipConfig(JSON.parse(data.value)); } catch { /* ignore */ }
+      }
+    })();
+  }, [fetchStats, collaboratorId]);
 
   // Timer
   useEffect(() => {
@@ -187,6 +201,15 @@ function TabLigacoes({
   const loadQueue = useCallback(async () => {
     setLoadingQueue(true);
     try {
+      // First: count leads with invalid phone
+      const { data: allData } = await supabase
+        .from("consultant_lead_pool")
+        .select("id, phone_normalized")
+        .eq("collaborator_id", collaboratorId)
+        .in("interest_status", ["pending", "not_interested_1"]);
+      const invalidCount = (allData || []).filter(l => !l.phone_normalized).length;
+      setInvalidPhoneCount(invalidCount);
+
       const { data, error } = await supabase
         .from("consultant_lead_pool")
         .select("id, collaborator_id, lead_name, phone, phone_normalized, interest_status, call_attempts, last_call_at, priority")
@@ -380,32 +403,62 @@ function TabLigacoes({
     <div className="space-y-4">
       {/* VoIP Status */}
       <Card className="border-border/60">
-        <CardContent className="flex items-center justify-between py-3 px-4">
-          <div className="flex items-center gap-2 text-sm">
-            {voipOnline === null ? (
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            ) : voipOnline ? (
-              <Wifi className="h-4 w-4 text-emerald-400" />
-            ) : (
-              <WifiOff className="h-4 w-4 text-red-400" />
-            )}
-            <span className={
-              voipOnline ? "text-emerald-400" :
-              voipOnline === false ? "text-red-400" :
-              "text-muted-foreground"
-            }>
-              Canal VoIP:{" "}
-              {voipOnline === null ? "verificando..." : voipOnline ? "Online" : "Offline"}
-            </span>
-            {voipOnline === false && (
-              <Badge variant="outline" className="text-[10px] ml-1 border-yellow-500/30 text-yellow-400">
-                modo simulação
-              </Badge>
-            )}
+        <CardContent className="py-3 px-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              {voipOnline === null ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              ) : voipOnline ? (
+                <Wifi className="h-4 w-4 text-emerald-400" />
+              ) : (
+                <WifiOff className="h-4 w-4 text-red-400" />
+              )}
+              <span className={
+                voipOnline ? "text-emerald-400" :
+                voipOnline === false ? "text-red-400" :
+                "text-muted-foreground"
+              }>
+                Servidor VoIP:{" "}
+                {voipOnline === null ? "verificando..." : voipOnline ? "Online" : "Offline"}
+              </span>
+              {voipOnline === false && (
+                <Badge variant="outline" className="text-[10px] ml-1 border-yellow-500/30 text-yellow-400">
+                  modo simulação
+                </Badge>
+              )}
+            </div>
+            <span className="text-xs text-muted-foreground">192.168.0.206:8500</span>
           </div>
-          <span className="text-xs text-muted-foreground">192.168.0.206:8500</span>
+          {voipConfig && voipConfig.ramal ? (
+            <div className="flex items-center gap-2 text-sm">
+              <Phone className="h-4 w-4 text-primary/70" />
+              <span className="text-muted-foreground">
+                Canal VoIP:{" "}
+                <span className="text-foreground font-mono">{voipConfig.ramal}</span>
+                {" — "}
+                <span className={voipConfig.ativo && voipOnline ? "text-emerald-400" : "text-muted-foreground"}>
+                  {voipConfig.ativo && voipOnline ? "Online" : "Offline"}
+                </span>
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm">
+              <Phone className="h-4 w-4 text-muted-foreground/50" />
+              <span className="text-muted-foreground/60">Canal VoIP: Não configurado</span>
+              <span className="text-xs text-yellow-400/80">— Peça ao gestor para configurar seu canal VoIP</span>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Invalid phone badge */}
+      {invalidPhoneCount > 0 && (
+        <div className="flex items-center gap-2 px-1">
+          <Badge variant="outline" className="text-xs border-orange-500/30 text-orange-400">
+            ⚠️ {invalidPhoneCount} lead{invalidPhoneCount > 1 ? "s" : ""} com telefone inválido (excluídos da fila)
+          </Badge>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">

@@ -73,6 +73,7 @@ interface WaTemplate {
   name: string;
   status: string;
   language: string;
+  body?: string;
 }
 
 interface DispatchLimit {
@@ -119,6 +120,7 @@ export default function Disparos() {
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [templates, setTemplates] = useState<WaTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [templatePreview, setTemplatePreview] = useState<string>("");
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
   const [dispatchingBulk, setDispatchingBulk] = useState(false);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());

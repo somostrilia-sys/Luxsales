@@ -133,6 +133,7 @@ export default function Templates() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("approved");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   // Create tab state
   const [objective, setObjective] = useState("");
@@ -347,7 +348,11 @@ export default function Templates() {
     if (tab === "drafts") fetchDrafts();
   }, [tab, fetchRejections, fetchDrafts]);
 
-  const approved = templates.filter((t) => t.status === "APPROVED" && (!search || t.name.toLowerCase().includes(search.toLowerCase())));
+  const approved = templates.filter((t) =>
+    t.status === "APPROVED" &&
+    (!search || t.name.toLowerCase().includes(search.toLowerCase())) &&
+    (categoryFilter === "all" || (t.category || "").toUpperCase() === categoryFilter.toUpperCase())
+  );
   const pending = templates.filter((t) => (t.status === "PENDING" || t.status === "REJECTED") && (!search || t.name.toLowerCase().includes(search.toLowerCase())));
 
   const handleGenerate = async () => {
@@ -560,6 +565,30 @@ export default function Templates() {
     setSavingAssign(false);
   };
 
+  const handleDeleteTemplate = async (t: Template) => {
+    if (!collaborator || !isCEO) return;
+    if (!confirm(`Deletar template "${t.name}"?`)) return;
+    try {
+      const headers = await getHeaders();
+      const res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action: "delete", company_id: effectiveCompanyId, name: t.name }),
+      });
+      if (res.ok) {
+        toast.success("Template deletado");
+        fetchTemplates();
+      } else {
+        // Fallback: mark as deleted in wa_templates
+        await supabase.from("wa_templates").delete().eq("name", t.name).eq("company_id", effectiveCompanyId);
+        toast.success("Template removido");
+        fetchTemplates();
+      }
+    } catch {
+      toast.error("Erro ao deletar template");
+    }
+  };
+
   const handleResubmitTemplate = async (t: Template) => {
     if (!collaborator) return;
     setResubmitting(t.name);
@@ -623,6 +652,12 @@ export default function Templates() {
           <p className="text-sm text-muted-foreground line-clamp-3">{t.body}</p>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <Badge variant="secondary" className="text-xs">{t.category}</Badge>
+            {(t.category || "").toUpperCase() === "UTILITY" && (
+              <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30">Economia</Badge>
+            )}
+            {(t.category || "").toUpperCase() === "MARKETING" && (
+              <Badge variant="outline" className="text-xs bg-yellow-500/10 text-yellow-400 border-yellow-500/30">Custo 2x</Badge>
+            )}
             {t.total_sent !== undefined && <span>{t.total_sent} envios</span>}
             {t.score !== undefined && <span className={scoreColor(t.score)}>Score: {t.score}</span>}
             {t.response_rate !== undefined && <span>{(t.response_rate * 100).toFixed(0)}% resp.</span>}
@@ -642,10 +677,15 @@ export default function Templates() {
             )}
             {showSubmit && (t.status === "REJECTED" || t.status === "PENDING") && (
               isCEO ? (
-                <Button size="sm" variant="default" disabled={resubmitting === t.name} onClick={() => handleResubmitTemplate(t)}>
-                  {resubmitting === t.name ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Send className="h-3.5 w-3.5 mr-1" />}
-                  {t.status === "REJECTED" ? "Resubmeter à Meta" : "Enviar para análise"}
-                </Button>
+                <>
+                  <Button size="sm" variant="default" disabled={resubmitting === t.name} onClick={() => handleResubmitTemplate(t)}>
+                    {resubmitting === t.name ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                    {t.status === "REJECTED" ? "Resubmeter à Meta" : "Enviar para análise"}
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={() => handleDeleteTemplate(t)}>
+                    Deletar
+                  </Button>
+                </>
               ) : (
                 <p className="text-xs text-muted-foreground italic">Aguardando aprovação do administrador</p>
               )
@@ -664,9 +704,9 @@ export default function Templates() {
         <div className="flex flex-wrap gap-3 items-center justify-between">
           <TabsList>
             <TabsTrigger value="approved">Aprovados</TabsTrigger>
-            <TabsTrigger value="pending">Pendentes</TabsTrigger>
-            <TabsTrigger value="drafts">Rascunhos</TabsTrigger>
-            <TabsTrigger value="create">Criar Novo</TabsTrigger>
+            {isCEO && <TabsTrigger value="pending">Pendentes</TabsTrigger>}
+            {isCEO && <TabsTrigger value="drafts">Rascunhos</TabsTrigger>}
+            {isCEO && <TabsTrigger value="create">Criar Novo</TabsTrigger>}
           </TabsList>
           {tab !== "create" && (
             <div className="relative min-w-[200px]">
@@ -678,13 +718,33 @@ export default function Templates() {
 
         {/* APPROVED TAB */}
         <TabsContent value="approved">
+          <div className="flex flex-wrap gap-2 mb-4 items-center">
+            {[
+              { value: "all", label: "Todos" },
+              { value: "UTILITY", label: "Utility" },
+              { value: "MARKETING", label: "Marketing" },
+            ].map(f => (
+              <button
+                key={f.value}
+                onClick={() => setCategoryFilter(f.value)}
+                className={`px-3 py-1 rounded-full text-xs border transition-colors ${
+                  categoryFilter === f.value
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border text-muted-foreground hover:border-primary/50"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+            <span className="text-xs text-muted-foreground ml-auto">{approved.length} templates</span>
+          </div>
           {loading ? (
             <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
           ) : approved.length === 0 ? (
             <Card><CardContent className="py-12 text-center text-muted-foreground">Nenhum template aprovado.</CardContent></Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {approved.map((t) => <TemplateCard key={t.name} t={t} showAssign />)}
+              {approved.map((t) => <TemplateCard key={t.name} t={t} showAssign={isCEO} />)}
             </div>
           )}
         </TabsContent>
