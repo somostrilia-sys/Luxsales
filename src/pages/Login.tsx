@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Mail, Lock, Loader2, ArrowRight } from "lucide-react";
-import { LOGO_URL } from "@/lib/constants";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -103,7 +102,7 @@ export default function Login() {
           </form>
         </Card>
 
-        <p className="text-center text-[10px] text-white/30">LuxSales © 2026 — Digital Lux</p>
+
       </div>
     </div>
   );
