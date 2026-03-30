@@ -42,20 +42,10 @@ export default function Login() {
         <source src="/login-bg.mp4" type="video/mp4" />
       </video>
 
-      {/* Overlay escuro para legibilidade */}
-      <div className="absolute inset-0 bg-black/60 z-10" />
+      {/* Sem overlay — vídeo direto */}
 
       {/* Formulário centralizado por cima */}
       <div className="relative z-20 w-full max-w-md px-4 space-y-5">
-
-        {/* Logo */}
-        <div className="flex flex-col items-center gap-1.5 mb-6">
-          <h1 className="text-[2rem] font-extralight tracking-[0.25em] uppercase text-white">
-            Lux<span className="font-semibold text-gold">Sales</span>
-          </h1>
-          <div className="w-10 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
-          <span className="text-[10px] font-light text-white/60 tracking-[0.35em] uppercase">by Digital Lux</span>
-        </div>
 
         <Card variant="gradient" className="card-accent-top accent-gold bg-black/50 backdrop-blur-md border-white/10">
           <form onSubmit={handleSubmit}>
