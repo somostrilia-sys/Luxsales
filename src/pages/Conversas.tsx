@@ -632,10 +632,10 @@ export default function Conversas() {
               {title.slice(0, 1).toUpperCase()}
             </div>
             <div>
-              <p className="text-[16px] wa-text-main" style={{ fontWeight: 500 }}>{title}</p>
+              <p className="text-[16px]" style={{ fontWeight: 500, color: "#111b21" }}>{title}</p>
               {isTyping
                 ? <p className="text-[12px]" style={{ color: "#008069" }}>digitando...</p>
-                : <p className="text-[12px]" style={{ color: "#d1d5db" }}>{formatPhone(selectedPhone)}</p>
+                : <p className="text-[12px]" style={{ color: "#111b21" }}>{formatPhone(selectedPhone)}</p>
               }
             </div>
           </div>
