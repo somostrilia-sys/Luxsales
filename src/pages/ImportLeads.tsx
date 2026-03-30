@@ -311,6 +311,18 @@ export default function ImportLeads() {
   // load history on mount-ish
   useState(() => { loadHistory(); });
 
+  // ── download template ──
+  const downloadTemplate = () => {
+    const csv = "telefone,nome,email,cidade,estado,segmento\n+5511999999999,João Silva,joao@email.com,São Paulo,SP,protecao_veicular\n11988887777,Maria Santos,,Campinas,SP,protecao_veicular\n";
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "modelo-importacao-leads.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // ── render steps ──
   const canNext = step === 1 ? rawRows.length > 0 : step === 2 ? !!mapping.phone_number : true;
 
@@ -322,7 +334,7 @@ export default function ImportLeads() {
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("/leads")}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <PageHeader title="Importar Leads" subtitle="Importe leads de CSV ou XLSX" />
+          <PageHeader title="Importar Leads" subtitle="Suba uma planilha com a coluna telefone — o sistema normaliza automaticamente" />
         </div>
 
         {/* Step indicator */}
@@ -346,8 +358,23 @@ export default function ImportLeads() {
         {/* Step 1: Upload */}
         {step === 1 && (
           <Card>
-            <CardHeader><CardTitle className="text-base">Upload do Arquivo</CardTitle></CardHeader>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Upload do Arquivo</CardTitle>
+                <Button variant="outline" size="sm" onClick={downloadTemplate} className="text-xs">
+                  <FileUp className="h-3.5 w-3.5 mr-1.5" /> Baixar Modelo CSV
+                </Button>
+              </div>
+            </CardHeader>
             <CardContent className="space-y-4">
+              {/* Info box */}
+              <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 text-xs space-y-1">
+                <p className="font-medium">📋 Como funciona:</p>
+                <p>1. Suba um CSV ou XLSX com pelo menos a coluna <strong>telefone</strong></p>
+                <p>2. O sistema normaliza automaticamente para +55XX9XXXXXXXX</p>
+                <p>3. Telefones fixos são descartados — apenas celular (+55XX<strong>9</strong>)</p>
+                <p>4. Colunas extras (nome, email, cidade) são mapeadas no próximo passo</p>
+              </div>
               {/* Drag & drop */}
               <div
                 className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
