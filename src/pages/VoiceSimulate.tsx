@@ -62,6 +62,7 @@ export default function VoiceSimulate() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsPlayingRef = useRef(false);
   const recognitionRef = useRef<any>(null);
   const uaRef = useRef<any>(null);
   const sessionRef = useRef<any>(null);
@@ -153,9 +154,34 @@ export default function VoiceSimulate() {
   // ── MODO BROWSER: Web Speech + AI Simulator ──
   // ══════════════════════════════════════════════
 
+  // Limpar markdown e artefatos para fala natural
+  const cleanForTTS = (text: string): string => {
+    return text
+      .replace(/\*\*([^*]+)\*\*/g, "$1")     // **bold** → bold
+      .replace(/\*([^*]+)\*/g, "$1")          // *italic* → italic
+      .replace(/#{1,6}\s/g, "")               // # headers
+      .replace(/[-•]\s/g, "")                 // bullets
+      .replace(/\n{2,}/g, ". ")               // double newlines → period
+      .replace(/\n/g, ", ")                   // single newline → comma
+      .replace(/[`_~]/g, "")                 // backticks, underscores
+      .replace(/\s{2,}/g, " ")               // multiple spaces
+      .replace(/\bponto\b/gi, "")            // remove "ponto" solto
+      .replace(/\bvírgula\b/gi, "")          // remove "vírgula" solto
+      .replace(/\bdois pontos\b/gi, "")      // remove "dois pontos"
+      .replace(/\bexclamação\b/gi, "")       // remove "exclamação"
+      .replace(/\binterrogação\b/gi, "")     // remove "interrogação"
+      .replace(/\s{2,}/g, " ")               // cleanup espaços novamente
+      .trim();
+  };
+
+  // Pausar mic, tocar áudio, retomar mic
   const playXTTS = useCallback(async (text: string) => {
+    // Pausar Speech Recognition enquanto TTS toca
+    ttsPlayingRef.current = true;
+    try { recognitionRef.current?.stop(); } catch {}
+    setListening(false);
+
     try {
-      // Chama ai-simulator com action tts-only para gerar áudio via XTTS no pipeline
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
         method: "POST",
@@ -175,40 +201,31 @@ export default function VoiceSimulate() {
         const blob = new Blob([byteArray], { type: "audio/wav" });
         const url = URL.createObjectURL(blob);
         if (audioRef.current) {
-          audioRef.current.src = url;
-          audioRef.current.play().catch(() => {});
+          // Esperar o áudio terminar antes de retomar o mic
+          await new Promise<void>((resolve) => {
+            audioRef.current!.onended = () => resolve();
+            audioRef.current!.src = url;
+            audioRef.current!.play().catch(() => resolve());
+            // Timeout safety — se áudio não dispara onended
+            setTimeout(resolve, 15000);
+          });
         }
-        return;
+      } else {
+        throw new Error("no audio");
       }
-      throw new Error("no audio");
     } catch {
-      // Fallback browser TTS
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "pt-BR";
-        utterance.rate = 1.05;
-        const voices = window.speechSynthesis.getVoices();
-        const ptVoice = voices.find(v => v.lang === "pt-BR") || voices.find(v => v.lang.startsWith("pt"));
-        if (ptVoice) utterance.voice = ptVoice;
-        window.speechSynthesis.speak(utterance);
-      }
+      // silencioso
+    }
+
+    // Retomar mic após TTS terminar
+    ttsPlayingRef.current = false;
+    if (sessionRef.current === "browser" && recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+        setListening(true);
+      } catch {}
     }
   }, []);
-
-  // Limpar markdown e formatar para fala natural
-  const cleanForTTS = (text: string): string => {
-    return text
-      .replace(/\*\*([^*]+)\*\*/g, "$1")   // **bold** → bold
-      .replace(/\*([^*]+)\*/g, "$1")        // *italic* → italic
-      .replace(/#{1,6}\s/g, "")             // # headers
-      .replace(/[-•]\s/g, "")               // bullets
-      .replace(/\n{2,}/g, ". ")             // double newlines → period
-      .replace(/\n/g, ", ")                 // single newline → comma
-      .replace(/[`_~]/g, "")               // backticks, underscores
-      .replace(/\s{2,}/g, " ")             // multiple spaces
-      .trim();
-  };
 
   const VOICE_SYSTEM_PROMPT = `Você está em uma LIGAÇÃO TELEFÔNICA. Responda SEMPRE de forma curta e natural, como uma pessoa real falando ao telefone.
 
@@ -294,13 +311,15 @@ REGRAS OBRIGATÓRIAS:
 
     recognition.onend = () => {
       setListening(false);
-      // Restart automatically if still in call
-      if (sessionRef.current === "browser") {
+      // Restart automatically if still in call — mas NÃO durante TTS
+      if (sessionRef.current === "browser" && !ttsPlayingRef.current) {
         setTimeout(() => {
-          try {
-            recognition.start();
-            setListening(true);
-          } catch {}
+          if (!ttsPlayingRef.current) {
+            try {
+              recognition.start();
+              setListening(true);
+            } catch {}
+          }
         }, 300);
       }
     };
