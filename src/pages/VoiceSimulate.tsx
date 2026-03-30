@@ -499,7 +499,7 @@ REGRAS DE LIGAÇÃO:
     try {
       const bgAudio = new Audio("/audio/office-bg.mp3");
       bgAudio.loop = true;
-      bgAudio.volume = 0.06;
+      bgAudio.volume = 0.03;
       bgAudio.play().catch(() => {});
       bgAudioRef.current = bgAudio;
     } catch {}
