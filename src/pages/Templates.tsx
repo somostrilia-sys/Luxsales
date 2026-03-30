@@ -652,6 +652,49 @@ export default function Templates() {
 
         {/* CREATE TAB */}
         <TabsContent value="create" className="space-y-6">
+          {/* Referência de variáveis Meta */}
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-yellow-400" /> Variáveis de Template — Meta WhatsApp
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground mb-3">
+                Use as variáveis abaixo no corpo do template. Na hora do envio, elas serão substituídas pelos dados reais do lead.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
+                  <code className="font-mono text-primary font-bold">{"{{1}}"}</code>
+                  <span className="text-muted-foreground">Nome do lead</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
+                  <code className="font-mono text-primary font-bold">{"{{2}}"}</code>
+                  <span className="text-muted-foreground">Produto / Serviço</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
+                  <code className="font-mono text-primary font-bold">{"{{3}}"}</code>
+                  <span className="text-muted-foreground">Data / Prazo</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
+                  <code className="font-mono text-primary font-bold">{"{{4}}"}</code>
+                  <span className="text-muted-foreground">Valor / Preço</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
+                  <code className="font-mono text-primary font-bold">{"{{5}}"}</code>
+                  <span className="text-muted-foreground">Nome do vendedor</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded bg-muted/30">
+                  <code className="font-mono text-primary font-bold">{"{{6}}"}</code>
+                  <span className="text-muted-foreground">Nome da empresa</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Exemplo: <code className="text-primary">Olá {"{{1}}"}, aqui é {"{{5}}"} da {"{{6}}"}. Sua proposta de {"{{2}}"} por {"{{4}}"} expira em {"{{3}}"}.</code>
+              </p>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
