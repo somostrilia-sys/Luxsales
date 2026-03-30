@@ -132,7 +132,7 @@ export default function Configuracoes() {
     ? selectedCompanyId
     : collaborator?.company_id ?? null;
 
-  const isCEO = collaborator?.role_level === 0;
+  const { isCEO } = useCollaborator();
 
   const [config, setConfig] = useState<Config>(DEFAULTS);
   const [loading, setLoading] = useState(true);
