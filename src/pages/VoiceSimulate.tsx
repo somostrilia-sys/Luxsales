@@ -375,6 +375,7 @@ REGRAS DE LIGAÇÃO:
           company_id: companyId,
           system_prompt: systemPrompt,
           context: { phone_number: phoneNumber },
+          llm_provider: "claude",
         }),
       });
 
