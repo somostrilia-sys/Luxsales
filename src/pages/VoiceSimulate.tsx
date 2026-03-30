@@ -68,6 +68,8 @@ export default function VoiceSimulate() {
   const sessionRef = useRef<any>(null);
   const conversationRef = useRef<{ role: string; content: string }[]>([]);
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const bgAudioRef = useRef<HTMLAudioElement | null>(null);
+  const bgAudioCtxRef = useRef<AudioContext | null>(null);
 
   // ── Load SIP config from DB ──
   useEffect(() => {
@@ -290,6 +292,16 @@ REGRAS OBRIGATÓRIAS:
     setTranscript([]);
     conversationRef.current = [];
     timerRef.current = setInterval(() => setCallTimer((p) => p + 1), 1000);
+
+    // Iniciar background office
+    try {
+      const bgAudio = new Audio("/audio/office-bg.mp3");
+      bgAudio.loop = true;
+      bgAudio.volume = 0.15;
+      bgAudio.play().catch(() => {});
+      bgAudioRef.current = bgAudio;
+    } catch {}
+
     addSystem("📞 Chamada simulada iniciada (modo browser)");
     addSystem("🎤 Fale algo para começar a conversa...");
 
@@ -352,6 +364,11 @@ REGRAS OBRIGATÓRIAS:
     window.speechSynthesis?.cancel();
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
+    // Parar background office
+    if (bgAudioRef.current) {
+      bgAudioRef.current.pause();
+      bgAudioRef.current = null;
+    }
     setInCall(false);
     setListening(false);
     addSystem("📵 Chamada simulada encerrada");
@@ -473,6 +490,7 @@ REGRAS OBRIGATÓRIAS:
       recognitionRef.current?.stop();
       uaRef.current?.stop();
       window.speechSynthesis?.cancel();
+      bgAudioRef.current?.pause();
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
