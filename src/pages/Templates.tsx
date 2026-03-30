@@ -133,6 +133,13 @@ export default function Templates() {
   // Resubmit
   const [resubmitting, setResubmitting] = useState<string | null>(null);
 
+  // Submit draft
+  const [submittingDraft, setSubmittingDraft] = useState<string | null>(null);
+
+  // Rejection history
+  const [rejections, setRejections] = useState<Rejection[]>([]);
+  const [rejectionsLoading, setRejectionsLoading] = useState(false);
+
   // Variable mappings
   const [varMappings, setVarMappings] = useState<VarMapping[]>([
     { variable_index: 1, label: "Nome do lead", source: "leads_master", source_field: "lead_name", default_value: "" },
@@ -209,12 +216,6 @@ export default function Templates() {
       return updated;
     }));
   };
-  const [submittingDraft, setSubmittingDraft] = useState<string | null>(null);
-
-  // Rejection history
-  const [rejections, setRejections] = useState<Rejection[]>([]);
-  const [rejectionsLoading, setRejectionsLoading] = useState(false);
-
   const getHeaders = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     return {
