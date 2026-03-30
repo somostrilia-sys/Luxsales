@@ -397,9 +397,9 @@ export default function Templates() {
         );
         await Promise.all(savePromises);
         toast.success(`${templates.length} variações geradas e salvas como rascunho`);
-        // Navegar para aba de rascunhos para submeter à Meta quando desejar
-        setTab("drafts");
-        fetchDrafts();
+        // Manter na aba Criar Novo — templates gerados ficam visíveis
+        // Atualizar rascunhos em background pra quando o usuário navegar
+        setTimeout(() => fetchDrafts(), 500);
       } else {
         toast.error(data.error || "Erro ao gerar");
       }
