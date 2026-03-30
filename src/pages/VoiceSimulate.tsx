@@ -242,13 +242,18 @@ export default function VoiceSimulate() {
       }
     }
 
-    // Retomar mic
+    // Delay extra pra não capturar eco da própria voz
+    await new Promise(r => setTimeout(r, 400));
     ttsPlayingRef.current = false;
+
+    // Retomar mic (continuous mode — pode já estar rodando, tentar start se parou)
     if (sessionRef.current === "browser" && recognitionRef.current) {
       try {
         recognitionRef.current.start();
         setListening(true);
-      } catch {}
+      } catch {
+        // Se já estava rodando (continuous), tudo OK
+      }
     }
   }, []);
 
@@ -331,7 +336,78 @@ REGRAS DE LIGAÇÃO:
     setAiThinking(false);
   }, [companyId, phoneNumber, addEntry, addSystem, playXTTS, knowledgeContext]);
 
-  const startBrowserCall = useCallback(() => {
+  // Helper: inicializa o Web Speech Recognition e retorna a instância
+  const setupRecognition = useCallback(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return null;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "pt-BR";
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let pendingText = "";
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      // Ignorar tudo que chega enquanto TTS toca (evita capturar a própria voz)
+      if (ttsPlayingRef.current) return;
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result && result.isFinal) {
+          const text = result[0].transcript.trim();
+          if (text && text.length > 1) {
+            // Debounce: acumula falas próximas antes de mandar pra IA
+            pendingText += (pendingText ? " " : "") + text;
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+              const final = pendingText.trim();
+              pendingText = "";
+              if (final) {
+                addEntry("lead", final);
+                callAiSimulator(final);
+              }
+            }, 800);
+          }
+        }
+      }
+    };
+
+    recognition.onend = () => {
+      setListening(false);
+      // Restart automatically if still in call — mas NÃO durante TTS
+      if (sessionRef.current === "browser" && !ttsPlayingRef.current) {
+        setTimeout(() => {
+          if (sessionRef.current === "browser" && !ttsPlayingRef.current) {
+            try {
+              recognition.start();
+              setListening(true);
+            } catch {}
+          }
+        }, 500);
+      }
+    };
+
+    recognition.onstart = () => {
+      setListening(true);
+    };
+
+    recognition.onerror = (e: any) => {
+      if (e.error === "not-allowed") {
+        addSystem("❌ Microfone bloqueado. Permita o acesso nas configurações do navegador.");
+      } else if (e.error === "no-speech") {
+        // Silêncio — restart automático via onend
+      } else if (e.error !== "aborted") {
+        addSystem(`⚠️ Erro microfone: ${e.error}`);
+      }
+    };
+
+    return recognition;
+  }, [addEntry, addSystem, callAiSimulator]);
+
+  const startBrowserCall = useCallback(async () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       toast.error("Seu navegador não suporta reconhecimento de voz. Use Chrome.");
@@ -354,59 +430,93 @@ REGRAS DE LIGAÇÃO:
     } catch {}
 
     addSystem("📞 Chamada simulada iniciada (modo browser)");
-    addSystem("🎤 Fale algo para começar a conversa...");
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = "pt-BR";
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const result = event.results[0];
-      if (result && result.isFinal) {
-        const text = result[0].transcript.trim();
-        if (text) {
-          addEntry("lead", text);
-          callAiSimulator(text);
-        }
-      }
-    };
-
-    recognition.onend = () => {
-      setListening(false);
-      // Restart automatically if still in call — mas NÃO durante TTS
-      if (sessionRef.current === "browser" && !ttsPlayingRef.current) {
-        setTimeout(() => {
-          if (!ttsPlayingRef.current) {
-            try {
-              recognition.start();
-              setListening(true);
-            } catch {}
-          }
-        }, 300);
-      }
-    };
-
-    recognition.onstart = () => {
-      setListening(true);
-      addSystem("🎤 Microfone ativo — fale agora");
-    };
-    recognition.onerror = (e: any) => {
-      if (e.error === "not-allowed") {
-        addSystem("❌ Microfone bloqueado. Permita o acesso nas configurações do navegador.");
-      } else if (e.error !== "no-speech" && e.error !== "aborted") {
-        addSystem(`⚠️ Erro microfone: ${e.error}`);
-      }
-    };
-
-    try {
-      recognition.start();
-    } catch (err: any) {
-      addSystem(`❌ Não foi possível iniciar o microfone: ${err.message}`);
+    // Configurar recognition mas NÃO iniciar ainda (Lucas fala primeiro)
+    const recognition = setupRecognition();
+    if (!recognition) {
+      addSystem("❌ Navegador não suporta reconhecimento de voz.");
+      return;
     }
     recognitionRef.current = recognition;
     sessionRef.current = "browser";
-  }, [addSystem, addEntry, callAiSimulator]);
+
+    // ── LUCAS FALA PRIMEIRO ──
+    addSystem("🤖 Lucas está iniciando a conversa...");
+    setAiThinking(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      // Buscar opening_message do script da empresa
+      let openingMessage = "";
+      const { data: scriptData } = await supabase
+        .from("ai_call_scripts")
+        .select("opening_message")
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+      
+      if (scriptData?.opening_message) {
+        openingMessage = scriptData.opening_message;
+      } else {
+        // Gerar abertura via IA
+        const systemPrompt = `${knowledgeContext || "Você é Lucas, vendedor IA da proteção veicular."}
+
+REGRAS DE LIGAÇÃO:
+- Máximo 2-3 frases curtas
+- NUNCA use markdown, bullets, asteriscos
+- Fale como pessoa real ao telefone
+- Seja conciso e simpático
+- Esta é a PRIMEIRA fala da ligação — se apresente brevemente`;
+
+        const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+          },
+          body: JSON.stringify({
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: "Inicie a ligação. Você está ligando para um lead interessado em proteção veicular. Cumprimente-o." },
+            ],
+            company_id: companyId,
+            context: { phone_number: phoneNumber },
+            system_prompt: systemPrompt,
+          }),
+        });
+        const data = await res.json();
+        openingMessage = cleanForTTS(data.text || data.response || data.message || "Olá, aqui é o Lucas! Tudo bem? Vi que você tem interesse em proteção veicular, posso te ajudar?").slice(0, 200);
+      }
+
+      const cleanOpening = cleanForTTS(openingMessage).slice(0, 200);
+      conversationRef.current.push({ role: "assistant", content: cleanOpening });
+      addEntry("ai", cleanOpening);
+      setAiThinking(false);
+
+      // Falar via XTTS (mic fica pausado automaticamente pelo playXTTS)
+      await playXTTS(cleanOpening);
+
+      // Agora sim, iniciar mic — Lucas já falou
+      addSystem("🎤 Microfone ativo — sua vez de falar");
+      try {
+        recognition.start();
+        setListening(true);
+      } catch (err: any) {
+        addSystem(`❌ Não foi possível iniciar o microfone: ${err.message}`);
+      }
+    } catch (err: any) {
+      setAiThinking(false);
+      addSystem(`⚠️ Erro ao gerar abertura: ${err.message}. Iniciando mic...`);
+      // Fallback: iniciar mic mesmo sem abertura
+      try {
+        recognition.start();
+        setListening(true);
+      } catch {}
+    }
+  }, [addSystem, addEntry, callAiSimulator, setupRecognition, playXTTS, companyId, phoneNumber, knowledgeContext, cleanForTTS]);
 
   const endBrowserCall = useCallback(() => {
     recognitionRef.current?.stop();
