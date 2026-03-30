@@ -185,6 +185,21 @@ export default function VoiceSimulate() {
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   const XTTS_LOCAL = "http://192.168.0.206:8300/tts";
 
+  // Safe start — prevents double .start() race condition (must be declared BEFORE interruptTTS)
+  const safeStartRecognition = useCallback(() => {
+    if (!recognitionRef.current || recognitionStartingRef.current || ttsPlayingRef.current) return;
+    if (sessionRef.current !== "browser") return;
+    recognitionStartingRef.current = true;
+    try {
+      recognitionRef.current.start();
+      setListening(true);
+    } catch {
+      // Already running — that's fine
+    } finally {
+      setTimeout(() => { recognitionStartingRef.current = false; }, 200);
+    }
+  }, []);
+
   // Interrupt TTS when user speaks or presses button/space
   const interruptTTS = useCallback(() => {
     if (ttsAudioRef.current) {
@@ -211,22 +226,6 @@ export default function VoiceSimulate() {
       setTimeout(resolve, 20000);
     });
   };
-
-  // Safe start — prevents double .start() race condition
-  const safeStartRecognition = useCallback(() => {
-    if (!recognitionRef.current || recognitionStartingRef.current || ttsPlayingRef.current) return;
-    if (sessionRef.current !== "browser") return;
-    recognitionStartingRef.current = true;
-    try {
-      recognitionRef.current.start();
-      setListening(true);
-    } catch {
-      // Already running — that's fine
-    } finally {
-      // Reset flag after a tick to prevent immediate re-entry
-      setTimeout(() => { recognitionStartingRef.current = false; }, 200);
-    }
-  }, []);
 
   const playXTTS = useCallback(async (text: string) => {
     ttsPlayingRef.current = true;
