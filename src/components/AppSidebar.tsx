@@ -52,6 +52,7 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
     items: [
       { title: "Meus Leads", url: "/my-leads", icon: ClipboardList, levels: [1, 2, 3] },
       { title: "Conversas", url: "/conversations", icon: MessageSquare, levels: [0, 1, 2, 3], badgeKey: "conversas" },
+      { title: "Histórico", url: "/historico", icon: History, levels: [0, 1, 2, 3] },
       { title: "Templates", url: "/templates", icon: FileText, levels: [0] },
     ],
   },

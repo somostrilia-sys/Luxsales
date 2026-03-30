@@ -54,6 +54,7 @@ const GestaoUsuarios = lazy(() => import("./pages/GestaoUsuarios"));
 const AceitarConvite = lazy(() => import("./pages/AceitarConvite"));
 const Ligacoes = lazy(() => import("./pages/Ligacoes"));
 const Disparos = lazy(() => import("./pages/Disparos"));
+const Historico = lazy(() => import("./pages/Historico"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -105,6 +106,7 @@ const App = () => (
           {/* WB — All roles */}
           <Route path="/my-leads" element={<ProtectedRoute><MyLeads /></ProtectedRoute>} />
           <Route path="/conversations" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
+          <Route path="/historico" element={<ProtectedRoute><Historico /></ProtectedRoute>} />
 
           {/* VoIP */}
           <Route path="/calls" element={<ProtectedRoute minLevel={0}><DashboardCalls /></ProtectedRoute>} />
