@@ -1,7 +1,7 @@
 import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Loader2 } from "lucide-react";
 
@@ -51,6 +51,7 @@ const MetaRules = lazy(() => import("./pages/MetaRules"));
 const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase"));
 const GestaoUsuarios = lazy(() => import("./pages/GestaoUsuarios"));
 const AceitarConvite = lazy(() => import("./pages/AceitarConvite"));
+const Ligacoes = lazy(() => import("./pages/Ligacoes"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -87,7 +88,10 @@ const App = () => (
           <Route path="/lead-distribution" element={<ProtectedRoute minLevel={0}><LeadDistribution /></ProtectedRoute>} />
           <Route path="/leads" element={<ProtectedRoute minLevel={0}><LeadsMaster /></ProtectedRoute>} />
           <Route path="/import" element={<ProtectedRoute minLevel={0}><ImportLeads /></ProtectedRoute>} />
-          <Route path="/call-queues" element={<ProtectedRoute minLevel={0}><CallQueues /></ProtectedRoute>} />
+          {/* Ligacoes unificadas (Fase 2) */}
+          <Route path="/ligacoes" element={<ProtectedRoute><Ligacoes /></ProtectedRoute>} />
+          {/* Redirects para rotas antigas */}
+          <Route path="/call-queues" element={<Navigate to="/ligacoes" replace />} />
           <Route path="/dispatch-queues" element={<ProtectedRoute minLevel={0}><DispatchQueues /></ProtectedRoute>} />
           <Route path="/opt-ins" element={<ProtectedRoute minLevel={0}><OptIns /></ProtectedRoute>} />
           <Route path="/config" element={<ProtectedRoute minLevel={0}><CompanySetup /></ProtectedRoute>} />
@@ -113,7 +117,7 @@ const App = () => (
           <Route path="/configuracoes-voz" element={<ProtectedRoute minLevel={0}><ConfiguracoesVoz /></ProtectedRoute>} />
           <Route path="/knowledge-base" element={<ProtectedRoute minLevel={0}><KnowledgeBase /></ProtectedRoute>} />
           <Route path="/meta-rules" element={<ProtectedRoute minLevel={0}><MetaRules /></ProtectedRoute>} />
-          <Route path="/voice/dialer" element={<ProtectedRoute minLevel={0}><VoiceDialer /></ProtectedRoute>} />
+          <Route path="/voice/dialer" element={<Navigate to="/ligacoes" replace />} />
           <Route path="/voice/simulate" element={<ProtectedRoute minLevel={0}><VoiceSimulate /></ProtectedRoute>} />
           <Route path="/voice/calls" element={<ProtectedRoute minLevel={0}><VoiceCalls /></ProtectedRoute>} />
 

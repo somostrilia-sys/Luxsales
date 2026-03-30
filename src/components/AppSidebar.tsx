@@ -57,7 +57,7 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
   {
     label: "Venda por Voz",
     items: [
-      { title: "Discador", url: "/voice/dialer", icon: PhoneCall, levels: [0] },
+      { title: "Ligações", url: "/ligacoes", icon: Phone, levels: [1, 2, 3] },
       { title: "Simulação", url: "/voice/simulate", icon: FlaskConical, levels: [0] },
       { title: "Histórico", url: "/voice/calls", icon: History, levels: [0] },
     ],
@@ -65,7 +65,6 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
   {
     label: "Filas",
     items: [
-      { title: "Filas Ligação", url: "/call-queues", icon: PhoneCall, levels: [0] },
       { title: "Filas Disparo", url: "/dispatch-queues", icon: Send, levels: [0] },
     ],
   },
