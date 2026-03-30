@@ -176,7 +176,9 @@ export default function VoiceSimulate() {
       .trim();
   };
 
-  // Pausar mic, tocar áudio, retomar mic
+  // Pausar mic, tocar áudio XTTS, retomar mic
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const playXTTS = useCallback(async (text: string) => {
     // Pausar Speech Recognition enquanto TTS toca
     ttsPlayingRef.current = true;
@@ -202,21 +204,24 @@ export default function VoiceSimulate() {
         for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
         const blob = new Blob([byteArray], { type: "audio/wav" });
         const url = URL.createObjectURL(blob);
-        if (audioRef.current) {
-          // Esperar o áudio terminar antes de retomar o mic
-          await new Promise<void>((resolve) => {
-            audioRef.current!.onended = () => resolve();
-            audioRef.current!.src = url;
-            audioRef.current!.play().catch(() => resolve());
-            // Timeout safety — se áudio não dispara onended
-            setTimeout(resolve, 15000);
-          });
-        }
-      } else {
-        throw new Error("no audio");
+
+        // Criar novo Audio element dedicado para TTS (não reusar audioRef)
+        await new Promise<void>((resolve) => {
+          const audio = new Audio(url);
+          audio.volume = 1.0;
+          ttsAudioRef.current = audio;
+          audio.onended = () => {
+            URL.revokeObjectURL(url);
+            resolve();
+          };
+          audio.onerror = () => resolve();
+          audio.play().catch(() => resolve());
+          // Safety timeout
+          setTimeout(resolve, 20000);
+        });
       }
-    } catch {
-      // silencioso
+    } catch (err) {
+      console.error("XTTS error:", err);
     }
 
     // Retomar mic após TTS terminar
