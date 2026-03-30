@@ -355,14 +355,17 @@ REGRAS DE LIGAÇÃO:
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
         },
         body: JSON.stringify({
+          action: "respond",
+          text: userMessage,
           messages: messagesWithSystem,
           company_id: companyId,
-          context: { phone_number: phoneNumber },
           system_prompt: systemPrompt,
+          context: { phone_number: phoneNumber },
         }),
       });
 
       const data = await res.json();
+      if (data.error) { console.error("ai-simulator error:", data.error); }
       const rawText = data.text || data.response || data.message || "...";
       // Limpar e truncar para TTS rápido
       const aiText = cleanForTTS(rawText).slice(0, 200);
