@@ -1,6 +1,6 @@
 /**
- * Ligacoes.tsx — Página unificada de ligações (Discador + Fila + Histórico)
- * Fase 2 — LuxSales
+ * Ligacoes.tsx — Ligações unificadas (Fase 3 — LuxSales V3)
+ * Discador + Fila unificados, usando campos novos: interest_status, phone_normalized, call_attempts
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -14,11 +14,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
-  Phone, PhoneCall, PhoneOff, Pause, Play, Loader2,
-  Clock, ChevronDown, ChevronUp, MessageSquare, Trash2,
-  RefreshCw, Wifi, WifiOff,
+  Phone, PhoneOff, Pause, Play, Loader2,
+  Clock, ChevronDown, ChevronUp, MessageSquare,
+  RefreshCw, Wifi, WifiOff, PhoneCall,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -26,8 +27,9 @@ interface PoolLead {
   id: string;
   collaborator_id: string;
   lead_name: string | null;
-  phone: string;
-  status: string | null;
+  phone: string | null;
+  phone_normalized: string | null;
+  interest_status: string | null;
   call_attempts: number;
   last_call_at: string | null;
   priority: number;
@@ -48,23 +50,19 @@ interface CallLog {
 type DialerState = "idle" | "running" | "paused";
 type CallStatus = "idle" | "dialing" | "answered" | "in_call" | "ended";
 
-const STATUS_LABELS: Record<string, string> = {
-  new: "Aguardando",
-  in_progress: "Ligando",
-  answered: "Atendeu",
-  no_answer: "Não Atendeu",
+const INTEREST_LABELS: Record<string, string> = {
+  pending: "Aguardando",
+  not_interested_1: "1ª Recusa",
+  not_interested_2: "2ª Recusa",
   interested: "Interesse",
-  no_interest: "Sem Interesse",
   discarded: "Descartado",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  new: "bg-slate-500/20 text-slate-300",
-  in_progress: "bg-yellow-500/20 text-yellow-400",
-  answered: "bg-blue-500/20 text-blue-400",
-  no_answer: "bg-orange-500/20 text-orange-400",
+const INTEREST_COLORS: Record<string, string> = {
+  pending: "bg-slate-500/20 text-slate-300",
+  not_interested_1: "bg-orange-500/20 text-orange-400",
+  not_interested_2: "bg-red-500/20 text-red-400",
   interested: "bg-emerald-500/20 text-emerald-400",
-  no_interest: "bg-red-500/20 text-red-400",
   discarded: "bg-gray-500/20 text-gray-500",
 };
 
@@ -94,6 +92,14 @@ const formatDate = (iso: string | null) => {
   });
 };
 
+const displayPhone = (lead: PoolLead) => {
+  if (lead.phone_normalized) return lead.phone_normalized;
+  const raw = (lead.phone || "").replace(/\D/g, "");
+  if (!raw) return "—";
+  const withCountry = raw.startsWith("55") ? raw : `55${raw}`;
+  return `+${withCountry}`;
+};
+
 // ── VoIP Health ───────────────────────────────────────────────────────────────
 function useVoipStatus() {
   const [online, setOnline] = useState<boolean | null>(null);
@@ -116,9 +122,9 @@ function useVoipStatus() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ABA DISCADOR
+// ABA LIGAÇÕES — Discador + Fila unificados
 // ═══════════════════════════════════════════════════════════════════════════════
-function TabDiscador({
+function TabLigacoes({
   collaboratorId,
   companyId,
 }: {
@@ -128,28 +134,40 @@ function TabDiscador({
   const { online: voipOnline } = useVoipStatus();
   const [dialerState, setDialerState] = useState<DialerState>("idle");
   const [batchSize, setBatchSize] = useState<string>("100");
+  const [queue, setQueue] = useState<PoolLead[]>([]);
+  const [loadingQueue, setLoadingQueue] = useState(false);
+  const [queueLoaded, setQueueLoaded] = useState(false);
+  const [currentLead, setCurrentLead] = useState<PoolLead | null>(null);
   const [callStatus, setCallStatus] = useState<CallStatus>("idle");
   const [callDuration, setCallDuration] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [currentLead, setCurrentLead] = useState<PoolLead | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [callStartTime, setCallStartTime] = useState<Date | null>(null);
+  const [processedCount, setProcessedCount] = useState(0);
   const [stats, setStats] = useState({ total: 0, answered: 0, interested: 0 });
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Refs for stable access inside timeouts
+  const queueRef = useRef<PoolLead[]>([]);
+  const dialerStateRef = useRef<DialerState>("idle");
+  const voipOnlineRef = useRef<boolean | null>(null);
+
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+  useEffect(() => { dialerStateRef.current = dialerState; }, [dialerState]);
+  useEffect(() => { voipOnlineRef.current = voipOnline; }, [voipOnline]);
 
   const fetchStats = useCallback(async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const { data } = await supabase
       .from("consultant_lead_pool")
-      .select("status")
+      .select("interest_status")
       .eq("collaborator_id", collaboratorId)
       .gte("last_call_at", today.toISOString());
     if (!data) return;
     setStats({
       total: data.length,
-      answered: data.filter(
-        (d) => d.status && ["answered", "interested", "no_interest"].includes(d.status)
+      answered: data.filter(d =>
+        d.interest_status && ["interested", "not_interested_1", "not_interested_2"].includes(d.interest_status)
       ).length,
-      interested: data.filter((d) => d.status === "interested").length,
+      interested: data.filter(d => d.interest_status === "interested").length,
     });
   }, [collaboratorId]);
 
@@ -158,51 +176,69 @@ function TabDiscador({
   // Timer
   useEffect(() => {
     if (callStatus === "in_call") {
-      timerRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
+      timerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
     } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
       if (callStatus !== "ended") setCallDuration(0);
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [callStatus]);
 
-  const startDialer = useCallback(async () => {
-    setLoading(true);
+  const loadQueue = useCallback(async () => {
+    setLoadingQueue(true);
     try {
       const { data, error } = await supabase
         .from("consultant_lead_pool")
-        .select("*")
+        .select("id, collaborator_id, lead_name, phone, phone_normalized, interest_status, call_attempts, last_call_at, priority")
         .eq("collaborator_id", collaboratorId)
-        .eq("status", "new")
-        .order("priority", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .in("interest_status", ["pending", "not_interested_1"])
+        .not("phone_normalized", "is", null)
+        .limit(parseInt(batchSize));
 
       if (error) throw error;
-      if (!data) {
-        toast.info("Nenhum lead novo na fila");
-        setLoading(false);
-        return;
-      }
 
-      setCurrentLead(data as PoolLead);
-      setDialerState("running");
-      setCallStatus("dialing");
+      const raw = (data || []) as PoolLead[];
+      // Priority: not_interested_1 first, then never-called (call_attempts = 0)
+      const sorted = [...raw].sort((a, b) => {
+        const pri = (l: PoolLead) =>
+          l.interest_status === "not_interested_1" ? 2 : l.call_attempts === 0 ? 1 : 0;
+        return pri(b) - pri(a);
+      });
 
+      setQueue(sorted);
+      setQueueLoaded(true);
+      setProcessedCount(0);
+      toast.success(`${sorted.length} leads carregados na fila`);
+    } catch (e: any) {
+      toast.error("Erro ao carregar fila: " + e.message);
+    } finally {
+      setLoadingQueue(false);
+    }
+  }, [collaboratorId, batchSize]);
+
+  const startNextCall = useCallback(async () => {
+    const q = queueRef.current;
+    if (q.length === 0) {
+      toast.info("Fila finalizada! Todos os leads foram processados.");
+      setDialerState("idle");
+      return;
+    }
+
+    const lead = q[0];
+    setCurrentLead(lead);
+    setCallStatus("dialing");
+
+    const phoneToCall = lead.phone_normalized ||
+      (lead.phone?.startsWith("+") ? lead.phone : `+55${(lead.phone || "").replace(/\D/g, "")}`);
+
+    try {
       await supabase
         .from("consultant_lead_pool")
-        .update({ status: "in_progress", last_call_at: new Date().toISOString() })
-        .eq("id", data.id);
+        .update({ last_call_at: new Date().toISOString() })
+        .eq("id", lead.id);
 
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
-      const phone: string = (data as any).phone;
-      const normalizedPhone = phone.startsWith("+") ? phone : `+55${phone.replace(/\D/g, "")}`;
 
       const res = await fetch(`${EDGE_BASE}/orchestrator-proxy?path=/api/calls`, {
         method: "POST",
@@ -211,10 +247,10 @@ function TabDiscador({
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          phone: normalizedPhone,
+          phone: phoneToCall,
           company_id: companyId,
-          lead_name: (data as any).lead_name ?? null,
-          pool_id: data.id,
+          lead_name: lead.lead_name ?? null,
+          pool_id: lead.id,
         }),
       });
 
@@ -223,63 +259,126 @@ function TabDiscador({
         throw new Error((err as any).error ?? `HTTP ${res.status}`);
       }
 
-      toast.success(`Ligando para ${(data as any).lead_name ?? phone}`);
-      setCallStatus("answered");
+      setCallStartTime(new Date());
       setTimeout(() => setCallStatus("in_call"), 4000);
     } catch (e: any) {
-      toast.error("Erro ao iniciar: " + e.message);
-      setDialerState("idle");
-      setCallStatus("idle");
-    } finally {
-      setLoading(false);
+      // VoIP offline: allow simulation
+      if (voipOnlineRef.current === false) {
+        toast.info("VoIP offline — modo simulação");
+        setCallStartTime(new Date());
+        setTimeout(() => setCallStatus("in_call"), 800);
+      } else {
+        toast.error("Erro VoIP: " + e.message);
+        setCallStatus("idle");
+        setCurrentLead(null);
+      }
     }
-  }, [collaboratorId, companyId]);
+  }, [companyId]);
+
+  const startDialer = () => {
+    if (queueRef.current.length === 0) {
+      toast.warning("Carregue a fila primeiro");
+      return;
+    }
+    setDialerState("running");
+    startNextCall();
+  };
 
   const pauseDialer = () => {
     setDialerState("paused");
+    if (!currentLead) return;
     setCallStatus("idle");
+    setCurrentLead(null);
     toast.info("Discador pausado");
   };
 
   const markCallResult = async (result: "interested" | "no_interest" | "no_answer") => {
     if (!currentLead) return;
-    const currentAttempts = (currentLead.call_attempts || 0) + 1;
-    let newStatus: string = result;
-    let shouldDiscard = false;
+    const newAttempts = (currentLead.call_attempts || 0) + 1;
+    const duration = callDuration;
+    const startedAt = callStartTime?.toISOString() ?? new Date().toISOString();
 
-    if (result === "no_interest" && currentAttempts >= 2) {
-      newStatus = "discarded";
-      shouldDiscard = true;
+    let newInterestStatus = currentLead.interest_status || "pending";
+    let removeFromQueue = false;
+    let dispatchAvailable = false;
+
+    if (result === "interested") {
+      newInterestStatus = "interested";
+      dispatchAvailable = true;
+      removeFromQueue = true;
+      toast.success("Lead com interesse — disponível para disparo!");
+    } else if (result === "no_interest") {
+      if (currentLead.interest_status === "not_interested_1") {
+        newInterestStatus = "not_interested_2";
+        removeFromQueue = true;
+        toast.info("Lead descartado após 2ª recusa");
+      } else {
+        newInterestStatus = "not_interested_1";
+        toast.info("1ª recusa — voltando pro final da fila");
+      }
+    } else {
+      // no_answer
+      if (newAttempts >= 5) {
+        newInterestStatus = "discarded";
+        removeFromQueue = true;
+        toast.warning(`Descartado após ${newAttempts} tentativas sem resposta`);
+      } else {
+        toast.info(`Tentativa ${newAttempts}/5 — voltando pro final da fila`);
+      }
     }
 
+    // Update DB
     await supabase
       .from("consultant_lead_pool")
       .update({
-        status: newStatus,
-        call_attempts: currentAttempts,
+        interest_status: newInterestStatus,
+        call_attempts: newAttempts,
         last_call_at: new Date().toISOString(),
-        ...(result === "no_interest" && currentAttempts < 2 ? { priority: -1 } : {}),
+        ...(dispatchAvailable ? { dispatch_available: true } : {}),
       })
       .eq("id", currentLead.id);
 
-    if (shouldDiscard) {
-      toast.warning(`Lead descartado após ${currentAttempts} recusas`);
-    } else {
-      toast.success("Resultado salvo");
+    // Register call_log for answered calls
+    if (result !== "no_answer") {
+      supabase.from("call_logs").insert({
+        collaborator_id: collaboratorId,
+        lead_name: currentLead.lead_name,
+        lead_phone: displayPhone(currentLead),
+        pool_id: currentLead.id,
+        transcript: "[ligação registrada via discador]",
+        interest_detected: result === "interested",
+        duration_sec: duration,
+        started_at: startedAt,
+      }).then(() => {}).catch(() => {});
     }
 
+    // Update queue: remove current (queue[0]) and optionally push back to end
+    const updatedLead: PoolLead = {
+      ...currentLead,
+      interest_status: newInterestStatus,
+      call_attempts: newAttempts,
+    };
+    setQueue(prev => {
+      const rest = prev.slice(1);
+      return removeFromQueue ? rest : [...rest, updatedLead];
+    });
+
+    setProcessedCount(p => p + 1);
     setCallStatus("idle");
     setCurrentLead(null);
+    setCallDuration(0);
     fetchStats();
 
-    if (dialerState === "running") {
-      setTimeout(() => startDialer(), 1500);
+    if (dialerStateRef.current === "running") {
+      setTimeout(() => startNextCall(), 1500);
     }
   };
 
+  const totalInQueue = queue.length + processedCount;
+
   return (
     <div className="space-y-4">
-      {/* VoIP status */}
+      {/* VoIP Status */}
       <Card className="border-border/60">
         <CardContent className="flex items-center justify-between py-3 px-4">
           <div className="flex items-center gap-2 text-sm">
@@ -290,28 +389,25 @@ function TabDiscador({
             ) : (
               <WifiOff className="h-4 w-4 text-red-400" />
             )}
-            <span
-              className={
-                voipOnline
-                  ? "text-emerald-400"
-                  : voipOnline === false
-                  ? "text-red-400"
-                  : "text-muted-foreground"
-              }
-            >
+            <span className={
+              voipOnline ? "text-emerald-400" :
+              voipOnline === false ? "text-red-400" :
+              "text-muted-foreground"
+            }>
               Canal VoIP:{" "}
-              {voipOnline === null
-                ? "verificando..."
-                : voipOnline
-                ? "Online"
-                : "Offline"}
+              {voipOnline === null ? "verificando..." : voipOnline ? "Online" : "Offline"}
             </span>
+            {voipOnline === false && (
+              <Badge variant="outline" className="text-[10px] ml-1 border-yellow-500/30 text-yellow-400">
+                modo simulação
+              </Badge>
+            )}
           </div>
           <span className="text-xs text-muted-foreground">192.168.0.206:8500</span>
         </CardContent>
       </Card>
 
-      {/* Counters */}
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: "Ligações hoje", value: stats.total, color: "text-primary" },
@@ -327,18 +423,23 @@ function TabDiscador({
         ))}
       </div>
 
-      {/* Controls */}
+      {/* Queue loader + controls */}
       <Card className="border-border/60">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-            Controle do Discador
+            Fila de Ligações
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Batch selector + load button */}
           <div className="flex items-end gap-3">
             <div className="flex-1">
-              <p className="text-xs text-muted-foreground mb-1.5">Leads por rodada</p>
-              <Select value={batchSize} onValueChange={setBatchSize}>
+              <p className="text-xs text-muted-foreground mb-1.5">Quantidade de leads</p>
+              <Select
+                value={batchSize}
+                onValueChange={setBatchSize}
+                disabled={dialerState === "running"}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -349,51 +450,102 @@ function TabDiscador({
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex-1">
-              {dialerState === "idle" || dialerState === "paused" ? (
+            <Button
+              variant="outline"
+              className="h-10 px-4"
+              onClick={loadQueue}
+              disabled={loadingQueue || dialerState === "running"}
+            >
+              {loadingQueue
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <RefreshCw className="h-4 w-4" />
+              }
+              <span className="ml-2">Carregar</span>
+            </Button>
+          </div>
+
+          {/* Queue progress */}
+          {queueLoaded && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">
+                  {currentLead
+                    ? `Ligando para ${processedCount + 1} de ${totalInQueue}`
+                    : `${queue.length} leads na fila`}
+                </span>
+                {dialerState === "running" && (
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border-0 text-xs animate-pulse">
+                    Discador ativo
+                  </Badge>
+                )}
+                {dialerState === "paused" && (
+                  <Badge className="bg-yellow-500/20 text-yellow-400 border-0 text-xs">
+                    Pausado
+                  </Badge>
+                )}
+              </div>
+              {totalInQueue > 0 && (
+                <Progress value={(processedCount / Math.max(totalInQueue, 1)) * 100} className="h-1.5" />
+              )}
+            </div>
+          )}
+
+          {/* Start / Pause */}
+          {queueLoaded && (
+            <div className="flex gap-3">
+              {dialerState !== "running" ? (
                 <Button
-                  className="w-full h-10 bg-emerald-600 hover:bg-emerald-700"
+                  className="flex-1 h-10 bg-emerald-600 hover:bg-emerald-700"
                   onClick={startDialer}
-                  disabled={loading || voipOnline === false}
+                  disabled={queue.length === 0 || !!currentLead}
                 >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Play className="h-4 w-4 mr-2" />
-                  )}
-                  {dialerState === "paused" ? "Retomar" : "▶ Iniciar Ligações"}
+                  <Play className="h-4 w-4 mr-2" />
+                  {dialerState === "paused" ? "Retomar Ligações" : "▶ Iniciar Ligações"}
                 </Button>
               ) : (
                 <Button
-                  className="w-full h-10"
+                  className="flex-1 h-10"
                   variant="outline"
                   onClick={pauseDialer}
+                  disabled={!!currentLead && callStatus !== "idle"}
                 >
                   <Pause className="h-4 w-4 mr-2" />
                   ⏸ Pausar
                 </Button>
               )}
             </div>
-          </div>
+          )}
 
-          {/* Active call */}
+          {/* Active call card */}
           {currentLead && (
-            <div className="rounded-lg border border-border/60 p-4 space-y-3">
-              <div className="flex items-center justify-between">
+            <div className="rounded-lg border border-border/60 p-4 space-y-3 bg-card/50">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-medium text-sm">{currentLead.lead_name ?? "Lead"}</p>
-                  <p className="text-xs font-mono text-muted-foreground">{currentLead.phone}</p>
+                  <p className="font-semibold text-sm">{currentLead.lead_name ?? "Lead"}</p>
+                  <p className="text-xs font-mono text-muted-foreground">{displayPhone(currentLead)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Tentativa {(currentLead.call_attempts || 0) + 1} de 5
+                  </p>
                 </div>
                 <Badge className={`text-xs ${CALL_COLOR[callStatus]}`}>
                   {CALL_LABEL[callStatus]}
                 </Badge>
               </div>
+
+              {callStatus === "dialing" && (
+                <div className="flex items-center gap-2 text-yellow-400 text-sm">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Discando para {displayPhone(currentLead)}...</span>
+                </div>
+              )}
+
               {(callStatus === "in_call" || callStatus === "ended") && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="h-3.5 w-3.5" />
                   <span className="font-mono text-sm">{formatDuration(callDuration)}</span>
                 </div>
               )}
+
               {callStatus === "in_call" && (
                 <Button
                   variant="destructive"
@@ -402,9 +554,10 @@ function TabDiscador({
                   onClick={() => setCallStatus("ended")}
                 >
                   <PhoneOff className="h-3.5 w-3.5 mr-2" />
-                  Encerrar
+                  Encerrar Ligação
                 </Button>
               )}
+
               {callStatus === "ended" && (
                 <div className="grid grid-cols-3 gap-2">
                   <Button
@@ -412,7 +565,7 @@ function TabDiscador({
                     className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
                     onClick={() => markCallResult("interested")}
                   >
-                    ✅ Interesse
+                    ✅ Com Interesse
                   </Button>
                   <Button
                     size="sm"
@@ -428,7 +581,7 @@ function TabDiscador({
                     className="text-xs"
                     onClick={() => markCallResult("no_answer")}
                   >
-                    📵 N. Atendeu
+                    📵 Não Atendeu
                   </Button>
                 </div>
               )}
@@ -436,146 +589,64 @@ function TabDiscador({
           )}
         </CardContent>
       </Card>
-    </div>
-  );
-}
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ABA FILA
-// ═══════════════════════════════════════════════════════════════════════════════
-function TabFila({ collaboratorId }: { collaboratorId: string }) {
-  const [leads, setLeads] = useState<PoolLead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<string>("all");
-
-  const fetchLeads = useCallback(async () => {
-    setLoading(true);
-    try {
-      let q = supabase
-        .from("consultant_lead_pool")
-        .select("*")
-        .eq("collaborator_id", collaboratorId)
-        .neq("status", "discarded");
-      if (filter !== "all") q = q.eq("status", filter);
-      const { data, error } = await q
-        .order("priority", { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      setLeads((data ?? []) as PoolLead[]);
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [collaboratorId, filter]);
-
-  useEffect(() => { fetchLeads(); }, [fetchLeads]);
-
-  const discardLead = async (id: string) => {
-    await supabase
-      .from("consultant_lead_pool")
-      .update({ status: "discarded" })
-      .eq("id", id);
-    toast.success("Lead descartado");
-    fetchLeads();
-  };
-
-  // Sort: interested first, then new/in_progress, then no_answer, then no_interest
-  const sorted = [...leads].sort((a, b) => {
-    const pri = (s: string | null) => {
-      if (s === "interested") return 4;
-      if (s === "new") return 3;
-      if (s === "in_progress") return 2;
-      if (s === "no_answer") return 1;
-      return 0;
-    };
-    return pri(b.status) - pri(a.status);
-  });
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os status</SelectItem>
-            <SelectItem value="new">Aguardando</SelectItem>
-            <SelectItem value="in_progress">Ligando</SelectItem>
-            <SelectItem value="interested">Com interesse</SelectItem>
-            <SelectItem value="no_interest">Sem interesse</SelectItem>
-            <SelectItem value="no_answer">Não atendeu</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button variant="outline" size="sm" onClick={fetchLeads}>
-          <RefreshCw className="h-3.5 w-3.5" />
-        </Button>
-        <span className="text-xs text-muted-foreground ml-auto">{leads.length} leads</span>
-      </div>
-
-      <Card className="border-border/60">
-        {loading ? (
-          <CardContent className="flex justify-center py-12">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-          </CardContent>
-        ) : sorted.length === 0 ? (
-          <CardContent className="py-12 text-center text-muted-foreground text-sm">
-            Nenhum lead encontrado.
-          </CardContent>
-        ) : (
-          <div className="divide-y divide-border/40">
-            {sorted.map((lead) => {
-              const attempts = lead.call_attempts || 0;
-              const showDiscard =
-                attempts >= 2 && lead.status === "no_interest";
-              return (
-                <div
-                  key={lead.id}
-                  className="flex items-center justify-between px-4 py-3 gap-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">
-                      {lead.lead_name ?? "—"}
-                    </p>
-                    <p className="text-xs font-mono text-muted-foreground">
-                      {lead.phone}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="text-right text-xs text-muted-foreground hidden sm:block">
-                      <p>
-                        {attempts} tentativa{attempts !== 1 ? "s" : ""}
-                      </p>
-                      <p>{formatDate(lead.last_call_at)}</p>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] px-1.5 py-0 border-0 ${
-                        STATUS_COLORS[lead.status ?? "new"] ??
-                        "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {STATUS_LABELS[lead.status ?? "new"] ?? lead.status}
-                    </Badge>
-                    {showDiscard && (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="h-6 px-2 text-[10px]"
-                        onClick={() => discardLead(lead.id)}
-                      >
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Descartar
-                      </Button>
-                    )}
+      {/* Queue preview list */}
+      {queueLoaded && queue.length > 0 && !currentLead && (
+        <Card className="border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+              Próximos na Fila ({queue.length})
+            </CardTitle>
+          </CardHeader>
+          <div className="divide-y divide-border/40 max-h-72 overflow-y-auto">
+            {queue.slice(0, 25).map((lead, idx) => (
+              <div key={lead.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-xs text-muted-foreground w-5 shrink-0 text-right">
+                    {idx + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{lead.lead_name ?? "—"}</p>
+                    <p className="text-xs font-mono text-muted-foreground">{displayPhone(lead)}</p>
                   </div>
                 </div>
-              );
-            })}
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs text-muted-foreground hidden sm:inline">
+                    {lead.call_attempts || 0} tent.
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] px-1.5 py-0 border-0 ${
+                      INTEREST_COLORS[lead.interest_status ?? "pending"] ?? "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {INTEREST_LABELS[lead.interest_status ?? "pending"] ?? lead.interest_status}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+            {queue.length > 25 && (
+              <div className="px-4 py-2.5 text-xs text-muted-foreground text-center">
+                +{queue.length - 25} leads na fila...
+              </div>
+            )}
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
+
+      {queueLoaded && queue.length === 0 && dialerState === "idle" && processedCount > 0 && (
+        <Card className="border-border/60">
+          <CardContent className="py-10 text-center text-muted-foreground text-sm">
+            <Phone className="h-8 w-8 mx-auto mb-2 opacity-30" />
+            Fila concluída! {processedCount} leads processados.
+            <br />
+            <Button variant="outline" size="sm" className="mt-3" onClick={loadQueue}>
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+              Carregar nova fila
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -612,16 +683,9 @@ function TabHistorico({ companyId }: { companyId: string | undefined }) {
           duration_sec: d.duration_seconds ?? d.duration_sec ?? null,
           status: d.status ?? null,
           started_at: d.created_at ?? null,
-          ai_qualification:
-            d.ai_qualification ??
-            d.ai_analysis?.interest_level ??
-            null,
+          ai_qualification: d.ai_qualification ?? d.ai_analysis?.interest_level ?? null,
           transcript: d.transcript ?? null,
-          ai_summary:
-            d.ai_summary ??
-            d.ai_analysis?.reason ??
-            d.call_summary ??
-            null,
+          ai_summary: d.ai_summary ?? d.ai_analysis?.reason ?? d.call_summary ?? null,
         }))
       );
     } catch (e: any) {
@@ -634,7 +698,7 @@ function TabHistorico({ companyId }: { companyId: string | undefined }) {
   useEffect(() => { fetchCalls(); }, [fetchCalls]);
 
   const toggleExpand = (id: string) => {
-    setExpanded((prev) => {
+    setExpanded(prev => {
       const s = new Set(prev);
       s.has(id) ? s.delete(id) : s.add(id);
       return s;
@@ -648,7 +712,7 @@ function TabHistorico({ companyId }: { companyId: string | undefined }) {
   };
 
   const filtered = calls.filter(
-    (c) =>
+    c =>
       !search ||
       (c.lead_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (c.lead_phone ?? "").includes(search)
@@ -660,7 +724,7 @@ function TabHistorico({ companyId }: { companyId: string | undefined }) {
         <Input
           placeholder="Buscar por nome ou telefone..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={e => setSearch(e.target.value)}
           className="flex-1"
         />
         <Button variant="outline" size="sm" onClick={fetchCalls}>
@@ -678,7 +742,7 @@ function TabHistorico({ companyId }: { companyId: string | undefined }) {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((call) => {
+          {filtered.map(call => {
             const isExpanded = expanded.has(call.id);
             return (
               <Card key={call.id} className="border-border/60">
@@ -686,22 +750,15 @@ function TabHistorico({ companyId }: { companyId: string | undefined }) {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium">
-                          {call.lead_name ?? "Desconhecido"}
-                        </p>
+                        <p className="text-sm font-medium">{call.lead_name ?? "Desconhecido"}</p>
                         {call.ai_qualification && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] px-1.5 border-0 bg-primary/10 text-primary"
-                          >
+                          <Badge variant="outline" className="text-[10px] px-1.5 border-0 bg-primary/10 text-primary">
                             {call.ai_qualification}
                           </Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
-                        <span className="font-mono">
-                          {call.lead_phone ?? "—"}
-                        </span>
+                        <span className="font-mono">{call.lead_phone ?? "—"}</span>
                         <span>{formatDate(call.started_at)}</span>
                         {call.duration_sec != null && (
                           <span className="flex items-center gap-1">
@@ -718,30 +775,15 @@ function TabHistorico({ companyId }: { companyId: string | undefined }) {
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       {call.lead_phone && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 text-emerald-400 hover:text-emerald-300"
-                            title="Chamar no WA"
-                            onClick={() => openWhatsApp(call.lead_phone!)}
-                          >
-                            <MessageSquare className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 text-primary hover:text-primary/80"
-                            title="Ligar manualmente"
-                            onClick={() =>
-                              toast.info(
-                                `Para ligar para ${call.lead_phone}, use a aba Discador`
-                              )
-                            }
-                          >
-                            <PhoneCall className="h-3.5 w-3.5" />
-                          </Button>
-                        </>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-emerald-400 hover:text-emerald-300"
+                          title="Chamar no WA"
+                          onClick={() => openWhatsApp(call.lead_phone!)}
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                        </Button>
                       )}
                       {(call.transcript || call.ai_summary) && (
                         <Button
@@ -750,37 +792,27 @@ function TabHistorico({ companyId }: { companyId: string | undefined }) {
                           className="h-7 w-7 p-0"
                           onClick={() => toggleExpand(call.id)}
                         >
-                          {isExpanded ? (
-                            <ChevronUp className="h-3.5 w-3.5" />
-                          ) : (
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          )}
+                          {isExpanded
+                            ? <ChevronUp className="h-3.5 w-3.5" />
+                            : <ChevronDown className="h-3.5 w-3.5" />
+                          }
                         </Button>
                       )}
                     </div>
                   </div>
 
-                  {/* Expanded transcript */}
                   {isExpanded && (
                     <div className="mt-3 space-y-2 border-t border-border/40 pt-3">
                       {call.ai_summary && (
                         <div className="rounded-lg bg-primary/5 p-3">
-                          <p className="text-xs font-medium text-primary mb-1">
-                            💡 Resumo Lucas
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {call.ai_summary}
-                          </p>
+                          <p className="text-xs font-medium text-primary mb-1">💡 Resumo Lucas</p>
+                          <p className="text-xs text-muted-foreground">{call.ai_summary}</p>
                         </div>
                       )}
                       {call.transcript && (
                         <div className="rounded-lg bg-secondary/30 p-3 max-h-48 overflow-y-auto">
-                          <p className="text-xs font-medium text-muted-foreground mb-1">
-                            Transcrição
-                          </p>
-                          <p className="text-xs whitespace-pre-wrap font-mono">
-                            {call.transcript}
-                          </p>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Transcrição</p>
+                          <p className="text-xs whitespace-pre-wrap font-mono">{call.transcript}</p>
                         </div>
                       )}
                     </div>
@@ -817,30 +849,22 @@ export default function Ligacoes() {
     <DashboardLayout>
       <PageHeader
         title="Ligações"
-        subtitle="Discador, fila e histórico de ligações unificados"
+        subtitle="Discador e fila unificados — leads com interesse vão direto para Disparos"
       />
-      <Tabs defaultValue="discador" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 max-w-sm">
-          <TabsTrigger value="discador">
+      <Tabs defaultValue="ligacoes" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-2 max-w-xs">
+          <TabsTrigger value="ligacoes">
             <Phone className="h-3.5 w-3.5 mr-1.5" />
-            Discador
-          </TabsTrigger>
-          <TabsTrigger value="fila">
-            <PhoneCall className="h-3.5 w-3.5 mr-1.5" />
-            Fila
+            Ligações
           </TabsTrigger>
           <TabsTrigger value="historico">
-            <Clock className="h-3.5 w-3.5 mr-1.5" />
+            <PhoneCall className="h-3.5 w-3.5 mr-1.5" />
             Histórico
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="discador">
-          <TabDiscador collaboratorId={collaboratorId} companyId={companyId} />
-        </TabsContent>
-
-        <TabsContent value="fila">
-          <TabFila collaboratorId={collaboratorId} />
+        <TabsContent value="ligacoes">
+          <TabLigacoes collaboratorId={collaboratorId} companyId={companyId} />
         </TabsContent>
 
         <TabsContent value="historico">

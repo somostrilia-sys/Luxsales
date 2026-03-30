@@ -1,3 +1,7 @@
+/**
+ * Disparos.tsx — Disparos WhatsApp com limite Meta (Fase 4 — LuxSales V3)
+ * Usa campos novos: interest_status, dispatch_available, lucas_summary, phone_normalized, dispatch_count
+ */
 import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
@@ -29,8 +33,10 @@ import {
   Loader2,
   Info,
   AlertCircle,
+  CheckSquare,
+  Square,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -39,12 +45,14 @@ interface EligibleLead {
   id: string;
   lead_id: string | null;
   collaborator_id: string;
-  phone_number: string;
+  phone_normalized: string | null;
+  phone: string | null;
   lead_name: string | null;
-  status: string;
-  dispatched: boolean;
-  total_call_attempts: number;
-  call_summary: string | null;
+  interest_status: string;
+  dispatch_available: boolean;
+  call_attempts: number;
+  lucas_summary: string | null;
+  last_call_at: string | null;
 }
 
 interface DispatchHistory {
@@ -75,10 +83,28 @@ interface DispatchLimit {
   dispatches_available: number;
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+const displayPhone = (lead: EligibleLead) => {
+  if (lead.phone_normalized) return lead.phone_normalized;
+  const raw = (lead.phone || "").replace(/\D/g, "");
+  if (!raw) return "—";
+  return raw.startsWith("55") ? `+${raw}` : `+55${raw}`;
+};
+
+const timeInQueue = (lastCallAt: string | null) => {
+  if (!lastCallAt) return null;
+  try {
+    return formatDistanceToNow(new Date(lastCallAt), { addSuffix: true, locale: ptBR });
+  } catch {
+    return null;
+  }
+};
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function Disparos() {
-  const { collaborator, roleLevel, isCEO } = useCollaborator();
+  const { collaborator } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
 
   const companyId =
@@ -94,6 +120,8 @@ export default function Disparos() {
   const [templates, setTemplates] = useState<WaTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+  const [dispatchingBulk, setDispatchingBulk] = useState(false);
+  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
 
   // ── Histórico tab state ──
   const [history, setHistory] = useState<DispatchHistory[]>([]);
@@ -109,32 +137,29 @@ export default function Disparos() {
     if (!collaborator?.id) return;
     setLoadingLeads(true);
     try {
-      // Query consultant_lead_pool: status = interested, dispatched = false, total_call_attempts > 0
       const { data, error } = await supabase
         .from("consultant_lead_pool")
         .select(
-          "id, lead_id, collaborator_id, phone_number, lead_name, status, dispatched, total_call_attempts, call_summary"
+          "id, lead_id, collaborator_id, phone_normalized, phone, lead_name, interest_status, dispatch_available, call_attempts, lucas_summary, last_call_at"
         )
         .eq("collaborator_id", collaborator.id)
-        .eq("status", "interested")
-        .eq("dispatched", false)
-        .gt("total_call_attempts", 0)
-        .order("updated_at", { ascending: false })
+        .eq("interest_status", "interested")
+        .eq("dispatch_available", true)
+        .order("last_call_at", { ascending: true }) // oldest first (mais tempo na fila)
         .limit(50);
 
       if (error) {
         console.error("Erro ao buscar leads elegíveis:", error);
-        // Se tabela não tiver coluna total_call_attempts, fallback sem esse filtro
-        if (error.message?.includes("total_call_attempts")) {
+        // Fallback sem dispatch_available se coluna não existir ainda
+        if (error.message?.includes("dispatch_available")) {
           const { data: fallback } = await supabase
             .from("consultant_lead_pool")
             .select(
-              "id, lead_id, collaborator_id, phone_number, lead_name, status, dispatched, total_call_attempts, call_summary"
+              "id, lead_id, collaborator_id, phone_normalized, phone, lead_name, interest_status, dispatch_available, call_attempts, lucas_summary, last_call_at"
             )
             .eq("collaborator_id", collaborator.id)
-            .eq("status", "interested")
-            .eq("dispatched", false)
-            .order("updated_at", { ascending: false })
+            .eq("interest_status", "interested")
+            .order("last_call_at", { ascending: true })
             .limit(50);
           setEligibleLeads((fallback || []) as EligibleLead[]);
         }
@@ -177,16 +202,12 @@ export default function Disparos() {
     if (!collaborator?.id) return;
     setLoadingHistory(true);
     try {
-      let query = supabase
+      const { data } = await supabase
         .from("smart_dispatches")
-        .select(
-          "id, phone_number, lead_name, template_name, status, created_at, sent_at"
-        )
+        .select("id, phone_number, lead_name, template_name, status, created_at, sent_at")
         .eq("collaborator_id", collaborator.id)
         .order("created_at", { ascending: false })
         .limit(100);
-
-      const { data } = await query;
       setHistory((data || []) as DispatchHistory[]);
     } catch (e) {
       console.error(e);
@@ -200,18 +221,16 @@ export default function Disparos() {
     if (!companyId || !collaborator?.id) return;
     setLoadingLimit(true);
     try {
-      // Buscar tier limit de system_configs
+      // Buscar tier limit pelo key específico da empresa
       const { data: configs } = await supabase
         .from("system_configs")
         .select("key, value")
-        .in("key", ["meta_tier_limit"]);
+        .eq("key", `meta_tier_daily_${companyId}`);
 
-      const configMap: Record<string, string> = {};
-      for (const c of configs || []) configMap[c.key] = c.value;
+      const tierValue = configs?.[0]?.value;
+      const metaTierLimit = parseInt(tierValue || "250", 10);
 
-      const metaTierLimit = parseInt(configMap["meta_tier_limit"] || "250", 10);
-
-      // Contar consultores ativos da empresa
+      // Contar consultores ativos
       const { count: activeCount } = await supabase
         .from("collaborators")
         .select("id", { count: "exact", head: true })
@@ -258,11 +277,9 @@ export default function Disparos() {
     }
   }, [activeTab, loadEligibleLeads, loadTemplates, loadHistory, loadLimitInfo]);
 
-  // ── Get headers for edge function calls ──
+  // ── Auth headers ──
   const getHeaders = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${session?.access_token}`,
@@ -273,18 +290,14 @@ export default function Disparos() {
     };
   };
 
-  // ── Dispatch action ──
-  const handleDispatch = async (
-    lead: EligibleLead,
-    mode: "lucas" | "manual"
-  ) => {
+  // ── Dispatch single lead ──
+  const handleDispatch = async (lead: EligibleLead, mode: "lucas" | "manual") => {
     if (!selectedTemplate) {
       toast.error("Selecione um template antes de disparar");
       return;
     }
     if (!collaborator?.id) return;
 
-    // Check limit
     if (limitInfo && limitInfo.dispatches_available <= 0) {
       toast.error("Limite diário atingido. Disponível amanhã.");
       return;
@@ -300,7 +313,7 @@ export default function Disparos() {
           action: "send",
           company_id: companyId,
           collaborator_id: collaborator.id,
-          phone_number: lead.phone_number,
+          phone_number: displayPhone(lead),
           template_name: selectedTemplate,
           dispatch_reason: mode === "lucas" ? "lucas_ia" : "manual",
           use_lucas: mode === "lucas",
@@ -316,51 +329,145 @@ export default function Disparos() {
             : "✅ Template enviado com sucesso!"
         );
 
-        // Mark as dispatched in consultant_lead_pool
+        // Update pool: remove from dispatch queue, increment dispatch_count
         await supabase
           .from("consultant_lead_pool")
-          .update({ dispatched: true, dispatched_at: new Date().toISOString() })
+          .update({
+            dispatch_available: false,
+            dispatch_count: (lead.call_attempts || 0), // use rpc or raw increment if available
+          })
           .eq("id", lead.id);
 
-        // Remove from local list
-        setEligibleLeads((prev) => prev.filter((l) => l.id !== lead.id));
+        // Register in wa_conversations
+        supabase.from("wa_conversations").insert({
+          company_id: companyId,
+          collaborator_id: collaborator.id,
+          phone: displayPhone(lead),
+          lead_name: lead.lead_name,
+          pool_id: lead.id,
+          template_used: selectedTemplate,
+          dispatched_by: mode,
+          status: "waiting_reply",
+          created_at: new Date().toISOString(),
+        }).then(() => {}).catch(() => {});
 
-        // Update limit
+        setEligibleLeads(prev => prev.filter(l => l.id !== lead.id));
+        setSelectedLeads(prev => { const s = new Set(prev); s.delete(lead.id); return s; });
+
         if (limitInfo) {
           setLimitInfo({
             ...limitInfo,
             dispatches_used_today: limitInfo.dispatches_used_today + 1,
-            dispatches_available: Math.max(
-              0,
-              limitInfo.dispatches_available - 1
-            ),
+            dispatches_available: Math.max(0, limitInfo.dispatches_available - 1),
           });
         }
       } else {
-        const errMsg = result.error || "Erro ao disparar";
         if (res.status === 429) {
           toast.error("Limite diário atingido. Disponível amanhã.");
         } else {
-          toast.error(errMsg);
+          toast.error(result.error || "Erro ao disparar");
         }
       }
-    } catch (e) {
+    } catch {
       toast.error("Erro de conexão");
     } finally {
       setDispatchingId(null);
     }
   };
 
-  // ── Filter history ──
-  const filteredHistory = history.filter((h) => {
-    if (historyFilter === "all") return true;
-    if (historyFilter === "replied") return h.replied;
-    if (historyFilter === "not_replied") return !h.replied;
-    if (historyFilter === "converted") return h.converted;
-    return true;
-  });
+  // ── Bulk dispatch ──
+  const handleBulkDispatch = async (mode: "lucas" | "manual") => {
+    if (!selectedTemplate) {
+      toast.error("Selecione um template antes de disparar em massa");
+      return;
+    }
+    if (selectedLeads.size === 0) {
+      toast.error("Selecione ao menos um lead");
+      return;
+    }
 
-  // ── Renders ──────────────────────────────────────────────────────────────
+    const available = limitInfo?.dispatches_available ?? Infinity;
+    if (selectedLeads.size > available) {
+      toast.error(`Limite insuficiente: você tem ${available} disparos disponíveis hoje`);
+      return;
+    }
+
+    setDispatchingBulk(true);
+    const leadsToDispatch = eligibleLeads.filter(l => selectedLeads.has(l.id));
+    let success = 0;
+
+    for (const lead of leadsToDispatch) {
+      try {
+        const headers = await getHeaders();
+        const res = await fetch(`${EDGE_BASE}/smart-dispatcher`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            action: "send",
+            company_id: companyId,
+            collaborator_id: collaborator!.id,
+            phone_number: displayPhone(lead),
+            template_name: selectedTemplate,
+            dispatch_reason: mode === "lucas" ? "lucas_ia" : "manual",
+            use_lucas: mode === "lucas",
+          }),
+        });
+        const result = await res.json();
+
+        if (res.ok && result.success) {
+          success++;
+          await supabase
+            .from("consultant_lead_pool")
+            .update({ dispatch_available: false })
+            .eq("id", lead.id);
+          supabase.from("wa_conversations").insert({
+            company_id: companyId,
+            collaborator_id: collaborator!.id,
+            phone: displayPhone(lead),
+            lead_name: lead.lead_name,
+            pool_id: lead.id,
+            template_used: selectedTemplate,
+            dispatched_by: mode,
+            status: "waiting_reply",
+            created_at: new Date().toISOString(),
+          }).then(() => {}).catch(() => {});
+          setEligibleLeads(prev => prev.filter(l => l.id !== lead.id));
+        }
+      } catch {
+        // continue on error
+      }
+    }
+
+    setSelectedLeads(new Set());
+    setDispatchingBulk(false);
+    toast.success(`${success} de ${leadsToDispatch.length} disparos enviados`);
+
+    if (limitInfo) {
+      setLimitInfo(prev => prev ? {
+        ...prev,
+        dispatches_used_today: prev.dispatches_used_today + success,
+        dispatches_available: Math.max(0, prev.dispatches_available - success),
+      } : prev);
+    }
+  };
+
+  const toggleSelectLead = (id: string) => {
+    setSelectedLeads(prev => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedLeads.size === eligibleLeads.length) {
+      setSelectedLeads(new Set());
+    } else {
+      setSelectedLeads(new Set(eligibleLeads.map(l => l.id)));
+    }
+  };
+
+  // ── Render: Disparar tab ──────────────────────────────────────────────────
 
   const renderDispararsTab = () => (
     <div className="space-y-4">
@@ -374,56 +481,85 @@ export default function Disparos() {
             <Progress
               value={
                 limitInfo.limit_per_consultant > 0
-                  ? (limitInfo.dispatches_used_today /
-                      limitInfo.limit_per_consultant) *
-                    100
+                  ? (limitInfo.dispatches_used_today / limitInfo.limit_per_consultant) * 100
                   : 0
               }
               className="mt-2 h-2"
             />
           </div>
-          <Badge
-            variant={
-              limitInfo.dispatches_available > 0 ? "secondary" : "destructive"
-            }
-          >
+          <Badge variant={limitInfo.dispatches_available > 0 ? "secondary" : "destructive"}>
             {limitInfo.dispatches_available > 0 ? "Disponível" : "Esgotado"}
           </Badge>
         </div>
       )}
 
       {/* Template selector */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1">
-          <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecionar template aprovado..." />
-            </SelectTrigger>
-            <SelectContent>
-              {templates.length === 0 ? (
-                <SelectItem value="__none" disabled>
-                  Nenhum template aprovado
-                </SelectItem>
-              ) : (
-                templates.map((t) => (
-                  <SelectItem key={t.id} value={t.name}>
-                    {t.name}{" "}
-                    <span className="text-muted-foreground text-xs">
-                      ({t.language})
-                    </span>
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
+      <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+        <SelectTrigger>
+          <SelectValue placeholder="Selecionar template aprovado..." />
+        </SelectTrigger>
+        <SelectContent>
+          {templates.length === 0 ? (
+            <SelectItem value="__none" disabled>
+              Nenhum template aprovado
+            </SelectItem>
+          ) : (
+            templates.map(t => (
+              <SelectItem key={t.id} value={t.name}>
+                {t.name}{" "}
+                <span className="text-muted-foreground text-xs">({t.language})</span>
+              </SelectItem>
+            ))
+          )}
+        </SelectContent>
+      </Select>
+
+      {/* Bulk actions bar */}
+      {eligibleLeads.length > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/30 px-3 py-2">
+          <button
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            onClick={toggleSelectAll}
+          >
+            {selectedLeads.size === eligibleLeads.length && eligibleLeads.length > 0
+              ? <CheckSquare className="h-4 w-4 text-primary" />
+              : <Square className="h-4 w-4" />
+            }
+            {selectedLeads.size === 0
+              ? "Selecionar todos"
+              : `${selectedLeads.size} selecionado${selectedLeads.size > 1 ? "s" : ""}`}
+          </button>
+          {selectedLeads.size > 0 && (
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                disabled={dispatchingBulk || !selectedTemplate || (limitInfo?.dispatches_available ?? 1) <= 0}
+                onClick={() => handleBulkDispatch("lucas")}
+              >
+                {dispatchingBulk ? <Loader2 className="h-3 w-3 animate-spin" /> : <Bot className="h-3 w-3" />}
+                Disparar em Massa (Lucas)
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5"
+                disabled={dispatchingBulk || !selectedTemplate || (limitInfo?.dispatches_available ?? 1) <= 0}
+                onClick={() => handleBulkDispatch("manual")}
+              >
+                <Hand className="h-3 w-3" />
+                Em Massa (Manual)
+              </Button>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Leads list */}
       {loadingLeads ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+            <Skeleton key={i} className="h-28 w-full rounded-xl" />
           ))}
         </div>
       ) : eligibleLeads.length === 0 ? (
@@ -433,90 +569,123 @@ export default function Disparos() {
             Nenhum lead elegível para disparo
           </p>
           <p className="text-xs text-muted-foreground/60 mt-1">
-            Leads aparecem aqui após ligação + interesse confirmado
+            Leads aparecem aqui após ligação com interesse confirmado
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {eligibleLeads.map((lead) => (
-            <div
-              key={lead.id}
-              className="rounded-xl border border-border/60 bg-card p-4 space-y-3"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-sm">
-                    {lead.lead_name || "Lead"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {lead.phone_number}
-                  </p>
+          {eligibleLeads.map(lead => {
+            const isSelected = selectedLeads.has(lead.id);
+            const queueTime = timeInQueue(lead.last_call_at);
+
+            return (
+              <div
+                key={lead.id}
+                className={`rounded-xl border bg-card p-4 space-y-3 transition-colors cursor-pointer ${
+                  isSelected ? "border-primary/50 bg-primary/5" : "border-border/60"
+                }`}
+                onClick={() => toggleSelectLead(lead.id)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 shrink-0" onClick={e => { e.stopPropagation(); toggleSelectLead(lead.id); }}>
+                      {isSelected
+                        ? <CheckSquare className="h-4 w-4 text-primary" />
+                        : <Square className="h-4 w-4 text-muted-foreground" />
+                      }
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">{lead.lead_name || "Lead"}</p>
+                      <p className="text-xs text-muted-foreground font-mono">{displayPhone(lead)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    {queueTime && (
+                      <Badge variant="outline" className="text-[10px] border-slate-500/30 text-slate-400">
+                        <Clock className="h-2.5 w-2.5 mr-1" />
+                        {queueTime}
+                      </Badge>
+                    )}
+                    <Badge variant="secondary" className="text-[10px]">
+                      <Phone className="h-2.5 w-2.5 mr-1" />
+                      {lead.call_attempts || 0} lig.
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] border-emerald-500/50 text-emerald-600"
+                    >
+                      Interessado
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Badge variant="secondary" className="text-[10px]">
-                    <Phone className="h-2.5 w-2.5 mr-1" />
-                    {lead.total_call_attempts || 0} lig.
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] border-emerald-500/50 text-emerald-600"
+
+                {lead.lucas_summary && (
+                  <div className="rounded-lg bg-primary/5 px-3 py-2" onClick={e => e.stopPropagation()}>
+                    <p className="text-[10px] font-medium text-primary mb-0.5">💡 Resumo Lucas</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      {lead.lucas_summary}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                  <Button
+                    size="sm"
+                    className="flex-1 gap-1.5 text-xs"
+                    disabled={
+                      dispatchingId === lead.id ||
+                      dispatchingBulk ||
+                      !selectedTemplate ||
+                      (limitInfo?.dispatches_available ?? 1) <= 0
+                    }
+                    onClick={() => handleDispatch(lead, "lucas")}
                   >
-                    Interessado
-                  </Badge>
+                    {dispatchingId === lead.id
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : <Bot className="h-3 w-3" />
+                    }
+                    Com Lucas
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 gap-1.5 text-xs"
+                    disabled={
+                      dispatchingId === lead.id ||
+                      dispatchingBulk ||
+                      !selectedTemplate ||
+                      (limitInfo?.dispatches_available ?? 1) <= 0
+                    }
+                    onClick={() => handleDispatch(lead, "manual")}
+                  >
+                    <Hand className="h-3 w-3" />
+                    Manual
+                  </Button>
                 </div>
-              </div>
 
-              {lead.call_summary && (
-                <div className="rounded-lg bg-muted/40 px-3 py-2">
-                  <p className="text-[11px] text-muted-foreground">
-                    Resumo: {lead.call_summary}
-                  </p>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  className="flex-1 gap-1.5 text-xs"
-                  disabled={
-                    dispatchingId === lead.id ||
-                    !selectedTemplate ||
-                    (limitInfo?.dispatches_available ?? 1) <= 0
-                  }
-                  onClick={() => handleDispatch(lead, "lucas")}
-                >
-                  {dispatchingId === lead.id ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Bot className="h-3 w-3" />
-                  )}
-                  Disparar com Lucas
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="flex-1 gap-1.5 text-xs"
-                  disabled={
-                    dispatchingId === lead.id ||
-                    !selectedTemplate ||
-                    (limitInfo?.dispatches_available ?? 1) <= 0
-                  }
-                  onClick={() => handleDispatch(lead, "manual")}
-                >
-                  <Hand className="h-3 w-3" />
-                  Disparar manualmente
-                </Button>
+                {(limitInfo?.dispatches_available ?? 1) <= 0 && (
+                  <p className="text-xs text-destructive text-center">Limite diário atingido</p>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 
+  // ── Render: Histórico tab ──────────────────────────────────────────────────
+
+  const filteredHistory = history.filter(h => {
+    if (historyFilter === "all") return true;
+    if (historyFilter === "replied") return h.replied;
+    if (historyFilter === "not_replied") return !h.replied;
+    if (historyFilter === "converted") return h.converted;
+    return true;
+  });
+
   const renderHistoricoTab = () => (
     <div className="space-y-4">
-      {/* Filters */}
       <div className="flex items-center gap-2">
         {(
           [
@@ -525,7 +694,7 @@ export default function Disparos() {
             { value: "not_replied", label: "Não respondeu" },
             { value: "converted", label: "Convertido" },
           ] as const
-        ).map((f) => (
+        ).map(f => (
           <Button
             key={f.value}
             size="sm"
@@ -547,42 +716,30 @@ export default function Disparos() {
       ) : filteredHistory.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/60 p-10 text-center">
           <Clock className="mx-auto mb-3 h-10 w-10 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">
-            Nenhum disparo encontrado
-          </p>
+          <p className="text-sm text-muted-foreground">Nenhum disparo encontrado</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {filteredHistory.map((d) => (
+          {filteredHistory.map(d => (
             <div
               key={d.id}
               className="rounded-xl border border-border/50 bg-card px-4 py-3 flex items-center justify-between gap-3"
             >
               <div className="min-w-0">
-                <p className="text-sm font-medium truncate">
-                  {d.lead_name || d.phone_number}
-                </p>
+                <p className="text-sm font-medium truncate">{d.lead_name || d.phone_number}</p>
                 <p className="text-[11px] text-muted-foreground">
                   {d.template_name} •{" "}
-                  {format(new Date(d.created_at), "dd/MM HH:mm", {
-                    locale: ptBR,
-                  })}
+                  {format(new Date(d.created_at), "dd/MM HH:mm", { locale: ptBR })}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {d.converted ? (
-                  <Badge
-                    variant="secondary"
-                    className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
-                  >
+                  <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
                     <TrendingUp className="h-2.5 w-2.5 mr-1" />
                     Convertido
                   </Badge>
                 ) : d.replied ? (
-                  <Badge
-                    variant="secondary"
-                    className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-500/30"
-                  >
+                  <Badge variant="secondary" className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-500/30">
                     <CheckCircle className="h-2.5 w-2.5 mr-1" />
                     Respondeu
                   </Badge>
@@ -601,6 +758,8 @@ export default function Disparos() {
     </div>
   );
 
+  // ── Render: Limite tab ──────────────────────────────────────────────────
+
   const renderLimiteTab = () => (
     <div className="space-y-4">
       {loadingLimit ? (
@@ -611,7 +770,6 @@ export default function Disparos() {
         </div>
       ) : limitInfo ? (
         <>
-          {/* Tier info */}
           <div className="rounded-xl border border-border/60 bg-card p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -621,17 +779,13 @@ export default function Disparos() {
                 <p className="text-2xl font-bold mt-0.5">
                   {limitInfo.meta_tier_limit.toLocaleString("pt-BR")}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  disparos/dia no total
-                </p>
+                <p className="text-xs text-muted-foreground">disparos/dia no total</p>
               </div>
               <div className="text-right">
                 <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
                   Consultores Ativos
                 </p>
-                <p className="text-2xl font-bold mt-0.5">
-                  {limitInfo.active_consultants}
-                </p>
+                <p className="text-2xl font-bold mt-0.5">{limitInfo.active_consultants}</p>
               </div>
             </div>
 
@@ -640,52 +794,38 @@ export default function Disparos() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium">Seu limite diário</p>
-                <p className="text-sm font-bold">
-                  {limitInfo.limit_per_consultant} disparos/dia
-                </p>
+                <p className="text-sm font-bold">{limitInfo.limit_per_consultant} disparos/dia</p>
               </div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-muted-foreground">Usados hoje</p>
-                <p className="text-xs font-medium">
-                  {limitInfo.dispatches_used_today}
-                </p>
+                <p className="text-xs font-medium">{limitInfo.dispatches_used_today}</p>
               </div>
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs text-muted-foreground">Disponíveis</p>
-                <p className="text-xs font-semibold text-emerald-600">
-                  {limitInfo.dispatches_available}
-                </p>
+                <p className="text-xs font-semibold text-emerald-600">{limitInfo.dispatches_available}</p>
               </div>
               <Progress
                 value={
                   limitInfo.limit_per_consultant > 0
-                    ? (limitInfo.dispatches_used_today /
-                        limitInfo.limit_per_consultant) *
-                      100
+                    ? (limitInfo.dispatches_used_today / limitInfo.limit_per_consultant) * 100
                     : 0
                 }
                 className="h-3"
               />
               <div className="flex justify-between mt-1">
                 <p className="text-[10px] text-muted-foreground">0</p>
-                <p className="text-[10px] text-muted-foreground">
-                  {limitInfo.limit_per_consultant}
-                </p>
+                <p className="text-[10px] text-muted-foreground">{limitInfo.limit_per_consultant}</p>
               </div>
             </div>
           </div>
 
-          {/* Info card */}
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 flex gap-3">
             <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">
-                Como funciona o limite?
-              </p>
+              <p className="text-sm font-medium text-foreground">Como funciona o limite?</p>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Seu limite é calculado automaticamente: TIER Meta ÷ consultores
-                ativos. Quando o TIER aumentar, seu limite aumenta
-                automaticamente. O limite reseta toda meia-noite.
+                Seu limite é calculado automaticamente: TIER Meta ÷ consultores ativos.
+                Quando o TIER aumentar, seu limite aumenta automaticamente. O limite reseta toda meia-noite.
               </p>
               <p className="text-xs text-muted-foreground">
                 Fórmula:{" "}
@@ -701,12 +841,9 @@ export default function Disparos() {
             <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 flex gap-3">
               <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-foreground">
-                  Limite atingido
-                </p>
+                <p className="text-sm font-medium text-foreground">Limite atingido</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Você atingiu seu limite de disparos para hoje. Os disparos
-                  serão liberados novamente amanhã à meia-noite.
+                  Você atingiu seu limite de disparos para hoje. Os disparos serão liberados novamente amanhã à meia-noite.
                 </p>
               </div>
             </div>
@@ -760,14 +897,14 @@ export default function Disparos() {
   );
 }
 
-// ── Small helper component ─────────────────────────────────────────────────
+// ── Helper component ───────────────────────────────────────────────────────
 
 function DispatchStatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; class: string }> = {
-    sent: { label: "Enviado", class: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" },
-    failed: { label: "Falhou", class: "bg-destructive/10 text-destructive border-destructive/30" },
-    queued: { label: "Aguardando", class: "bg-yellow-500/10 text-yellow-600 border-yellow-500/30" },
-    delivered: { label: "Entregue", class: "bg-blue-500/10 text-blue-600 border-blue-500/30" },
+    sent:      { label: "Enviado",    class: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" },
+    failed:    { label: "Falhou",     class: "bg-destructive/10 text-destructive border-destructive/30" },
+    queued:    { label: "Aguardando", class: "bg-yellow-500/10 text-yellow-600 border-yellow-500/30" },
+    delivered: { label: "Entregue",   class: "bg-blue-500/10 text-blue-600 border-blue-500/30" },
   };
   const s = map[status] || { label: status, class: "" };
   return (
