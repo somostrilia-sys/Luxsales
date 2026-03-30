@@ -115,19 +115,73 @@ export default function Conversas() {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10000);
     try {
-      const { data } = await supabase
+      // CEO com "Todas Empresas" vê tudo. Consultores veem apenas suas próprias conversas.
+      const isCeoAllView = collaborator?.role?.level === 0 &&
+        (selectedCompanyId === "all" || !selectedCompanyId);
+
+      let query = supabase
         .from("wa_conversations")
-        .select("id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, is_typing, typing_updated_at")
+        .select("id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, is_typing, typing_updated_at, collaborator_id, assigned_to")
         .order("last_message_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
-        .limit(50)
+        .limit(100)
         .abortSignal(controller.signal);
 
-      if (!data) { if (!silent) setLoadingList(false); return; }
+      // Filtrar por collaborator se não for CEO vendo tudo
+      if (!isCeoAllView && collaborator?.id) {
+        // Try filtering by collaborator_id or assigned_to column
+        query = query.or(`collaborator_id.eq.${collaborator.id},assigned_to.eq.${collaborator.id}`);
+      }
+
+      const { data, error: convError } = await query;
+
+      // If columns don't exist (error), fallback to pool-based filtering
+      let finalData = data;
+      if (convError && (convError.message?.includes("collaborator_id") || convError.message?.includes("assigned_to"))) {
+        // Fallback: filter via consultant_lead_pool
+        if (!isCeoAllView && collaborator?.id) {
+          const { data: poolPhones } = await supabase
+            .from("consultant_lead_pool")
+            .select("phone_number")
+            .eq("collaborator_id", collaborator.id)
+            .limit(200)
+            .abortSignal(controller.signal);
+
+          const phones = (poolPhones || []).map((p: any) => p.phone_number);
+
+          if (phones.length > 0) {
+            const { data: fallbackData } = await supabase
+              .from("wa_conversations")
+              .select("id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, is_typing, typing_updated_at")
+              .in("phone", phones)
+              .order("last_message_at", { ascending: false, nullsFirst: false })
+              .order("created_at", { ascending: false })
+              .limit(100)
+              .abortSignal(controller.signal);
+            finalData = fallbackData;
+          } else {
+            finalData = [];
+          }
+        } else {
+          // CEO fallback: load all without filter
+          const { data: allData } = await supabase
+            .from("wa_conversations")
+            .select("id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, is_typing, typing_updated_at")
+            .order("last_message_at", { ascending: false, nullsFirst: false })
+            .order("created_at", { ascending: false })
+            .limit(50)
+            .abortSignal(controller.signal);
+          finalData = allData;
+        }
+      }
+
+      const dataToProcess = finalData;
+
+      if (!dataToProcess) { if (!silent) setLoadingList(false); return; }
 
       // Deduplicate by normalized phone — keep most recent
       const seen = new Map<string, ConversationItem>();
-      for (const row of data) {
+      for (const row of dataToProcess) {
         const norm = normalizePhone(row.phone || "");
         if (!seen.has(norm)) {
           seen.set(norm, {
