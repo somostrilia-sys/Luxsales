@@ -287,13 +287,27 @@ export default function VoiceSimulate() {
   useEffect(() => {
     if (!companyId) return;
     (async () => {
-      const { data } = await supabase
+      // Priorizar script com knowledge_base preenchido
+      let { data } = await supabase
         .from("ai_call_scripts")
-        .select("system_prompt, knowledge_base, personality, tone, opening_message, objection_handlers, forbidden_words")
+        .select("system_prompt, knowledge_base, personality, tone, opening_message, objection_handlers, forbidden_words, sales_techniques")
         .eq("company_id", companyId)
         .eq("is_active", true)
+        .not("knowledge_base", "is", null)
+        .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      // Fallback: qualquer script ativo
+      if (!data) {
+        ({ data } = await supabase
+          .from("ai_call_scripts")
+          .select("system_prompt, knowledge_base, personality, tone, opening_message, objection_handlers, forbidden_words, sales_techniques")
+          .eq("company_id", companyId)
+          .eq("is_active", true)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle());
+      }
       if (data) {
         const parts = [];
         if (data.system_prompt) parts.push(data.system_prompt);
@@ -307,6 +321,7 @@ export default function VoiceSimulate() {
             .join("\n");
           if (objs) parts.push(`\nOBJEÇÕES:\n${objs}`);
         }
+        if (data.sales_techniques) parts.push(`\nTÉCNICAS DE VENDA:\n${data.sales_techniques}`);
         setKnowledgeContext(parts.join("\n"));
       }
     })();
@@ -490,15 +505,27 @@ REGRAS DE LIGAÇÃO:
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
-      // Buscar opening_message do script da empresa
+      // Buscar opening_message do script da empresa (priorizar com knowledge_base)
       let openingMessage = "";
-      const { data: scriptData } = await supabase
+      let { data: scriptData } = await supabase
         .from("ai_call_scripts")
         .select("opening_message")
         .eq("company_id", companyId)
         .eq("is_active", true)
+        .not("knowledge_base", "is", null)
+        .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (!scriptData) {
+        ({ data: scriptData } = await supabase
+          .from("ai_call_scripts")
+          .select("opening_message")
+          .eq("company_id", companyId)
+          .eq("is_active", true)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle());
+      }
       
       if (scriptData?.opening_message) {
         openingMessage = scriptData.opening_message;
