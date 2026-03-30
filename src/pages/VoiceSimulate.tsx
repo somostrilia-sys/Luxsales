@@ -181,6 +181,19 @@ export default function VoiceSimulate() {
       .trim();
   };
 
+  // Trunca na última frase completa (não corta no meio da palavra)
+  const smartTruncate = (text: string, maxLen = 250): string => {
+    if (text.length <= maxLen) return text;
+    // Find last sentence-ending punctuation before maxLen
+    const sub = text.slice(0, maxLen);
+    const lastPeriod = Math.max(sub.lastIndexOf("."), sub.lastIndexOf("!"), sub.lastIndexOf("?"), sub.lastIndexOf(","));
+    if (lastPeriod > maxLen * 0.4) return sub.slice(0, lastPeriod + 1).trim();
+    // Fallback: last space
+    const lastSpace = sub.lastIndexOf(" ");
+    if (lastSpace > maxLen * 0.4) return sub.slice(0, lastSpace).trim() + ".";
+    return sub.trim() + ".";
+  };
+
   // Pausar mic, tocar áudio XTTS, retomar mic
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   const XTTS_LOCAL = "http://192.168.0.206:8300/tts";
@@ -219,6 +232,7 @@ export default function VoiceSimulate() {
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.volume = 1.0;
+      audio.playbackRate = 1.25;
       ttsAudioRef.current = audio;
       audio.onended = () => { URL.revokeObjectURL(url); ttsAudioRef.current = null; resolve(); };
       audio.onerror = () => { ttsAudioRef.current = null; resolve(); };
@@ -368,7 +382,7 @@ REGRAS DE LIGAÇÃO:
       if (data.error) { console.error("ai-simulator error:", data.error); }
       const rawText = data.text || data.response || data.message || "...";
       // Limpar e truncar para TTS rápido
-      const aiText = cleanForTTS(rawText).slice(0, 200);
+      const aiText = smartTruncate(cleanForTTS(rawText));
       conversationRef.current.push({ role: "assistant", content: aiText });
       addEntry("ai", aiText);
 
@@ -485,7 +499,7 @@ REGRAS DE LIGAÇÃO:
     try {
       const bgAudio = new Audio("/audio/office-bg.mp3");
       bgAudio.loop = true;
-      bgAudio.volume = 0.15;
+      bgAudio.volume = 0.08;
       bgAudio.play().catch(() => {});
       bgAudioRef.current = bgAudio;
     } catch {}
@@ -561,10 +575,10 @@ REGRAS DE LIGAÇÃO:
           }),
         });
         const data = await res.json();
-        openingMessage = cleanForTTS(data.text || data.response || data.message || "Olá, aqui é o Lucas! Tudo bem? Vi que você tem interesse em proteção veicular, posso te ajudar?").slice(0, 200);
+        openingMessage = smartTruncate(cleanForTTS(data.text || data.response || data.message || "Olá, aqui é o Lucas! Tudo bem? Vi que você tem interesse em proteção veicular, posso te ajudar?"));
       }
 
-      const cleanOpening = cleanForTTS(openingMessage).slice(0, 200);
+      const cleanOpening = smartTruncate(cleanForTTS(openingMessage));
       conversationRef.current.push({ role: "assistant", content: cleanOpening });
       addEntry("ai", cleanOpening);
       setAiThinking(false);
