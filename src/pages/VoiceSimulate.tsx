@@ -153,24 +153,36 @@ export default function VoiceSimulate() {
   // ── MODO BROWSER: Web Speech + AI Simulator ──
   // ══════════════════════════════════════════════
 
-  const XTTS_URL = "http://192.168.0.206:8300/tts";
-
   const playXTTS = useCallback(async (text: string) => {
     try {
-      const res = await fetch(XTTS_URL, {
+      // Chama ai-simulator com action tts-only para gerar áudio via XTTS no pipeline
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+        },
+        body: JSON.stringify({ action: "tts", text, tts_url: "http://134.122.17.106/api/tts" }),
       });
-      if (!res.ok) throw new Error(`XTTS ${res.status}`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      if (audioRef.current) {
-        audioRef.current.src = url;
-        audioRef.current.play().catch(() => {});
+      if (!res.ok) throw new Error(`TTS ${res.status}`);
+      const data = await res.json();
+      if (data.audio) {
+        const byteChars = atob(data.audio);
+        const byteArray = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+        const blob = new Blob([byteArray], { type: "audio/wav" });
+        const url = URL.createObjectURL(blob);
+        if (audioRef.current) {
+          audioRef.current.src = url;
+          audioRef.current.play().catch(() => {});
+        }
+        return;
       }
+      throw new Error("no audio");
     } catch {
-      // Fallback browser TTS se XTTS não alcançável
+      // Fallback browser TTS
       if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);

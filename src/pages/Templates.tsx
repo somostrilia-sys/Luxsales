@@ -85,6 +85,24 @@ const scoreBadge = (s: number) => {
   return { label: "REESCREVER", color: "bg-red-500/10 text-red-400 border-red-500/30" };
 };
 
+interface VarMapping {
+  variable_index: number;
+  label: string;
+  source: string;
+  source_field: string;
+  default_value: string;
+}
+
+const SOURCE_OPTIONS = [
+  { value: "leads_master.lead_name", label: "Nome do lead" },
+  { value: "leads_master.phone_number", label: "Telefone do lead" },
+  { value: "leads_master.email", label: "Email do lead" },
+  { value: "company_config.persona_company", label: "Nome da empresa" },
+  { value: "company_config.persona_name", label: "Nome do vendedor" },
+  { value: "company_config.product_data.base_price", label: "Preço base" },
+  { value: "custom", label: "Valor fixo (custom)" },
+];
+
 export default function Templates() {
   const { collaborator } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
@@ -113,16 +131,6 @@ export default function Templates() {
   const [draftsLoading, setDraftsLoading] = useState(false);
 
   // Variable mappings
-  interface VarMapping { variable_index: number; label: string; source: string; source_field: string; default_value: string }
-  const SOURCE_OPTIONS = [
-    { value: "leads_master.lead_name", label: "Nome do lead" },
-    { value: "leads_master.phone_number", label: "Telefone do lead" },
-    { value: "leads_master.email", label: "Email do lead" },
-    { value: "company_config.persona_company", label: "Nome da empresa" },
-    { value: "company_config.persona_name", label: "Nome do vendedor" },
-    { value: "company_config.product_data.base_price", label: "Preço base" },
-    { value: "custom", label: "Valor fixo (custom)" },
-  ];
   const [varMappings, setVarMappings] = useState<VarMapping[]>([
     { variable_index: 1, label: "Nome do lead", source: "leads_master", source_field: "lead_name", default_value: "" },
     { variable_index: 2, label: "Produto / Serviço", source: "custom", source_field: "", default_value: "" },
