@@ -359,6 +359,12 @@ export default function Conversas() {
     return () => { supabase.removeChannel(ch); };
   }, [selectedConvId, loadConversations]);
 
+  // Polling de fallback: recarrega lista a cada 10s independente do realtime
+  useEffect(() => {
+    const interval = setInterval(() => { loadConversations(true); }, 10000);
+    return () => clearInterval(interval);
+  }, [loadConversations]);
+
   useEffect(() => {
     if (!selectedConvId) return;
     const interval = setInterval(async () => {
