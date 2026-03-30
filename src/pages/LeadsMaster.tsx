@@ -325,6 +325,19 @@ export default function LeadsMaster() {
     } catch { /* silent */ }
   };
 
+  // count undistributed leads
+  const [undistributedCount, setUndistributedCount] = useState(0);
+  useEffect(() => {
+    (async () => {
+      const cid = company_id ?? baseCompanyId;
+      if (!cid) return;
+      let q = supabase.from("leads").select("*", { count: "exact", head: true })
+        .is("assigned_to", null).eq("company_id", cid);
+      const { count } = await q;
+      setUndistributedCount(count ?? 0);
+    })();
+  }, [company_id, baseCompanyId, leads]);
+
   // load collabs for distribute modal
   const openDistribute = async () => {
     const preselect = company_id ?? baseCompanyId;
@@ -339,6 +352,29 @@ export default function LeadsMaster() {
       setCompaniesList(data || []);
     }
     if (preselect) loadConsultantsForCompany(preselect);
+  };
+
+  // Distribuição em massa — todos os não-distribuídos da empresa
+  const massDistribute = async (targetCompanyId: string, mode: "all" | "specific", collabId?: string) => {
+    setActionLoading(true);
+    try {
+      await callEdge("lead-distributor", {
+        action: "distribute",
+        ...base,
+        company_id: targetCompanyId,
+        phone_numbers: [], // vazio = distribuir todos não-distribuídos
+        distribute_all_undistributed: true,
+        ...(mode === "all"
+          ? { distribute_to_all: true }
+          : { collaborator_id: collabId }),
+      });
+      toast.success("Distribuição em massa executada!");
+      setDistributeOpen(false);
+      fetchLeads(true);
+    } catch (e: any) {
+      toast.error(e.message || "Erro na distribuição");
+    }
+    setActionLoading(false);
   };
 
   // single lead actions
@@ -392,6 +428,12 @@ export default function LeadsMaster() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <PageHeader title="Leads Master" subtitle={`${totalLeads.toLocaleString("pt-BR")} leads na base`} />
           <div className="flex gap-2 flex-wrap">
+            <Button variant="default" size="sm" onClick={openDistribute}
+              className="bg-primary hover:bg-primary/90">
+              <UserPlus className="h-4 w-4 mr-1.5" /> Distribuir {undistributedCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px] font-bold">{undistributedCount.toLocaleString("pt-BR")}</span>
+              )}
+            </Button>
             <Button variant="outline" size="sm" onClick={() => navigate("/leads-discador")}>
               <Upload className="h-4 w-4 mr-1.5" /> Importar
             </Button>
@@ -764,21 +806,39 @@ export default function LeadsMaster() {
                 )}
               </div>
             )}
-            <p className="text-xs text-muted-foreground">{selectedPhones.length} lead(s) selecionado(s)</p>
+            {selectedPhones.length > 0 ? (
+              <p className="text-xs text-muted-foreground">{selectedPhones.length} lead(s) selecionado(s)</p>
+            ) : (
+              <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <p className="text-sm font-medium">Distribuição em massa</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {undistributedCount > 0
+                    ? `${undistributedCount.toLocaleString("pt-BR")} leads não distribuídos serão atribuídos automaticamente aos consultores comerciais da empresa.`
+                    : "Nenhum lead pendente de distribuição para esta empresa."}
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDistributeOpen(false)}>Cancelar</Button>
             <Button
-              disabled={!distributeCompanyId || (distributeMode === "specific" && !distributeCollab) || actionLoading}
+              disabled={!distributeCompanyId || (distributeMode === "specific" && !distributeCollab) || actionLoading || (selectedPhones.length === 0 && undistributedCount === 0)}
               onClick={async () => {
-                if (distributeMode === "all") {
-                  await bulkAction("distribute", { company_id: distributeCompanyId, distribute_to_all: true });
+                if (selectedPhones.length > 0) {
+                  // Distribuição dos selecionados
+                  if (distributeMode === "all") {
+                    await bulkAction("distribute", { company_id: distributeCompanyId, distribute_to_all: true });
+                  } else {
+                    await bulkAction("distribute", { collaborator_id: distributeCollab, company_id: distributeCompanyId });
+                  }
+                  setDistributeOpen(false);
                 } else {
-                  await bulkAction("distribute", { collaborator_id: distributeCollab, company_id: distributeCompanyId });
+                  // Distribuição em massa
+                  await massDistribute(distributeCompanyId, distributeMode, distributeCollab);
                 }
-                setDistributeOpen(false);
               }}>
-              {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null} Distribuir
+              {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              {selectedPhones.length > 0 ? "Distribuir" : `Distribuir ${undistributedCount.toLocaleString("pt-BR")} leads`}
             </Button>
           </DialogFooter>
         </DialogContent>
