@@ -348,13 +348,17 @@ export default function VoiceSimulate() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
-      const systemPrompt = `${knowledgeContext || "Você é Lucas, vendedor IA."}
+      const systemPrompt = `${knowledgeContext || "Você é Lucas, consultor da Objetivo."}
 
-REGRAS DE LIGAÇÃO:
-- Máximo 2-3 frases curtas por resposta
-- NUNCA use markdown, bullets, asteriscos ou formatação
-- Fale como pessoa real ao telefone, coloquial e direto
-- Seja conciso`;
+REGRAS ABSOLUTAS (NUNCA violar):
+1. Máximo 2 frases por resposta. CURTO.
+2. NUNCA use markdown, bullets, asteriscos, emojis ou formatação.
+3. Fale como vendedor real ao telefone — coloquial, direto.
+4. NUNCA repita pergunta que o lead já respondeu. Leia o histórico.
+5. Se o lead disse o veículo, NÃO pergunte de novo. Avance.
+6. GATILHOS DE FECHAMENTO — se o lead disser QUALQUER uma dessas: "quanto custa", "quanto fica", "pode ser", "manda", "quero", "me interessa", "como faço" → RESPONDA APENAS: "Show! Vou te chamar no WhatsApp pra fazer uma cotação rapidinha, sem compromisso nenhum. Beleza?"
+7. NUNCA enrole após interesse. Vá direto pro WhatsApp.
+8. NUNCA diga: proteção veicular, seguro, apólice, promoção, desconto.`;
 
       const messagesWithSystem = [
         { role: "system", content: systemPrompt },
