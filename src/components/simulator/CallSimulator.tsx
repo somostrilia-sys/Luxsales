@@ -128,6 +128,26 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { loadingRef.current = loading; }, [loading]);
 
+  // Start/stop SpeechRecognition based on phase
+  useEffect(() => {
+    if (phase === "listening") {
+      // User's turn — start mic if not already running
+      if (!recognitionRunningRef.current) {
+        startRecognition();
+      }
+    } else if (phase === "ai_speaking" || phase === "processing") {
+      // AI's turn or processing — stop recognition to avoid browser timeout kills
+      if (recognitionRunningRef.current && recognitionRef.current) {
+        try {
+          recognitionRunningRef.current = false;
+          recognitionRef.current.stop();
+        } catch { /* already stopped */ }
+        setMicActive(false);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading, liveTranscript]);
@@ -313,13 +333,14 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
         // Transient — don't restart immediately, let onend handle it
         return;
       }
-      // Auto-restart on other errors (with guard)
-      if (phaseRef.current !== "ended" && phaseRef.current !== "idle") {
+      // Auto-restart only if in listening phase
+      if (phaseRef.current === "listening") {
         setTimeout(() => {
-          if (phaseRef.current !== "ended" && phaseRef.current !== "idle" && !recognitionRunningRef.current) {
+          if (phaseRef.current === "listening" && !recognitionRunningRef.current) {
             try {
               recognitionRunningRef.current = true;
               recognitionRef.current?.start();
+              setMicActive(true);
             } catch {
               recognitionRunningRef.current = false;
             }
@@ -330,13 +351,15 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
 
     recognition.onend = () => {
       recognitionRunningRef.current = false;
-      // Auto-restart if call is still active (with guard)
-      if (phaseRef.current !== "ended" && phaseRef.current !== "idle" && recognitionRef.current) {
+      // Only auto-restart if we're in "listening" phase (user's turn)
+      // Do NOT restart during ai_speaking/processing — the useEffect handles phase transitions
+      if (phaseRef.current === "listening" && recognitionRef.current) {
         setTimeout(() => {
-          if (phaseRef.current !== "ended" && phaseRef.current !== "idle" && !recognitionRunningRef.current) {
+          if (phaseRef.current === "listening" && !recognitionRunningRef.current && recognitionRef.current) {
             try {
               recognitionRunningRef.current = true;
-              recognitionRef.current?.start();
+              recognitionRef.current.start();
+              setMicActive(true);
             } catch {
               recognitionRunningRef.current = false;
             }
@@ -493,9 +516,11 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     setMessages([]);
     setDuration(0);
 
-    // Start speech recognition + VAD mic for interruption
+    // Init VAD mic for interruption detection (echo-cancelled)
     await initVADMic();
-    startRecognition();
+    // NOTE: do NOT start SpeechRecognition here — start it only when it's the user's turn
+    // Starting it during ai_speaking causes the browser to kill it after ~10s of no valid speech,
+    // then onend/onerror race to restart → "recognition has already started" crash
 
     await new Promise((r) => setTimeout(r, 500));
     setPhase("connected");
