@@ -48,14 +48,28 @@ export default function KnowledgeBase() {
 
   const loadScript = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    // Try to find a script with knowledge_base first, then fall back to most recent
+    let { data } = await supabase
       .from("ai_call_scripts")
       .select("*")
       .eq("company_id", companyId)
       .eq("is_active", true)
-      .order("created_at", { ascending: false })
+      .not("knowledge_base", "is", null)
+      .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    // Fallback: get any active script for company
+    if (!data) {
+      ({ data } = await supabase
+        .from("ai_call_scripts")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle());
+    }
 
     if (data) {
       setScriptId(data.id);
