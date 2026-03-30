@@ -45,6 +45,7 @@ export default function VoiceSimulate() {
   const [phoneNumber, setPhoneNumber] = useState("5531997441277");
   const [listening, setListening] = useState(false);
   const [aiThinking, setAiThinking] = useState(false);
+  const [ttsPlaying, setTtsPlaying] = useState(false);
 
   // VoIP config
   const [sipHost, setSipHost] = useState("");
@@ -184,17 +185,18 @@ export default function VoiceSimulate() {
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   const XTTS_LOCAL = "http://192.168.0.206:8300/tts";
 
-  // Interrupt TTS when user speaks
+  // Interrupt TTS when user speaks or presses button/space
   const interruptTTS = useCallback(() => {
-    if (ttsAudioRef.current && !ttsAudioRef.current.paused) {
+    if (ttsAudioRef.current) {
       ttsAudioRef.current.pause();
       ttsAudioRef.current.currentTime = 0;
       ttsAudioRef.current.onended = null;
       ttsAudioRef.current = null;
-      ttsPlayingRef.current = false;
-      addSystem("🔇 Interrompido — sua vez de falar");
-      safeStartRecognition();
     }
+    ttsPlayingRef.current = false;
+    setTtsPlaying(false);
+    addSystem("🔇 Interrompido — sua vez de falar");
+    safeStartRecognition();
   }, [addSystem, safeStartRecognition]);
 
   const playAudioBlob = (blob: Blob): Promise<void> => {
@@ -228,8 +230,9 @@ export default function VoiceSimulate() {
 
   const playXTTS = useCallback(async (text: string) => {
     ttsPlayingRef.current = true;
-    try { recognitionRef.current?.stop(); } catch {}
-    setListening(false);
+    setTtsPlaying(true);
+    // Keep recognition running during TTS — if user speaks, we detect and interrupt
+    // Don't stop it here anymore
 
     try {
       // Tentativa 1: XTTS direto na rede local (mais rápido, ~1s)
@@ -272,9 +275,10 @@ export default function VoiceSimulate() {
       }
     }
 
-    // Delay extra pra não capturar eco da própria voz
-    await new Promise(r => setTimeout(r, 400));
+    // Small delay to avoid echo capture
+    await new Promise(r => setTimeout(r, 300));
     ttsPlayingRef.current = false;
+    setTtsPlaying(false);
 
     // Retomar mic — safe start prevents double .start()
     safeStartRecognition();
@@ -374,8 +378,30 @@ REGRAS DE LIGAÇÃO:
     let pendingText = "";
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Ignorar tudo que chega enquanto TTS toca (evita capturar a própria voz)
-      if (ttsPlayingRef.current) return;
+      // Se TTS tocando e usuário fala → INTERROMPER o agente
+      if (ttsPlayingRef.current) {
+        // Check if there's actual speech (not echo)
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result && result.isFinal) {
+            const text = result[0].transcript.trim();
+            if (text && text.length > 1) {
+              // User is speaking — interrupt TTS
+              if (ttsAudioRef.current) {
+                ttsAudioRef.current.pause();
+                ttsAudioRef.current.currentTime = 0;
+                ttsAudioRef.current.onended = null;
+                ttsAudioRef.current = null;
+              }
+              ttsPlayingRef.current = false;
+              setTtsPlaying(false);
+              // Don't return — let the speech be processed below
+              break;
+            }
+          }
+        }
+        if (ttsPlayingRef.current) return; // Still playing, was just noise
+      }
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
@@ -527,6 +553,18 @@ REGRAS DE LIGAÇÃO:
       safeStartRecognition();
     }
   }, [addSystem, addEntry, callAiSimulator, setupRecognition, playXTTS, companyId, phoneNumber, knowledgeContext, cleanForTTS, safeStartRecognition]);
+
+  // Keyboard shortcut: Space to interrupt TTS
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.code === "Space" && ttsPlaying && inCall) {
+        e.preventDefault();
+        interruptTTS();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [ttsPlaying, inCall, interruptTTS]);
 
   const endBrowserCall = useCallback(() => {
     recognitionRef.current?.stop();
@@ -760,11 +798,11 @@ REGRAS DE LIGAÇÃO:
                                 <Loader2 className="h-3 w-3 animate-spin" /> IA pensando...
                               </Badge>
                             )}
-                            {ttsPlayingRef.current && (
+                            {ttsPlaying && (
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="gap-1 text-yellow-400 border-yellow-400/30 hover:bg-yellow-400/10"
+                                className="gap-1 text-yellow-400 border-yellow-400/30 hover:bg-yellow-400/10 animate-pulse"
                                 onClick={interruptTTS}
                               >
                                 <Volume2 className="h-3 w-3" /> Interromper e Falar
