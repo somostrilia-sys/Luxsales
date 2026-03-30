@@ -45,6 +45,20 @@ function fmtDate(iso: string | null) {
   try { return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); } catch { return iso; }
 }
 
+const segmentLabels: Record<string, string> = {
+  protecao_veicular: "Proteção Completa",
+  protecao_leves: "Leves (Carros/SUVs)",
+  protecao_motos: "Motos",
+  protecao_pesados: "Pesados",
+  rastreamento: "Rastreamento",
+  assistencia: "Assistência 24h",
+};
+
+function fmtSegment(seg: string | null): string {
+  if (!seg) return "—";
+  return segmentLabels[seg] || seg.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function fmtPhone(phone: string | null): string {
   if (!phone) return "—";
   const d = phone.replace(/\D/g, "");
@@ -609,7 +623,7 @@ export default function LeadsMaster() {
                             </div>
                           </td>
                           <td className="py-2 px-2 text-center text-base">{tempEmoji[l.lead_temperature] || "—"}</td>
-                          <td className="py-2 px-2 text-xs">{l.segment || "—"}</td>
+                          <td className="py-2 px-2 text-xs">{fmtSegment(l.segment)}</td>
                           <td className="py-2 px-2 text-center text-xs">{l.total_call_attempts || 0}</td>
                           <td className="py-2 px-2 text-xs">{fmtDate(l.last_call_at)}</td>
                           <td className="py-2 px-3 text-right" onClick={e => e.stopPropagation()}>
@@ -674,7 +688,7 @@ export default function LeadsMaster() {
                     <div><span className="text-muted-foreground">Nome:</span> {detailLead.lead_name || "—"}</div>
                     <div><span className="text-muted-foreground">Score:</span> {detailLead.lead_score || 0}</div>
                     <div><span className="text-muted-foreground">Temp:</span> {tempEmoji[detailLead.lead_temperature] || "—"} {detailLead.lead_temperature || "—"}</div>
-                    <div><span className="text-muted-foreground">Segmento:</span> {detailLead.segment || "—"}</div>
+                    <div><span className="text-muted-foreground">Segmento:</span> {fmtSegment(detailLead.segment)}</div>
                     <div><span className="text-muted-foreground">Ligações:</span> {detailLead.total_call_attempts || 0}</div>
                   </div>
                 </div>

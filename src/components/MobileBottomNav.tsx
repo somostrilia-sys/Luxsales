@@ -1,13 +1,13 @@
-import { LayoutDashboard, Phone, MessageSquare, Users, ClipboardList } from "lucide-react";
+import { LayoutDashboard, Phone, Send, Users, MessageSquare } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 
 const tabs = [
   { title: "Home", url: "/", icon: LayoutDashboard },
-  { title: "Ligações", url: "/calls", icon: Phone },
-  { title: "WhatsApp", url: "/meta", icon: MessageSquare },
+  { title: "Ligações", url: "/ligacoes", icon: Phone },
+  { title: "Disparos", url: "/disparos", icon: Send },
   { title: "Leads", url: "/leads", icon: Users },
-  { title: "Conversas", url: "/conversations", icon: ClipboardList },
+  { title: "Conversas", url: "/conversations", icon: MessageSquare },
 ];
 
 export function MobileBottomNav() {

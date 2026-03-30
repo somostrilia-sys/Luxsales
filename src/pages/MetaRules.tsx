@@ -15,7 +15,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 
 const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
-const COMPANY_ID = "d33b6a84-8f72-4441-b2eb-dd151a31ac12";
+const COMPANY_ID = "70967469-9a9b-4e29-a744-410e41eb47a5"; // Objetivo
 
 async function callMetaRules(body: Record<string, unknown>) {
   const res = await fetch(`${EDGE_BASE}/meta-rules`, {

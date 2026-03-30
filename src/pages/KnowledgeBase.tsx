@@ -17,7 +17,7 @@ import {
   Mic, BookOpen, Plus, X, Sparkles,
 } from "lucide-react";
 
-const FALLBACK_COMPANY_ID = "d33b6a84-8f72-4441-b2eb-dd151a31ac12";
+const FALLBACK_COMPANY_ID = "70967469-9a9b-4e29-a744-410e41eb47a5"; // Objetivo
 
 interface Objection {
   trigger: string;
