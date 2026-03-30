@@ -66,6 +66,7 @@ export default function VoiceSimulate() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ttsPlayingRef = useRef(false);
+  const recognitionStartingRef = useRef(false);
   const recognitionRef = useRef<any>(null);
   const uaRef = useRef<any>(null);
   const sessionRef = useRef<any>(null);
@@ -183,18 +184,47 @@ export default function VoiceSimulate() {
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   const XTTS_LOCAL = "http://192.168.0.206:8300/tts";
 
+  // Interrupt TTS when user speaks
+  const interruptTTS = useCallback(() => {
+    if (ttsAudioRef.current && !ttsAudioRef.current.paused) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current.currentTime = 0;
+      ttsAudioRef.current.onended = null;
+      ttsAudioRef.current = null;
+      ttsPlayingRef.current = false;
+      addSystem("🔇 Interrompido — sua vez de falar");
+      safeStartRecognition();
+    }
+  }, [addSystem, safeStartRecognition]);
+
   const playAudioBlob = (blob: Blob): Promise<void> => {
     return new Promise((resolve) => {
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.volume = 1.0;
       ttsAudioRef.current = audio;
-      audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-      audio.onerror = () => resolve();
+      audio.onended = () => { URL.revokeObjectURL(url); ttsAudioRef.current = null; resolve(); };
+      audio.onerror = () => { ttsAudioRef.current = null; resolve(); };
       audio.play().catch(() => resolve());
       setTimeout(resolve, 20000);
     });
   };
+
+  // Safe start — prevents double .start() race condition
+  const safeStartRecognition = useCallback(() => {
+    if (!recognitionRef.current || recognitionStartingRef.current || ttsPlayingRef.current) return;
+    if (sessionRef.current !== "browser") return;
+    recognitionStartingRef.current = true;
+    try {
+      recognitionRef.current.start();
+      setListening(true);
+    } catch {
+      // Already running — that's fine
+    } finally {
+      // Reset flag after a tick to prevent immediate re-entry
+      setTimeout(() => { recognitionStartingRef.current = false; }, 200);
+    }
+  }, []);
 
   const playXTTS = useCallback(async (text: string) => {
     ttsPlayingRef.current = true;
@@ -246,16 +276,9 @@ export default function VoiceSimulate() {
     await new Promise(r => setTimeout(r, 400));
     ttsPlayingRef.current = false;
 
-    // Retomar mic (continuous mode — pode já estar rodando, tentar start se parou)
-    if (sessionRef.current === "browser" && recognitionRef.current) {
-      try {
-        recognitionRef.current.start();
-        setListening(true);
-      } catch {
-        // Se já estava rodando (continuous), tudo OK
-      }
-    }
-  }, []);
+    // Retomar mic — safe start prevents double .start()
+    safeStartRecognition();
+  }, [safeStartRecognition]);
 
   // Carregar base de conhecimento da empresa
   useEffect(() => {
@@ -380,12 +403,7 @@ REGRAS DE LIGAÇÃO:
       // Restart automatically if still in call — mas NÃO durante TTS
       if (sessionRef.current === "browser" && !ttsPlayingRef.current) {
         setTimeout(() => {
-          if (sessionRef.current === "browser" && !ttsPlayingRef.current) {
-            try {
-              recognition.start();
-              setListening(true);
-            } catch {}
-          }
+          safeStartRecognition();
         }, 500);
       }
     };
@@ -501,22 +519,14 @@ REGRAS DE LIGAÇÃO:
 
       // Agora sim, iniciar mic — Lucas já falou
       addSystem("🎤 Microfone ativo — sua vez de falar");
-      try {
-        recognition.start();
-        setListening(true);
-      } catch (err: any) {
-        addSystem(`❌ Não foi possível iniciar o microfone: ${err.message}`);
-      }
+      safeStartRecognition();
     } catch (err: any) {
       setAiThinking(false);
       addSystem(`⚠️ Erro ao gerar abertura: ${err.message}. Iniciando mic...`);
       // Fallback: iniciar mic mesmo sem abertura
-      try {
-        recognition.start();
-        setListening(true);
-      } catch {}
+      safeStartRecognition();
     }
-  }, [addSystem, addEntry, callAiSimulator, setupRecognition, playXTTS, companyId, phoneNumber, knowledgeContext, cleanForTTS]);
+  }, [addSystem, addEntry, callAiSimulator, setupRecognition, playXTTS, companyId, phoneNumber, knowledgeContext, cleanForTTS, safeStartRecognition]);
 
   const endBrowserCall = useCallback(() => {
     recognitionRef.current?.stop();
@@ -749,6 +759,16 @@ REGRAS DE LIGAÇÃO:
                               <Badge variant="outline" className="gap-1 text-blue-400 border-blue-400/30">
                                 <Loader2 className="h-3 w-3 animate-spin" /> IA pensando...
                               </Badge>
+                            )}
+                            {ttsPlayingRef.current && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1 text-yellow-400 border-yellow-400/30 hover:bg-yellow-400/10"
+                                onClick={interruptTTS}
+                              >
+                                <Volume2 className="h-3 w-3" /> Interromper e Falar
+                              </Button>
                             )}
                           </div>
                           <span className="font-mono text-lg font-bold">{formatTimer(callTimer)}</span>
