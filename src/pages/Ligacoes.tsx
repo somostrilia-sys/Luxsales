@@ -103,7 +103,14 @@ const displayPhone = (lead: PoolLead) => {
 // ── VoIP Health ───────────────────────────────────────────────────────────────
 function useVoipStatus() {
   const [online, setOnline] = useState<boolean | null>(null);
+  const isLocal = typeof window !== "undefined" && (
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "192.168.0.206" ||
+    window.location.protocol === "http:"
+  );
   const check = useCallback(async () => {
+    // Skip health check on HTTPS (mixed content blocked by browser)
+    if (!isLocal) { setOnline(false); return; }
     try {
       const res = await fetch("http://192.168.0.206:8500/health", {
         signal: AbortSignal.timeout(3000),
@@ -112,10 +119,10 @@ function useVoipStatus() {
     } catch {
       setOnline(false);
     }
-  }, []);
+  }, [isLocal]);
   useEffect(() => {
     check();
-    const t = setInterval(check, 30000);
+    const t = setInterval(check, 60000); // check every 60s, not 30s
     return () => clearInterval(t);
   }, [check]);
   return { online, check };
