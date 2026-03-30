@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Phone, MessageSquare, LogOut, Settings,
-  FileText, Send, UserCog, Users, ShieldCheck, Sparkles,
+  FileText, Send, UserCog, Users, ShieldCheck, Sparkles, Brain,
   ClipboardList, PhoneCall, Upload, Loader2, Mic, FlaskConical, History, Users2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
@@ -76,6 +76,7 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
       { title: "Gestão de Usuários", url: "/gestao-usuarios", icon: Users2, levels: [0, 1] },
       { title: "Opt-ins", url: "/opt-ins", icon: ShieldCheck, levels: [0] },
       { title: "Regras Meta", url: "/meta-rules", icon: ClipboardList, levels: [0] },
+      { title: "Base de Conhecimento", url: "/knowledge-base", icon: Brain, levels: [0] },
       { title: "Configuração", url: "/config", icon: Sparkles, levels: [0] },
       { title: "WhatsApp Empresas", url: "/config-whatsapp", icon: MessageSquare, levels: [0] },
     ],

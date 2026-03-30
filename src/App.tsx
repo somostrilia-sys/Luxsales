@@ -48,6 +48,7 @@ const WhatsAppMeta = lazy(() => import("./pages/WhatsAppMeta"));
 const ConfigWhatsApp = lazy(() => import("./pages/ConfigWhatsApp"));
 const MetaRules = lazy(() => import("./pages/MetaRules"));
 
+const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase"));
 const GestaoUsuarios = lazy(() => import("./pages/GestaoUsuarios"));
 const AceitarConvite = lazy(() => import("./pages/AceitarConvite"));
 
@@ -110,6 +111,7 @@ const App = () => (
           <Route path="/relatorios-voz" element={<ProtectedRoute minLevel={1}><RelatoriosVoz /></ProtectedRoute>} />
           <Route path="/compliance-voz" element={<ProtectedRoute minLevel={0}><ComplianceVoz /></ProtectedRoute>} />
           <Route path="/configuracoes-voz" element={<ProtectedRoute minLevel={0}><ConfiguracoesVoz /></ProtectedRoute>} />
+          <Route path="/knowledge-base" element={<ProtectedRoute minLevel={0}><KnowledgeBase /></ProtectedRoute>} />
           <Route path="/meta-rules" element={<ProtectedRoute minLevel={0}><MetaRules /></ProtectedRoute>} />
           <Route path="/voice/dialer" element={<ProtectedRoute minLevel={0}><VoiceDialer /></ProtectedRoute>} />
           <Route path="/voice/simulate" element={<ProtectedRoute minLevel={0}><VoiceSimulate /></ProtectedRoute>} />

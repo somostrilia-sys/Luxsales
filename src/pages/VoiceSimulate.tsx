@@ -249,14 +249,35 @@ export default function VoiceSimulate() {
     }
   }, []);
 
-  const VOICE_SYSTEM_PROMPT = `Você está em uma LIGAÇÃO TELEFÔNICA. Responda SEMPRE de forma curta e natural, como uma pessoa real falando ao telefone.
-
-REGRAS OBRIGATÓRIAS:
-- Máximo 2-3 frases curtas por resposta
-- NUNCA use markdown, bullets, asteriscos ou formatação
-- NUNCA faça listas ou tópicos
-- Fale de forma coloquial e direta
-- Seja conciso como num telefonema real`;
+  // Carregar base de conhecimento da empresa
+  const [knowledgeContext, setKnowledgeContext] = useState("");
+  useEffect(() => {
+    if (!companyId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("ai_call_scripts")
+        .select("system_prompt, knowledge_base, personality, tone, opening_message, objection_handlers, forbidden_words")
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        const parts = [];
+        if (data.system_prompt) parts.push(data.system_prompt);
+        if (data.knowledge_base) parts.push(`\nBASE DE CONHECIMENTO:\n${data.knowledge_base}`);
+        if (data.personality) parts.push(`\nPERSONALIDADE: ${data.personality}`);
+        if (data.tone) parts.push(`\nTOM: ${data.tone}`);
+        if (data.forbidden_words?.length) parts.push(`\nNUNCA diga: ${data.forbidden_words.join(", ")}`);
+        if (data.objection_handlers) {
+          const objs = Object.entries(data.objection_handlers)
+            .map(([k, v]) => `- Se disser "${k}": ${v}`)
+            .join("\n");
+          if (objs) parts.push(`\nOBJEÇÕES:\n${objs}`);
+        }
+        setKnowledgeContext(parts.join("\n"));
+      }
+    })();
+  }, [companyId]);
 
   const callAiSimulator = useCallback(async (userMessage: string) => {
     setAiThinking(true);
@@ -265,8 +286,16 @@ REGRAS OBRIGATÓRIAS:
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
+      const systemPrompt = `${knowledgeContext || "Você é Lucas, vendedor IA."}
+
+REGRAS DE LIGAÇÃO:
+- Máximo 2-3 frases curtas por resposta
+- NUNCA use markdown, bullets, asteriscos ou formatação
+- Fale como pessoa real ao telefone, coloquial e direto
+- Seja conciso`;
+
       const messagesWithSystem = [
-        { role: "system", content: VOICE_SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         ...conversationRef.current,
       ];
 
@@ -281,7 +310,7 @@ REGRAS OBRIGATÓRIAS:
           messages: messagesWithSystem,
           company_id: companyId,
           context: { phone_number: phoneNumber },
-          system_prompt: VOICE_SYSTEM_PROMPT,
+          system_prompt: systemPrompt,
         }),
       });
 
@@ -298,7 +327,7 @@ REGRAS OBRIGATÓRIAS:
       addSystem(`❌ Erro IA: ${err.message || "falha na conexão"}`);
     }
     setAiThinking(false);
-  }, [companyId, phoneNumber, addEntry, addSystem, playXTTS]);
+  }, [companyId, phoneNumber, addEntry, addSystem, playXTTS, knowledgeContext]);
 
   const startBrowserCall = useCallback(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
