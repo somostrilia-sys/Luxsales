@@ -46,12 +46,12 @@ function fmtDate(iso: string | null) {
 }
 
 const segmentLabels: Record<string, string> = {
-  protecao_veicular: "Proteção Completa",
-  protecao_leves: "Leves (Carros/SUVs)",
-  protecao_motos: "Motos",
-  protecao_pesados: "Pesados",
-  rastreamento: "Rastreamento",
-  assistencia: "Assistência 24h",
+  protecao_veicular: "Proteção Completa p/ Veículos",
+  protecao_leves: "Proteção Leves (Carros/SUVs)",
+  protecao_motos: "Proteção Motos",
+  protecao_pesados: "Proteção Pesados",
+  rastreamento: "Rastreamento Veicular",
+  assistencia: "Assistência 24h Veicular",
 };
 
 function fmtSegment(seg: string | null): string {
