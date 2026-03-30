@@ -95,7 +95,7 @@ const tempEmoji: Record<string, string> = { hot: "🔥", warm: "🌡️", cold: 
 
 // ── types ──
 interface Lead {
-  id: string; phone_number: string; lead_name: string; status: string; lead_score: number; lead_temperature: string;
+  id: string; phone_number: string; phone_normalized: string | null; lead_name: string; status: string; lead_score: number; lead_temperature: string;
   segment: string; total_call_attempts: number; last_call_at: string | null; created_at: string;
 }
 interface Stats {
@@ -232,7 +232,7 @@ export default function LeadsMaster() {
       // Data query
       let query = supabase
         .from("leads_master")
-        .select("id, lead_name, phone_number, status, lead_score, lead_temperature, segment, total_call_attempts, last_call_at, created_at");
+        .select("id, lead_name, phone_number, phone_normalized, status, lead_score, lead_temperature, segment, total_call_attempts, last_call_at, created_at");
       if (company_id) query = query.eq("company_id", company_id);
       if (fStatus !== "all") query = query.eq("status", fStatus);
       if (fTemp !== "all") query = query.eq("lead_temperature", fTemp);
@@ -614,7 +614,12 @@ export default function LeadsMaster() {
                             <Checkbox checked={selected.has(l.phone_number)} onCheckedChange={() => toggleSelect(l.phone_number)} />
                           </td>
                           <td className="py-2 px-2"><Badge variant="outline" className={`text-xs ${st.cls}`}>{st.label}</Badge></td>
-                          <td className="py-2 px-2 font-mono text-xs">{fmtPhone(l.phone_number)}</td>
+                          <td className="py-2 px-2 font-mono text-xs">
+                            {l.phone_normalized
+                              ? fmtPhone(l.phone_normalized)
+                              : <span className="flex items-center gap-1">{fmtPhone(l.phone_number)} <span className="text-[9px] bg-red-500/20 text-red-400 px-1 rounded">Fixo</span></span>
+                            }
+                          </td>
                           <td className="py-2 px-2">{l.lead_name || "—"}</td>
                           <td className="py-2 px-2">
                             <div className="flex items-center gap-1.5 justify-center">
