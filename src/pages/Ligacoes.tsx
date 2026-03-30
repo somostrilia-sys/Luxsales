@@ -134,9 +134,11 @@ function useVoipStatus() {
 function TabLigacoes({
   collaboratorId,
   companyId,
+  isCEO = false,
 }: {
   collaboratorId: string;
   companyId: string | undefined;
+  isCEO?: boolean;
 }) {
   const { online: voipOnline } = useVoipStatus();
   const [voipConfig, setVoipConfig] = useState<{ ramal: string; servidor: string; porta: string; ativo: boolean } | null>(null);
@@ -209,21 +211,23 @@ function TabLigacoes({
     setLoadingQueue(true);
     try {
       // First: count leads with invalid phone
-      const { data: allData } = await supabase
-        .from("consultant_lead_pool")
-        .select("id, phone_normalized")
-        .eq("collaborator_id", collaboratorId)
-        .in("interest_status", ["pending", "not_interested_1"]);
+      const validStatuses = ["pending", "unknown", "not_interested_1"];
+      // CEO sees all leads from the company; consultants see only their own
+      let countQ = supabase.from("consultant_lead_pool").select("id, phone_normalized").in("interest_status", validStatuses);
+      if (!isCEO) countQ = countQ.eq("collaborator_id", collaboratorId);
+      // Filter by company via join if CEO
+      const { data: allData } = await countQ;
       const invalidCount = (allData || []).filter(l => !l.phone_normalized).length;
       setInvalidPhoneCount(invalidCount);
 
-      const { data, error } = await supabase
+      // Load queue — works regardless of VoIP status (it's just a list)
+      let query = supabase
         .from("consultant_lead_pool")
         .select("id, collaborator_id, lead_name, phone, phone_normalized, interest_status, call_attempts, last_call_at, priority")
-        .eq("collaborator_id", collaboratorId)
-        .in("interest_status", ["pending", "not_interested_1"])
-        .not("phone_normalized", "is", null)
+        .in("interest_status", validStatuses)
         .limit(parseInt(batchSize));
+      if (!isCEO) query = query.eq("collaborator_id", collaboratorId);
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -891,9 +895,10 @@ function TabHistorico({ companyId }: { companyId: string | undefined }) {
 // MAIN PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function Ligacoes() {
-  const { collaborator } = useCollaborator();
+  const { collaborator, roleLevel } = useCollaborator();
   const companyId = collaborator?.company_id;
   const collaboratorId = collaborator?.id ?? "";
+  const isCEO = roleLevel === 0;
 
   if (!collaborator) {
     return (
@@ -924,7 +929,7 @@ export default function Ligacoes() {
         </TabsList>
 
         <TabsContent value="ligacoes">
-          <TabLigacoes collaboratorId={collaboratorId} companyId={companyId} />
+          <TabLigacoes collaboratorId={collaboratorId} companyId={companyId} isCEO={isCEO} />
         </TabsContent>
 
         <TabsContent value="historico">
