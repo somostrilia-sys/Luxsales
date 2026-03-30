@@ -17,67 +17,62 @@ import { toast } from "sonner";
 import {
   Users, Phone, MessageCircle, UserCheck,
   RefreshCw, AlertTriangle, CheckCircle, Shield,
-  BarChart3, Loader2, Info,
+  BarChart3, Loader2, Info, TrendingUp, Send,
+  ThumbsDown, Zap, Target, Activity,
 } from "lucide-react";
 import {
-  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
 } from "recharts";
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 interface CallsData {
   today: { total: number; answered: number };
   answer_rate: number;
   opt_in_rate: number;
 }
-
 interface WhatsAppData {
   today: { total: number };
   delivery_rate: number;
   read_rate: number;
   reply_rate: number;
 }
-
 interface MetaQuality {
   status: string;
   messaging_limit_tier: string;
   usage_pct: number;
 }
-
 interface TeamData {
   total: number;
   active_dispatchers: number;
   total_dispatches_today: number;
   total_limit_today: number;
 }
-
 interface AlertItem {
   type: string;
   message: string;
   severity: "info" | "warning" | "error";
 }
-
 interface QueueItem {
   name: string;
   leads_called?: number;
   dispatched?: number;
   total_leads: number;
 }
-
 interface DashboardData {
   calls: CallsData;
   whatsapp: WhatsAppData;
   meta_quality: MetaQuality;
   team: TeamData;
   alerts: AlertItem[];
-  queues: {
-    call_queues: QueueItem[];
-    dispatch_queues: QueueItem[];
-  };
+  queues: { call_queues: QueueItem[]; dispatch_queues: QueueItem[] };
 }
-
 interface KPIData {
   [key: string]: unknown;
 }
+
+// ── Defaults ───────────────────────────────────────────────────────────────────
 
 const defaultData: DashboardData = {
   calls: { today: { total: 0, answered: 0 }, answer_rate: 0, opt_in_rate: 0 },
@@ -88,28 +83,7 @@ const defaultData: DashboardData = {
   queues: { call_queues: [], dispatch_queues: [] },
 };
 
-const CHART_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#6B7280"];
-
-const CREATE_CALL_LOGS_SQL = `
-CREATE TABLE IF NOT EXISTS call_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  lead_phone TEXT,
-  lead_name TEXT,
-  company_id UUID REFERENCES companies(id),
-  collaborator_id UUID REFERENCES collaborators(id),
-  duration_seconds INTEGER DEFAULT 0,
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending','ringing','in_progress','completed','failed','no_answer','busy','voicemail')),
-  recording_url TEXT,
-  notes TEXT,
-  disposition TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  ended_at TIMESTAMPTZ
-);
-ALTER TABLE call_logs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "call_logs_all" ON call_logs FOR ALL USING (true);
-CREATE INDEX IF NOT EXISTS idx_call_logs_company ON call_logs(company_id);
-CREATE INDEX IF NOT EXISTS idx_call_logs_created ON call_logs(created_at);
-`;
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 async function getAuthHeaders() {
   const { data } = await supabase.auth.getSession();
@@ -120,6 +94,66 @@ async function getAuthHeaders() {
     apikey: SUPABASE_ANON_KEY,
   };
 }
+
+function fmt(n: number) {
+  return n.toLocaleString("pt-BR");
+}
+
+function pct(a: number, b: number) {
+  if (!b) return 0;
+  return Math.round((a / b) * 100);
+}
+
+// ── KPI Card Component ─────────────────────────────────────────────────────────
+
+interface KpiCardProps {
+  label: string;
+  value: string | number;
+  icon: React.ElementType;
+  color: string;
+  bg: string;
+  sub?: string;
+  onClick?: () => void;
+}
+
+function KpiCard({ label, value, icon: Icon, color, bg, sub, onClick }: KpiCardProps) {
+  return (
+    <Card
+      className={`${onClick ? "cursor-pointer hover:border-primary/30" : ""} transition-colors`}
+      onClick={onClick}
+    >
+      <CardContent className="pt-5 pb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <div className={`p-1.5 rounded-lg ${bg}`}>
+            <Icon className={`h-4 w-4 ${color}`} />
+          </div>
+        </div>
+        <p className="text-2xl font-bold tracking-tight">
+          {typeof value === "number" ? fmt(value) : value}
+        </p>
+        <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+        {sub && <p className="text-[10px] text-muted-foreground/60 mt-0.5">{sub}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function KpiRowSkeleton() {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Card key={i}>
+          <CardContent className="pt-5 space-y-2">
+            <Skeleton className="h-8 w-16" />
+            <Skeleton className="h-3 w-24" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+// ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function DashboardGeral() {
   const { company_id: baseCompanyId, user_role } = useCompany();
@@ -135,22 +169,58 @@ export default function DashboardGeral() {
   const [kpiData, setKpiData] = useState<KPIData | null>(null);
   const [kpiLoading, setKpiLoading] = useState(false);
 
-  // Real KPI cards (Supabase direct)
-  const [realKpis, setRealKpis] = useState({
+  // ── LINHA 1 — Volume Operacional ──────────────────────────────────────────────
+  const [opKpis, setOpKpis] = useState({
     totalLeads: 0,
-    activeConversations: 0,
-    callsToday: 0,
-    activeCollaborators: 0,
+    leadsDistribuidos: 0,
+    leadsDisponiveis: 0,
+    consultoresAtivos: 0,
   });
-  const [kpisLoading, setKpisLoading] = useState(true);
+  const [opLoading, setOpLoading] = useState(true);
 
-  // Chart data
-  const [leadsPerDay, setLeadsPerDay] = useState<{ date: string; leads: number }[]>([]);
-  const [leadsBySource, setLeadsBySource] = useState<{ name: string; value: number }[]>([]);
-  const [topCompanies, setTopCompanies] = useState<{ name: string; leads: number }[]>([]);
+  // ── LINHA 2 — Pipeline de Ligações ────────────────────────────────────────────
+  const [callKpis, setCallKpis] = useState({
+    ligacoesHoje: 0,
+    taxaAtendimento: 0,
+    leadsInteresse: 0,
+    leadsDescartados: 0,
+  });
+  const [callKpisLoading, setCallKpisLoading] = useState(true);
+
+  // ── LINHA 3 — Disparos WhatsApp ───────────────────────────────────────────────
+  const [waKpis, setWaKpis] = useState({
+    disparosHoje: 0,
+    taxaRespostaWA: 0,
+    janelasAbertas: 0,
+    convertidos: 0,
+  });
+  const [waKpisLoading, setWaKpisLoading] = useState(true);
+
+  // ── LINHA 4 — TIER Meta ───────────────────────────────────────────────────────
+  const [tierKpis, setTierKpis] = useState({
+    tierAtual: 0,
+    disponiveisHoje: 0,
+    limitePorConsultor: 0,
+    previsaoAumento: "—",
+  });
+  const [tierLoading, setTierLoading] = useState(true);
+
+  // ── Charts ────────────────────────────────────────────────────────────────────
+  const [funnelData, setFunnelData] = useState<{ name: string; value: number }[]>([]);
+  const [callsPerDay, setCallsPerDay] = useState<{ date: string; calls: number }[]>([]);
+  const [dispatchPerDay, setDispatchPerDay] = useState<{ date: string; dispatches: number }[]>([]);
+  const [topConsultores, setTopConsultores] = useState<{
+    name: string;
+    ligacoes: number;
+    taxa: number;
+    disparos: number;
+    conversoes: number;
+  }[]>([]);
   const [chartsLoading, setChartsLoading] = useState(true);
 
-  // ---- Edge function fetch (existing sections) ----
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Edge function fetch (existing sections)
+  // ─────────────────────────────────────────────────────────────────────────────
   const fetchDashboard = useCallback(async (silent = false) => {
     if (!company_id) return;
     if (!silent) setLoading(true);
@@ -181,7 +251,9 @@ export default function DashboardGeral() {
     return () => clearInterval(interval);
   }, [fetchDashboard]);
 
-  // ---- KPI modal ----
+  // ─────────────────────────────────────────────────────────────────────────────
+  // KPI modal
+  // ─────────────────────────────────────────────────────────────────────────────
   const fetchKPIs = async () => {
     setKpiOpen(true);
     setKpiLoading(true);
@@ -200,36 +272,21 @@ export default function DashboardGeral() {
     setKpiLoading(false);
   };
 
-  // ---- Ensure call_logs table exists ----
-  const ensureCallLogs = useCallback(async () => {
-    const { error } = await supabase.from("call_logs").select("id").limit(1);
-    if (error && (error.code === "42P01" || error.message?.includes("does not exist"))) {
-      try {
-        const headers = await getAuthHeaders();
-        await fetch(`${EDGE_BASE}/run-sql`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ sql: CREATE_CALL_LOGS_SQL }),
-        });
-      } catch { /* ignore */ }
-    }
-  }, []);
-
-  // ---- Real KPI cards ----
-  const fetchRealKPIs = useCallback(async () => {
-    setKpisLoading(true);
+  // ─────────────────────────────────────────────────────────────────────────────
+  // LINHA 1 — Volume Operacional
+  // ─────────────────────────────────────────────────────────────────────────────
+  const fetchOpKpis = useCallback(async () => {
+    setOpLoading(true);
     const filter = selectedCompanyId !== "all" ? selectedCompanyId : null;
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
 
-    const [leadsRes, convRes, collabRes] = await Promise.all([
+    const [totalRes, distribRes, collabRes] = await Promise.all([
       (() => {
         let q = supabase.from("leads_master").select("id", { count: "exact", head: true });
         if (filter) q = q.eq("company_id", filter);
         return q;
       })(),
       (() => {
-        let q = supabase.from("wa_conversations").select("id", { count: "exact", head: true }).neq("status", "closed");
+        let q = supabase.from("consultant_lead_pool").select("id", { count: "exact", head: true });
         if (filter) q = q.eq("company_id", filter);
         return q;
       })(),
@@ -240,143 +297,301 @@ export default function DashboardGeral() {
       })(),
     ]);
 
-    let callsToday = 0;
-    try {
-      let callQ = supabase
-        .from("call_logs")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", todayStart.toISOString());
-      if (filter) callQ = callQ.eq("company_id", filter);
-      const { count } = await callQ;
-      callsToday = count ?? 0;
-    } catch { /* call_logs may not exist yet */ }
-
-    setRealKpis({
-      totalLeads: leadsRes.count ?? 0,
-      activeConversations: convRes.count ?? 0,
-      callsToday,
-      activeCollaborators: collabRes.count ?? 0,
+    const total = totalRes.count ?? 0;
+    const distribuidos = distribRes.count ?? 0;
+    setOpKpis({
+      totalLeads: total,
+      leadsDistribuidos: distribuidos,
+      leadsDisponiveis: Math.max(0, total - distribuidos),
+      consultoresAtivos: collabRes.count ?? 0,
     });
-    setKpisLoading(false);
+    setOpLoading(false);
   }, [selectedCompanyId]);
 
-  // ---- Chart data ----
-  const fetchChartData = useCallback(async () => {
+  // ─────────────────────────────────────────────────────────────────────────────
+  // LINHA 2 — Pipeline de Ligações
+  // ─────────────────────────────────────────────────────────────────────────────
+  const fetchCallKpis = useCallback(async () => {
+    setCallKpisLoading(true);
+    const filter = selectedCompanyId !== "all" ? selectedCompanyId : null;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    let ligacoesHoje = 0;
+    let ligacoesAtendidas = 0;
+    try {
+      const [totalCallRes, answeredCallRes] = await Promise.all([
+        (() => {
+          let q = supabase.from("calls").select("id", { count: "exact", head: true })
+            .gte("created_at", todayStart.toISOString());
+          if (filter) q = q.eq("company_id", filter);
+          return q;
+        })(),
+        (() => {
+          let q = supabase.from("calls").select("id", { count: "exact", head: true })
+            .gte("created_at", todayStart.toISOString())
+            .in("status", ["completed", "answered"]);
+          if (filter) q = q.eq("company_id", filter);
+          return q;
+        })(),
+      ]);
+      ligacoesHoje = totalCallRes.count ?? 0;
+      ligacoesAtendidas = answeredCallRes.count ?? 0;
+    } catch { /* calls table may not exist */ }
+
+    const [interRes, discRes] = await Promise.all([
+      (() => {
+        let q = supabase.from("leads_master").select("id", { count: "exact", head: true })
+          .eq("status", "interested");
+        if (filter) q = q.eq("company_id", filter);
+        return q;
+      })(),
+      (() => {
+        let q = supabase.from("leads_master").select("id", { count: "exact", head: true })
+          .gte("total_call_attempts", 2)
+          .in("status", ["lost", "dnc", "invalid", "discarded"]);
+        if (filter) q = q.eq("company_id", filter);
+        return q;
+      })(),
+    ]);
+
+    setCallKpis({
+      ligacoesHoje,
+      taxaAtendimento: pct(ligacoesAtendidas, ligacoesHoje),
+      leadsInteresse: interRes.count ?? 0,
+      leadsDescartados: discRes.count ?? 0,
+    });
+    setCallKpisLoading(false);
+  }, [selectedCompanyId]);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // LINHA 3 — Disparos WhatsApp
+  // ─────────────────────────────────────────────────────────────────────────────
+  const fetchWaKpis = useCallback(async () => {
+    setWaKpisLoading(true);
+    const filter = selectedCompanyId !== "all" ? selectedCompanyId : null;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [dispHojeRes, dispRespRes, janelaRes, convRes] = await Promise.all([
+      (() => {
+        let q = supabase.from("smart_dispatches").select("id", { count: "exact", head: true })
+          .gte("created_at", todayStart.toISOString());
+        if (filter) q = q.eq("company_id", filter);
+        return q;
+      })(),
+      (() => {
+        let q = supabase.from("smart_dispatches").select("id", { count: "exact", head: true })
+          .gte("created_at", todayStart.toISOString())
+          .not("replied_at", "is", null);
+        if (filter) q = q.eq("company_id", filter);
+        return q;
+      })(),
+      (() => {
+        let q = supabase.from("wa_conversations").select("id", { count: "exact", head: true })
+          .neq("status", "closed");
+        if (filter) q = q.eq("company_id", filter);
+        return q;
+      })(),
+      (() => {
+        let q = supabase.from("leads_master").select("id", { count: "exact", head: true })
+          .eq("status", "converted");
+        if (filter) q = q.eq("company_id", filter);
+        return q;
+      })(),
+    ]);
+
+    const dispHoje = dispHojeRes.count ?? 0;
+    const dispResp = dispRespRes.count ?? 0;
+    setWaKpis({
+      disparosHoje: dispHoje,
+      taxaRespostaWA: pct(dispResp, dispHoje),
+      janelasAbertas: janelaRes.count ?? 0,
+      convertidos: convRes.count ?? 0,
+    });
+    setWaKpisLoading(false);
+  }, [selectedCompanyId]);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // LINHA 4 — TIER Meta
+  // ─────────────────────────────────────────────────────────────────────────────
+  const fetchTierKpis = useCallback(async () => {
+    setTierLoading(true);
+    const filter = selectedCompanyId !== "all" ? selectedCompanyId : null;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    let tierLimit = 0;
+    try {
+      let q = supabase.from("system_configs").select("value").eq("key", "meta_tier_limit");
+      if (filter) q = q.eq("company_id", filter);
+      const { data: cfgData } = await q.maybeSingle();
+      tierLimit = cfgData?.value ? Number(cfgData.value) : 0;
+    } catch { /* ignore */ }
+
+    let dispHoje = 0;
+    try {
+      let q = supabase.from("smart_dispatches").select("id", { count: "exact", head: true })
+        .gte("created_at", todayStart.toISOString());
+      if (filter) q = q.eq("company_id", filter);
+      const { count } = await q;
+      dispHoje = count ?? 0;
+    } catch { /* ignore */ }
+
+    let consultores = 0;
+    try {
+      let q = supabase.from("collaborators").select("id", { count: "exact", head: true }).eq("active", true);
+      if (filter) q = q.eq("company_id", filter);
+      const { count } = await q;
+      consultores = count ?? 0;
+    } catch { /* ignore */ }
+
+    const disponiveisHoje = Math.max(0, tierLimit - dispHoje);
+    const limitePorConsultor = consultores > 0 ? Math.floor(tierLimit / consultores) : 0;
+
+    let previsao = "—";
+    try {
+      const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      let q = supabase.from("smart_dispatches").select("id", { count: "exact", head: true })
+        .gte("created_at", since7d);
+      if (filter) q = q.eq("company_id", filter);
+      const { count: w7 } = await q;
+      const dailyAvg = (w7 ?? 0) / 7;
+      if (tierLimit > 0) {
+        const usoPct = (dailyAvg / tierLimit) * 100;
+        previsao = usoPct >= 80 ? "Alta ↑" : usoPct >= 50 ? "Média →" : "Baixa ↓";
+      }
+    } catch { /* ignore */ }
+
+    setTierKpis({ tierAtual: tierLimit, disponiveisHoje, limitePorConsultor, previsaoAumento: previsao });
+    setTierLoading(false);
+  }, [selectedCompanyId]);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Charts
+  // ─────────────────────────────────────────────────────────────────────────────
+  const fetchCharts = useCallback(async () => {
     setChartsLoading(true);
     const filter = selectedCompanyId !== "all" ? selectedCompanyId : null;
-    const since = new Date();
-    since.setDate(since.getDate() - 29);
-    since.setHours(0, 0, 0, 0);
+    const since30 = new Date();
+    since30.setDate(since30.getDate() - 29);
+    since30.setHours(0, 0, 0, 0);
 
-    // Leads per day (last 30 days)
-    let lpQ = supabase
-      .from("leads_master")
-      .select("created_at")
-      .gte("created_at", since.toISOString());
-    if (filter) lpQ = lpQ.eq("company_id", filter);
-    const { data: rawLeads } = await lpQ;
+    // ── Funil ─────────────────────────────────────────────────────────────────
+    try {
+      const [
+        totalRes, ligacoesRes, atendRes, interRes, dispRes, respRes, convRes,
+      ] = await Promise.all([
+        (() => { let q = supabase.from("leads_master").select("id", { count: "exact", head: true }); if (filter) q = q.eq("company_id", filter); return q; })(),
+        (() => { let q = supabase.from("calls").select("id", { count: "exact", head: true }); if (filter) q = q.eq("company_id", filter); return q; })(),
+        (() => { let q = supabase.from("calls").select("id", { count: "exact", head: true }).in("status", ["completed", "answered"]); if (filter) q = q.eq("company_id", filter); return q; })(),
+        (() => { let q = supabase.from("leads_master").select("id", { count: "exact", head: true }).eq("status", "interested"); if (filter) q = q.eq("company_id", filter); return q; })(),
+        (() => { let q = supabase.from("smart_dispatches").select("id", { count: "exact", head: true }); if (filter) q = q.eq("company_id", filter); return q; })(),
+        (() => { let q = supabase.from("smart_dispatches").select("id", { count: "exact", head: true }).not("replied_at", "is", null); if (filter) q = q.eq("company_id", filter); return q; })(),
+        (() => { let q = supabase.from("leads_master").select("id", { count: "exact", head: true }).eq("status", "converted"); if (filter) q = q.eq("company_id", filter); return q; })(),
+      ]);
+      setFunnelData([
+        { name: "Total Leads", value: totalRes.count ?? 0 },
+        { name: "Ligações", value: ligacoesRes.count ?? 0 },
+        { name: "Atendidas", value: atendRes.count ?? 0 },
+        { name: "Interesse", value: interRes.count ?? 0 },
+        { name: "Disparos", value: dispRes.count ?? 0 },
+        { name: "Respostas", value: respRes.count ?? 0 },
+        { name: "Convertidos", value: convRes.count ?? 0 },
+      ]);
+    } catch { setFunnelData([]); }
 
-    const dayMap: Record<string, number> = {};
-    for (let i = 0; i < 30; i++) {
-      const d = new Date(since);
-      d.setDate(d.getDate() + i);
-      dayMap[d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })] = 0;
-    }
-    (rawLeads ?? []).forEach((l: { created_at: string }) => {
-      const key = new Date(l.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-      if (key in dayMap) dayMap[key]++;
-    });
-    setLeadsPerDay(Object.entries(dayMap).map(([date, leads]) => ({ date, leads })));
-
-    // Leads by source
-    let srcQ = supabase.from("leads_master").select("source");
-    if (filter) srcQ = srcQ.eq("company_id", filter);
-    const { data: rawSrc } = await srcQ;
-    const srcMap: Record<string, number> = {};
-    (rawSrc ?? []).forEach((l: { source: string | null }) => {
-      const src = l.source || "Desconhecido";
-      srcMap[src] = (srcMap[src] || 0) + 1;
-    });
-    setLeadsBySource(
-      Object.entries(srcMap)
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value)
-    );
-
-    // Top 5 companies (only for "all")
-    if (selectedCompanyId === "all") {
-      const { data: rawCompLeads } = await supabase
-        .from("leads_master")
-        .select("company_id");
-      const cntMap: Record<string, number> = {};
-      (rawCompLeads ?? []).forEach((l: { company_id: string | null }) => {
-        if (l.company_id) cntMap[l.company_id] = (cntMap[l.company_id] || 0) + 1;
-      });
-      const top5 = Object.entries(cntMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
-      if (top5.length > 0) {
-        const { data: comps } = await supabase
-          .from("companies")
-          .select("id, name")
-          .in("id", top5.map(([id]) => id));
-        const nameMap = Object.fromEntries(
-          (comps ?? []).map((c: { id: string; name: string }) => [c.id, c.name])
-        );
-        setTopCompanies(top5.map(([id, leads]) => ({ name: nameMap[id] || id, leads })));
-      } else {
-        setTopCompanies([]);
+    // ── Ligações por dia ───────────────────────────────────────────────────────
+    try {
+      let q = supabase.from("leads_master").select("last_call_at")
+        .gte("last_call_at", since30.toISOString())
+        .not("last_call_at", "is", null);
+      if (filter) q = q.eq("company_id", filter);
+      const { data: rawCalls } = await q;
+      const dayMap: Record<string, number> = {};
+      for (let i = 0; i < 30; i++) {
+        const d = new Date(since30);
+        d.setDate(d.getDate() + i);
+        dayMap[d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })] = 0;
       }
-    } else {
-      setTopCompanies([]);
-    }
+      (rawCalls ?? []).forEach((l: { last_call_at: string }) => {
+        const key = new Date(l.last_call_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+        if (key in dayMap) dayMap[key]++;
+      });
+      setCallsPerDay(Object.entries(dayMap).map(([date, calls]) => ({ date, calls })));
+    } catch { setCallsPerDay([]); }
+
+    // ── Disparos por dia ──────────────────────────────────────────────────────
+    try {
+      let q = supabase.from("smart_dispatches").select("created_at")
+        .gte("created_at", since30.toISOString());
+      if (filter) q = q.eq("company_id", filter);
+      const { data: rawDisp } = await q;
+      const dayMap: Record<string, number> = {};
+      for (let i = 0; i < 30; i++) {
+        const d = new Date(since30);
+        d.setDate(d.getDate() + i);
+        dayMap[d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })] = 0;
+      }
+      (rawDisp ?? []).forEach((l: { created_at: string }) => {
+        const key = new Date(l.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+        if (key in dayMap) dayMap[key]++;
+      });
+      setDispatchPerDay(Object.entries(dayMap).map(([date, dispatches]) => ({ date, dispatches })));
+    } catch { setDispatchPerDay([]); }
+
+    // ── Top Consultores ───────────────────────────────────────────────────────
+    try {
+      let q = supabase.from("collaborators")
+        .select("id, name, total_calls, calls_answered, total_dispatches, total_conversions")
+        .eq("active", true);
+      if (filter) q = q.eq("company_id", filter);
+      q = q.order("total_calls", { ascending: false }).limit(10);
+      const { data: collabs } = await q;
+      setTopConsultores(
+        (collabs ?? []).map((c: {
+          id: string;
+          name: string;
+          total_calls?: number;
+          calls_answered?: number;
+          total_dispatches?: number;
+          total_conversions?: number;
+        }) => ({
+          name: c.name ?? "—",
+          ligacoes: c.total_calls ?? 0,
+          taxa: pct(c.calls_answered ?? 0, c.total_calls ?? 0),
+          disparos: c.total_dispatches ?? 0,
+          conversoes: c.total_conversions ?? 0,
+        }))
+      );
+    } catch { setTopConsultores([]); }
 
     setChartsLoading(false);
   }, [selectedCompanyId]);
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Mount & auto-refresh
+  // ─────────────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    ensureCallLogs();
-  }, [ensureCallLogs]);
+    fetchOpKpis();
+    fetchCallKpis();
+    fetchWaKpis();
+    fetchTierKpis();
+    fetchCharts();
+  }, [fetchOpKpis, fetchCallKpis, fetchWaKpis, fetchTierKpis, fetchCharts]);
 
-  useEffect(() => {
-    fetchRealKPIs();
-    fetchChartData();
-  }, [fetchRealKPIs, fetchChartData]);
+  const refreshAll = () => {
+    fetchDashboard(true);
+    fetchOpKpis();
+    fetchCallKpis();
+    fetchWaKpis();
+    fetchTierKpis();
+    fetchCharts();
+  };
 
-  // ---- KPI cards config ----
-  const kpiCards = [
-    {
-      label: "Total Leads",
-      value: realKpis.totalLeads,
-      icon: Users,
-      color: "text-blue-400",
-      bg: "bg-blue-500/10",
-      onClick: () => navigate("/lead-distribution"),
-    },
-    {
-      label: "Conversas WA Ativas",
-      value: realKpis.activeConversations,
-      icon: MessageCircle,
-      color: "text-emerald-400",
-      bg: "bg-emerald-500/10",
-      onClick: () => navigate("/conversas"),
-    },
-    {
-      label: "Ligações Hoje",
-      value: realKpis.callsToday,
-      icon: Phone,
-      color: "text-green-400",
-      bg: "bg-green-500/10",
-      onClick: () => navigate("/dashboard-voip"),
-    },
-    {
-      label: "Colaboradores Ativos",
-      value: realKpis.activeCollaborators,
-      icon: UserCheck,
-      color: "text-purple-400",
-      bg: "bg-purple-500/10",
-      onClick: () => navigate("/equipe"),
-    },
-  ];
-
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Derived helpers
+  // ─────────────────────────────────────────────────────────────────────────────
   const { calls, whatsapp: wa, meta_quality: mq, team, alerts, queues } = data;
 
   const qualityColorMap: Record<string, string> = {
@@ -391,65 +606,362 @@ export default function DashboardGeral() {
     return <Info className="h-4 w-4 text-accent shrink-0" />;
   };
 
-  const teamPct =
-    team.total_limit_today > 0
-      ? (team.total_dispatches_today / team.total_limit_today) * 100
-      : 0;
+  const teamPct = team.total_limit_today > 0
+    ? (team.total_dispatches_today / team.total_limit_today) * 100
+    : 0;
 
+  const hasCallsData = callsPerDay.some((d) => d.calls > 0);
+  const hasDispatchData = dispatchPerDay.some((d) => d.dispatches > 0);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <PageHeader title="Dashboard Geral" subtitle="Visão executiva da operação" />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              fetchDashboard(true);
-              fetchRealKPIs();
-              fetchChartData();
-            }}
-            disabled={refreshing}
-          >
+          <Button variant="outline" size="sm" onClick={refreshAll} disabled={refreshing}>
             <RefreshCw className={`h-4 w-4 mr-1.5 ${refreshing ? "animate-spin" : ""}`} />
             Atualizar
           </Button>
         </div>
 
-        {/* LINHA 1 — 4 KPI Cards (dados reais Supabase) */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {kpisLoading
-            ? Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i}>
-                  <CardContent className="pt-5 space-y-2">
-                    <Skeleton className="h-8 w-16" />
-                    <Skeleton className="h-3 w-24" />
-                  </CardContent>
-                </Card>
-              ))
-            : kpiCards.map((c) => (
-                <Card
-                  key={c.label}
-                  className="cursor-pointer hover:border-primary/30 transition-colors"
-                  onClick={c.onClick}
-                >
-                  <CardContent className="pt-5 pb-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className={`p-1.5 rounded-lg ${c.bg}`}>
-                        <c.icon className={`h-4 w-4 ${c.color}`} />
-                      </div>
-                    </div>
-                    <p className="text-2xl font-bold tracking-tight">
-                      {c.value.toLocaleString("pt-BR")}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{c.label}</p>
-                  </CardContent>
-                </Card>
-              ))}
+        {/* ── LINHA 1 — Volume Operacional ─────────────────────────────── */}
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+            Volume Operacional
+          </p>
+          {opLoading ? (
+            <KpiRowSkeleton />
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiCard
+                label="Total Leads na Base"
+                value={opKpis.totalLeads}
+                icon={Users}
+                color="text-blue-400"
+                bg="bg-blue-500/10"
+                onClick={() => navigate("/leads")}
+              />
+              <KpiCard
+                label="Leads Distribuídos"
+                value={opKpis.leadsDistribuidos}
+                icon={UserCheck}
+                color="text-emerald-400"
+                bg="bg-emerald-500/10"
+                onClick={() => navigate("/lead-distribution")}
+              />
+              <KpiCard
+                label="Leads Disponíveis"
+                value={opKpis.leadsDisponiveis}
+                icon={Target}
+                color="text-yellow-400"
+                bg="bg-yellow-500/10"
+              />
+              <KpiCard
+                label="Consultores Ativos"
+                value={opKpis.consultoresAtivos}
+                icon={Users}
+                color="text-purple-400"
+                bg="bg-purple-500/10"
+                onClick={() => navigate("/team")}
+              />
+            </div>
+          )}
         </div>
 
-        {/* LINHA 2 — Calls / WhatsApp / Meta Quality */}
+        {/* ── LINHA 2 — Pipeline de Ligações ───────────────────────────── */}
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+            Pipeline de Ligações
+          </p>
+          {callKpisLoading ? (
+            <KpiRowSkeleton />
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiCard
+                label="Ligações Hoje"
+                value={callKpis.ligacoesHoje}
+                icon={Phone}
+                color="text-green-400"
+                bg="bg-green-500/10"
+                onClick={() => navigate("/dashboard-voip")}
+              />
+              <KpiCard
+                label="Taxa de Atendimento"
+                value={`${callKpis.taxaAtendimento}%`}
+                icon={Activity}
+                color="text-teal-400"
+                bg="bg-teal-500/10"
+              />
+              <KpiCard
+                label="Leads com Interesse"
+                value={callKpis.leadsInteresse}
+                icon={TrendingUp}
+                color="text-cyan-400"
+                bg="bg-cyan-500/10"
+              />
+              <KpiCard
+                label="Leads Descartados"
+                value={callKpis.leadsDescartados}
+                icon={ThumbsDown}
+                color="text-red-400"
+                bg="bg-red-500/10"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* ── LINHA 3 — Disparos WhatsApp ──────────────────────────────── */}
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+            Disparos WhatsApp
+          </p>
+          {waKpisLoading ? (
+            <KpiRowSkeleton />
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiCard
+                label="Disparos Realizados Hoje"
+                value={waKpis.disparosHoje}
+                icon={Send}
+                color="text-emerald-400"
+                bg="bg-emerald-500/10"
+                onClick={() => navigate("/disparos")}
+              />
+              <KpiCard
+                label="Taxa de Resposta WA"
+                value={`${waKpis.taxaRespostaWA}%`}
+                icon={MessageCircle}
+                color="text-blue-400"
+                bg="bg-blue-500/10"
+              />
+              <KpiCard
+                label="Janelas Abertas"
+                value={waKpis.janelasAbertas}
+                icon={MessageCircle}
+                color="text-orange-400"
+                bg="bg-orange-500/10"
+                onClick={() => navigate("/conversations")}
+              />
+              <KpiCard
+                label="Leads Convertidos"
+                value={waKpis.convertidos}
+                icon={CheckCircle}
+                color="text-green-400"
+                bg="bg-green-500/10"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* ── LINHA 4 — TIER Meta ───────────────────────────────────────── */}
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+            TIER Meta
+          </p>
+          {tierLoading ? (
+            <KpiRowSkeleton />
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiCard
+                label="TIER Atual"
+                value={fmt(tierKpis.tierAtual)}
+                icon={Shield}
+                color="text-purple-400"
+                bg="bg-purple-500/10"
+                onClick={() => navigate("/whatsapp-meta")}
+              />
+              <KpiCard
+                label="Disponíveis Hoje"
+                value={tierKpis.disponiveisHoje}
+                icon={Zap}
+                color="text-yellow-400"
+                bg="bg-yellow-500/10"
+              />
+              <KpiCard
+                label="Limite por Consultor"
+                value={tierKpis.limitePorConsultor}
+                icon={UserCheck}
+                color="text-blue-400"
+                bg="bg-blue-500/10"
+              />
+              <KpiCard
+                label="Previsão de Aumento"
+                value={tierKpis.previsaoAumento}
+                icon={TrendingUp}
+                color="text-emerald-400"
+                bg="bg-emerald-500/10"
+                sub="Baseado no volume dos últimos 7 dias"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* ── GRÁFICOS ─────────────────────────────────────────────────── */}
+
+        {/* Funil de Conversão */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" /> Funil de Conversão
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {chartsLoading ? (
+              <Skeleton className="h-[220px] w-full" />
+            ) : funnelData.every((d) => d.value === 0) ? (
+              <div className="flex items-center justify-center h-[220px] text-sm text-muted-foreground">
+                Sem dados
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={funnelData} layout="vertical" margin={{ left: 10, right: 30 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={90} />
+                  <Tooltip formatter={(v: number) => fmt(v)} />
+                  <Bar dataKey="value" name="Leads" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]}>
+                    {funnelData.map((_, i) => (
+                      <rect key={i} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Ligações por dia + Disparos por dia */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Phone className="h-4 w-4 text-green-400" /> Ligações por Dia (30 dias)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {chartsLoading ? (
+                <Skeleton className="h-[200px] w-full" />
+              ) : !hasCallsData ? (
+                <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
+                  Sem dados no período
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={callsPerDay}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 9 }}
+                      interval={Math.floor(callsPerDay.length / 6)}
+                    />
+                    <YAxis tick={{ fontSize: 9 }} />
+                    <Tooltip />
+                    <Line
+                      type="monotone"
+                      dataKey="calls"
+                      stroke="#22c55e"
+                      strokeWidth={2}
+                      dot={false}
+                      name="Ligações"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Send className="h-4 w-4 text-emerald-400" /> Disparos por Dia (30 dias)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {chartsLoading ? (
+                <Skeleton className="h-[200px] w-full" />
+              ) : !hasDispatchData ? (
+                <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
+                  Sem dados no período
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={dispatchPerDay}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 9 }}
+                      interval={Math.floor(dispatchPerDay.length / 6)}
+                    />
+                    <YAxis tick={{ fontSize: 9 }} />
+                    <Tooltip />
+                    <Bar
+                      dataKey="dispatches"
+                      fill="#10b981"
+                      name="Disparos"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Top Consultores */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary" /> Top Consultores
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {chartsLoading ? (
+              <Skeleton className="h-[200px] w-full" />
+            ) : topConsultores.length === 0 ? (
+              <div className="flex items-center justify-center h-[120px] text-sm text-muted-foreground">
+                Sem dados de consultores
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/50 text-muted-foreground text-xs">
+                      <th className="text-left py-2 pr-4 font-medium">Consultor</th>
+                      <th className="text-right py-2 px-2 font-medium">Ligações</th>
+                      <th className="text-right py-2 px-2 font-medium">Taxa Atend.</th>
+                      <th className="text-right py-2 px-2 font-medium">Disparos</th>
+                      <th className="text-right py-2 pl-2 font-medium">Conversões</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topConsultores.map((c, i) => (
+                      <tr
+                        key={i}
+                        className="border-b border-border/30 hover:bg-muted/20 transition-colors"
+                      >
+                        <td className="py-2 pr-4 font-medium truncate max-w-[140px]">{c.name}</td>
+                        <td className="text-right py-2 px-2">{fmt(c.ligacoes)}</td>
+                        <td className="text-right py-2 px-2">
+                          <span className={c.taxa >= 50 ? "text-green-400" : c.taxa >= 30 ? "text-yellow-400" : "text-red-400"}>
+                            {c.taxa}%
+                          </span>
+                        </td>
+                        <td className="text-right py-2 px-2">{fmt(c.disparos)}</td>
+                        <td className="text-right py-2 pl-2 text-emerald-400 font-semibold">{fmt(c.conversoes)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── SEÇÕES EXISTENTES — Calls / WhatsApp / Meta Quality ─────── */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -471,7 +983,7 @@ export default function DashboardGeral() {
             >
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-green-400" /> Ligações
+                  <Phone className="h-4 w-4 text-green-400" /> Ligações (Edge)
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -565,109 +1077,9 @@ export default function DashboardGeral() {
           </div>
         )}
 
-        {/* LINHA 3 — Gráficos */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Leads por dia */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Leads por Dia (últimos 30 dias)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {chartsLoading ? (
-                <Skeleton className="h-[200px] w-full" />
-              ) : leadsPerDay.every((d) => d.leads === 0) ? (
-                <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
-                  Sem dados no período
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={leadsPerDay}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 9 }}
-                      interval={Math.floor(leadsPerDay.length / 6)}
-                    />
-                    <YAxis tick={{ fontSize: 9 }} />
-                    <Tooltip />
-                    <Bar dataKey="leads" fill="hsl(var(--primary))" name="Leads" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Leads por fonte */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Leads por Fonte</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {chartsLoading ? (
-                <Skeleton className="h-[200px] w-full" />
-              ) : leadsBySource.length === 0 ? (
-                <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
-                  Sem dados
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie
-                      data={leadsBySource}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={75}
-                      dataKey="value"
-                      label={({ name, percent }) =>
-                        `${name} ${(percent * 100).toFixed(0)}%`
-                      }
-                      labelLine={false}
-                    >
-                      {leadsBySource.map((_, i) => (
-                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Top 5 Empresas (só quando "all") */}
-        {selectedCompanyId === "all" && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Top 5 Empresas por Leads</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {chartsLoading ? (
-                <Skeleton className="h-[200px] w-full" />
-              ) : topCompanies.length === 0 ? (
-                <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
-                  Sem dados
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={topCompanies} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis type="number" tick={{ fontSize: 10 }} />
-                    <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={100} />
-                    <Tooltip />
-                    <Bar dataKey="leads" fill="hsl(var(--primary))" name="Leads" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* LINHA 4 — Team & Alerts */}
+        {/* ── Team & Alerts ─────────────────────────────────────────────── */}
         {!loading && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Team */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -697,7 +1109,6 @@ export default function DashboardGeral() {
               </CardContent>
             </Card>
 
-            {/* Alerts */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -728,7 +1139,7 @@ export default function DashboardGeral() {
           </div>
         )}
 
-        {/* LINHA 5 — Filas Ativas */}
+        {/* ── Filas Ativas ──────────────────────────────────────────────── */}
         {!loading && (
           <Card>
             <CardHeader className="pb-2">
@@ -744,14 +1155,11 @@ export default function DashboardGeral() {
                 </TabsList>
                 <TabsContent value="calls">
                   {queues.call_queues.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      Nenhuma fila ativa
-                    </p>
+                    <p className="text-sm text-muted-foreground text-center py-4">Nenhuma fila ativa</p>
                   ) : (
                     <div className="space-y-3">
                       {queues.call_queues.map((q, i) => {
-                        const pct =
-                          q.total_leads > 0 ? ((q.leads_called || 0) / q.total_leads) * 100 : 0;
+                        const p = q.total_leads > 0 ? ((q.leads_called || 0) / q.total_leads) * 100 : 0;
                         return (
                           <div key={i} className="space-y-1">
                             <div className="flex justify-between text-sm">
@@ -760,7 +1168,7 @@ export default function DashboardGeral() {
                                 {q.leads_called || 0}/{q.total_leads}
                               </span>
                             </div>
-                            <Progress value={pct} className="h-2" />
+                            <Progress value={p} className="h-2" />
                           </div>
                         );
                       })}
@@ -769,14 +1177,11 @@ export default function DashboardGeral() {
                 </TabsContent>
                 <TabsContent value="dispatches">
                   {queues.dispatch_queues.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      Nenhuma fila ativa
-                    </p>
+                    <p className="text-sm text-muted-foreground text-center py-4">Nenhuma fila ativa</p>
                   ) : (
                     <div className="space-y-3">
                       {queues.dispatch_queues.map((q, i) => {
-                        const pct =
-                          q.total_leads > 0 ? ((q.dispatched || 0) / q.total_leads) * 100 : 0;
+                        const p = q.total_leads > 0 ? ((q.dispatched || 0) / q.total_leads) * 100 : 0;
                         return (
                           <div key={i} className="space-y-1">
                             <div className="flex justify-between text-sm">
@@ -785,7 +1190,7 @@ export default function DashboardGeral() {
                                 {q.dispatched || 0}/{q.total_leads}
                               </span>
                             </div>
-                            <Progress value={pct} className="h-2" />
+                            <Progress value={p} className="h-2" />
                           </div>
                         );
                       })}
@@ -797,7 +1202,7 @@ export default function DashboardGeral() {
           </Card>
         )}
 
-        {/* LINHA 6 — KPIs Button */}
+        {/* ── KPIs Button ───────────────────────────────────────────────── */}
         <div className="flex justify-center">
           <Button variant="outline" onClick={fetchKPIs}>
             <BarChart3 className="h-4 w-4 mr-2" />
@@ -824,7 +1229,7 @@ export default function DashboardGeral() {
                   >
                     <span className="text-sm font-medium capitalize">{key.replace(/_/g, " ")}</span>
                     <span className="text-sm font-bold">
-                      {typeof value === "number" ? value.toLocaleString("pt-BR") : String(value)}
+                      {typeof value === "number" ? fmt(value) : String(value)}
                     </span>
                   </div>
                 ))}
