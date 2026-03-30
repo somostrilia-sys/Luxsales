@@ -30,14 +30,7 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
     label: "Visão Geral",
     items: [
       { title: "Dashboard", url: "/", icon: LayoutDashboard, levels: [0, 1, 2, 3] },
-      { title: "Meus Números", url: "/meus-numeros", icon: BarChart2, levels: [1, 2, 3] },
-    ],
-  },
-  {
-    label: "Canais",
-    items: [
-      { title: "Ligações", url: "/calls", icon: Phone, levels: [0, 1], badgeKey: "calls" },
-      { title: "WhatsApp", url: "/meta", icon: MessageSquare, levels: [0, 1], badgeKey: "metaAlert" },
+      { title: "Meus Números", url: "/meus-numeros", icon: BarChart2, levels: [0, 1, 2, 3] },
     ],
   },
   {
@@ -45,30 +38,28 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
     items: [
       { title: "Leads Master", url: "/leads", icon: Users, levels: [0] },
       { title: "Importar", url: "/import", icon: Upload, levels: [0] },
-    ],
-  },
-  {
-    label: "Operação",
-    items: [
       { title: "Meus Leads", url: "/my-leads", icon: ClipboardList, levels: [1, 2, 3] },
-      { title: "Conversas", url: "/conversations", icon: MessageSquare, levels: [0, 1, 2, 3], badgeKey: "conversas" },
-      { title: "Histórico", url: "/historico", icon: History, levels: [0, 1, 2, 3] },
-      { title: "Templates", url: "/templates", icon: FileText, levels: [0] },
     ],
   },
   {
-    label: "Venda por Voz",
+    label: "Ligações",
     items: [
-      { title: "Ligações", url: "/ligacoes", icon: Phone, levels: [1, 2, 3] },
+      { title: "Ligações", url: "/ligacoes", icon: Phone, levels: [0, 1, 2, 3] },
       { title: "Simulação", url: "/voice/simulate", icon: FlaskConical, levels: [0] },
-      { title: "Histórico", url: "/voice/calls", icon: History, levels: [0] },
     ],
   },
   {
     label: "Disparos",
     items: [
-      { title: "Disparos", url: "/disparos", icon: Send, levels: [1, 2, 3] },
-      { title: "Filas Disparo", url: "/dispatch-queues", icon: Send, levels: [0] },
+      { title: "Disparos", url: "/disparos", icon: Send, levels: [0, 1, 2, 3] },
+      { title: "Templates", url: "/templates", icon: FileText, levels: [0] },
+    ],
+  },
+  {
+    label: "Conversas",
+    items: [
+      { title: "Conversas", url: "/conversations", icon: MessageSquare, levels: [0, 1, 2, 3], badgeKey: "conversas" },
+      { title: "Histórico", url: "/historico", icon: History, levels: [0, 1, 2, 3] },
     ],
   },
   {
@@ -76,11 +67,10 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
     items: [
       { title: "Equipe", url: "/team", icon: UserCog, levels: [0] },
       { title: "Gestão de Usuários", url: "/gestao-usuarios", icon: Users2, levels: [0, 1] },
-      { title: "Opt-ins", url: "/opt-ins", icon: ShieldCheck, levels: [0] },
-      { title: "Regras Meta", url: "/meta-rules", icon: ClipboardList, levels: [0] },
       { title: "Base de Conhecimento", url: "/knowledge-base", icon: Brain, levels: [0] },
-      { title: "Configuração", url: "/config", icon: Sparkles, levels: [0] },
+      { title: "Opt-ins", url: "/opt-ins", icon: ShieldCheck, levels: [0] },
       { title: "WhatsApp Empresas", url: "/config-whatsapp", icon: MessageSquare, levels: [0] },
+      { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0, 1, 2, 3] },
     ],
   },
 ];
