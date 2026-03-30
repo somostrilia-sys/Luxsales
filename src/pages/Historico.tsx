@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { supabase } from "@/lib/supabase";
@@ -33,6 +34,7 @@ interface CallLog {
   status: string | null;
   duration_sec: number | null;
   transcript: unknown;
+  lucas_summary: string | null;
   result: string | null;
   started_at: string | null;
   created_at: string;
@@ -42,6 +44,7 @@ interface CallLog {
   next_action: string | null;
   company_id: string | null;
   voice_key: string | null;
+  collaborator_id: string | null;
 }
 
 interface WaConversation {
@@ -187,9 +190,26 @@ function TemplatePickerDialog({
   );
 }
 
+// ─── Shared: Ligar Button ─────────────────────────────────────────────────────
+
+function LigarButton({ phone, leadName }: { phone: string; leadName?: string | null }) {
+  const navigate = useNavigate();
+  const handleLigar = () => {
+    const params = new URLSearchParams();
+    if (phone) params.set("phone", phone);
+    if (leadName) params.set("name", leadName);
+    navigate(`/ligacoes?${params.toString()}`);
+  };
+  return (
+    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleLigar}>
+      <Phone className="h-3 w-3 mr-1" /> Ligar
+    </Button>
+  );
+}
+
 // ─── Aba 1: Transcrições ──────────────────────────────────────────────────────
 
-function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId }: { companyId: string; roleLevel: number; collaboratorCompanyId?: string }) {
+function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collaboratorId }: { companyId: string; roleLevel: number; collaboratorCompanyId?: string; collaboratorId?: string }) {
   const [calls, setCalls] = useState<CallLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("week");
@@ -206,7 +226,7 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId }: { comp
       let query = supabase
         .from("call_logs")
         .select(
-          "id, lead_phone, lead_name, status, duration_sec, transcript, result, started_at, created_at, goal_achieved, sentiment_overall, lead_temperature, next_action, company_id, voice_key"
+          "id, lead_phone, lead_name, status, duration_sec, transcript, lucas_summary, result, started_at, created_at, goal_achieved, sentiment_overall, lead_temperature, next_action, company_id, voice_key, collaborator_id"
         )
         .order("created_at", { ascending: false })
         .limit(100);
@@ -230,8 +250,16 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId }: { comp
         query = query.eq("status", statusFilter);
       }
 
-      if (roleLevel > 0 && collaboratorCompanyId) {
-        query = query.eq("company_id", collaboratorCompanyId);
+      // CEO: sem filtro de empresa/colaborador
+      // Gestor (roleLevel === 2): filtra por empresa
+      // Consultor (outros > 0): filtra por collaborator_id
+      if (roleLevel === 0) {
+        // CEO vê tudo
+      } else if (roleLevel === 2) {
+        if (collaboratorCompanyId) query = query.eq("company_id", collaboratorCompanyId);
+      } else if (collaboratorId) {
+        query = query.eq("collaborator_id", collaboratorId);
+        if (collaboratorCompanyId) query = query.eq("company_id", collaboratorCompanyId);
       } else if (companyId && companyId !== "all") {
         query = query.eq("company_id", companyId);
       }
@@ -245,7 +273,7 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId }: { comp
     } finally {
       setLoading(false);
     }
-  }, [companyId, period, statusFilter, roleLevel, collaboratorCompanyId]);
+  }, [companyId, period, statusFilter, roleLevel, collaboratorCompanyId, collaboratorId]);
 
   useEffect(() => {
     fetchCalls();
@@ -403,16 +431,17 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId }: { comp
 
                   {isExpanded && (
                     <div className="mt-3 space-y-3 border-t pt-3">
-                      {summaryText && (
-                        <div className="rounded-lg bg-muted/60 p-3">
-                          <p className="text-xs font-semibold text-primary mb-1 flex items-center gap-1">
-                            <Mic className="h-3.5 w-3.5" /> Resumo do Lucas
-                          </p>
-                          <p className="text-sm text-foreground leading-relaxed">
-                            {summaryText}
-                          </p>
-                        </div>
-                      )}
+                      {/* lucas_summary direto do campo (fallback para transcript) */}
+                      <div className="rounded-lg bg-muted/60 p-3">
+                        <p className="text-xs font-semibold text-primary mb-1 flex items-center gap-1">
+                          <Mic className="h-3.5 w-3.5" /> Resumo do Lucas
+                        </p>
+                        <p className="text-sm text-foreground leading-relaxed">
+                          {call.lucas_summary || summaryText || (
+                            <span className="text-muted-foreground italic">Aguardando análise do Lucas</span>
+                          )}
+                        </p>
+                      </div>
 
                       {transcriptText && (
                         <div>
@@ -457,16 +486,16 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId }: { comp
                         </div>
                       )}
 
-                      <div className="pt-1">
+                      <div className="pt-1 flex gap-2 flex-wrap">
                         <Button
                           size="sm"
                           variant="default"
                           className="h-7 text-xs"
                           onClick={() => openTemplateDialog(phone)}
                         >
-                          <Send className="h-3 w-3 mr-1" /> Disparar WA com
-                          Lucas
+                          <Send className="h-3 w-3 mr-1" /> Disparar WA com Lucas
                         </Button>
+                        <LigarButton phone={phone} leadName={call.lead_name} />
                       </div>
                     </div>
                   )}
@@ -495,10 +524,12 @@ function TabConversasEncerradas({
   companyId,
   roleLevel,
   collaboratorCompanyId,
+  collaboratorId,
 }: {
   companyId: string;
   roleLevel: number;
   collaboratorCompanyId?: string;
+  collaboratorId?: string;
 }) {
   const [convs, setConvs] = useState<WaConversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -521,8 +552,13 @@ function TabConversasEncerradas({
         .order("last_message_at", { ascending: false })
         .limit(100);
 
-      if (roleLevel > 0 && collaboratorCompanyId) {
-        query = query.eq("company_id", collaboratorCompanyId);
+      if (roleLevel === 0) {
+        // CEO vê tudo
+      } else if (roleLevel === 2) {
+        if (collaboratorCompanyId) query = query.eq("company_id", collaboratorCompanyId);
+      } else if (collaboratorId) {
+        query = query.eq("collaborator_id", collaboratorId);
+        if (collaboratorCompanyId) query = query.eq("company_id", collaboratorCompanyId);
       } else if (companyId && companyId !== "all") {
         query = query.eq("company_id", companyId);
       }
@@ -547,7 +583,7 @@ function TabConversasEncerradas({
     } finally {
       setLoading(false);
     }
-  }, [companyId, roleLevel, collaboratorCompanyId]);
+  }, [companyId, roleLevel, collaboratorCompanyId, collaboratorId]);
 
   useEffect(() => {
     fetchConvs();
@@ -751,16 +787,16 @@ function TabConversasEncerradas({
                         </p>
                       )}
 
-                      <div className="pt-1">
+                      <div className="pt-1 flex gap-2 flex-wrap">
                         <Button
                           size="sm"
                           variant="default"
                           className="h-7 text-xs"
                           onClick={() => openReactivate(conv)}
                         >
-                          <Send className="h-3 w-3 mr-1" /> Reativar com
-                          Template
+                          <Send className="h-3 w-3 mr-1" /> Reativar com Template
                         </Button>
+                        <LigarButton phone={conv.phone} leadName={conv.lead_name} />
                       </div>
                     </div>
                   )}
@@ -1017,6 +1053,7 @@ export default function Historico() {
               companyId={companyId}
               roleLevel={roleLevel}
               collaboratorCompanyId={collaborator?.company_id}
+              collaboratorId={collaborator?.id}
             />
           </TabsContent>
 
@@ -1025,6 +1062,7 @@ export default function Historico() {
               companyId={companyId}
               roleLevel={roleLevel}
               collaboratorCompanyId={collaborator?.company_id}
+              collaboratorId={collaborator?.id}
             />
           </TabsContent>
 

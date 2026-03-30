@@ -107,7 +107,7 @@ const getWindowCountdown = (expiresAt: string | null): string | null => {
   return null;
 };
 export default function Conversas() {
-  const { collaborator, isCEO } = useCollaborator();
+  const { collaborator, isCEO, isGestor } = useCollaborator();
   const isMobile = useIsMobile();
   const { selectedCompanyId } = useCompanyFilter();
   const companyId =
@@ -207,11 +207,18 @@ export default function Conversas() {
           .limit(150)
           .abortSignal(controller.signal);
 
-        // CEO ou "Todas Empresas": sem filtro de colaborador
-        // Outros: tentar filtrar por collaborator_id (se coluna existir e tiver dados)
-        // Por enquanto não filtrar por collaborator — mostrar todas da empresa
-        if (!isCeoAllView && companyId && companyId !== "all") {
-          query = query.eq("company_id", companyId);
+        // CEO: sem filtro — vê tudo
+        // Gestor: filtra por empresa
+        // Consultor: filtra por collaborator_id + empresa
+        if (!isCeoAllView) {
+          if (isGestor) {
+            if (companyId && companyId !== "all") query = query.eq("company_id", companyId);
+          } else if (collaborator?.id) {
+            query = query.eq("collaborator_id", collaborator.id);
+            if (companyId && companyId !== "all") query = query.eq("company_id", companyId);
+          } else if (companyId && companyId !== "all") {
+            query = query.eq("company_id", companyId);
+          }
         }
 
         const { data, error: convError } = await query;
@@ -325,7 +332,7 @@ export default function Conversas() {
         if (!silent) setLoadingList(false);
       }
     },
-    [companyId, collaborator, selectedCompanyId]
+    [companyId, collaborator, selectedCompanyId, isGestor, isCEO]
   );
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
@@ -960,17 +967,17 @@ export default function Conversas() {
               <div className="group relative">
                 <span className="rounded-full px-2 py-0.5 text-[11px] font-medium wa-window-open flex items-center gap-1 cursor-help">
                   <span className="h-1.5 w-1.5 rounded-full wa-window-dot" />
-                  Janela aberta
+                  Janela aberta até {conv?.window_expires_at ? format(new Date(conv.window_expires_at), "dd/MM HH:mm", { locale: ptBR }) : "—"}
                 </span>
-                <div className="absolute right-0 top-7 z-20 hidden group-hover:block w-56 rounded-lg p-2 text-xs shadow-lg"
+                <div className="absolute right-0 top-7 z-20 hidden group-hover:block w-60 rounded-lg p-2 text-xs shadow-lg"
                   style={{ background: "#111b21", color: "#e9edef" }}>
-                  <p className="font-medium mb-1">Expira em: {conv?.window_expires_at ? format(new Date(conv.window_expires_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : "—"}</p>
-                  <p className="opacity-70">Se o lead responder, a janela se reabre automaticamente por mais 24h</p>
+                  <p className="font-medium mb-1">Expira: {conv?.window_expires_at ? format(new Date(conv.window_expires_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : "—"}</p>
+                  <p className="opacity-70">Se o lead chamar de volta, a janela se abre novamente por mais 24h</p>
                 </div>
               </div>
             ) : (
               <span className="rounded-full px-2 py-0.5 text-[11px] font-medium wa-window-closed">
-                Janela encerrada
+                Janela expirada
               </span>
             )}
             <button onClick={() => {}} style={{ color: "#54656f" }}>

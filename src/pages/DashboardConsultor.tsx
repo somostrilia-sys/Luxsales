@@ -13,8 +13,10 @@ import { supabase } from "@/lib/supabase";
 import {
   Phone, MessageCircle, Users, TrendingUp,
   Send, Target, RefreshCw, CheckCircle,
-  Activity, BarChart2,
+  Activity, BarChart2, Clock, Bot,
 } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -111,6 +113,17 @@ export default function DashboardConsultor() {
   // Meta do mês
   const [metaMes, setMetaMes] = useState<number | null>(null);
   const [conversoesMes, setConversoesMes] = useState(0);
+
+  // Últimas atividades
+  interface AtividadeItem {
+    id: string;
+    tipo: "call" | "wa";
+    label: string;
+    sub: string;
+    ts: string;
+    positivo?: boolean;
+  }
+  const [atividades, setAtividades] = useState<AtividadeItem[]>([]);
 
   const [allLoading, setAllLoading] = useState(true);
 
@@ -266,6 +279,48 @@ export default function DashboardConsultor() {
           setMetaMes(null);
           setConversoesMes(0);
         }
+      })(),
+
+      // Últimas atividades (5 mais recentes: ligações + WA)
+      (async () => {
+        try {
+          const [callsRes, waRes] = await Promise.all([
+            supabase
+              .from("call_logs")
+              .select("id, lead_name, lead_phone, status, goal_achieved, created_at")
+              .eq("collaborator_id", collaboratorId)
+              .order("created_at", { ascending: false })
+              .limit(5),
+            supabase
+              .from("wa_conversations")
+              .select("id, lead_name, phone, status, last_message_at, last_message")
+              .eq("collaborator_id", collaboratorId)
+              .order("last_message_at", { ascending: false })
+              .limit(5),
+          ]);
+          const items: AtividadeItem[] = [];
+          for (const c of callsRes.data || []) {
+            items.push({
+              id: c.id,
+              tipo: "call",
+              label: c.lead_name || c.lead_phone || "Lead",
+              sub: `Ligação — ${c.status || "—"}`,
+              ts: c.created_at,
+              positivo: c.goal_achieved === true,
+            });
+          }
+          for (const w of waRes.data || []) {
+            items.push({
+              id: `wa-${w.id}`,
+              tipo: "wa",
+              label: w.lead_name || w.phone || "Lead",
+              sub: w.last_message ? w.last_message.slice(0, 60) : "Conversa WA",
+              ts: w.last_message_at || "",
+            });
+          }
+          items.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+          setAtividades(items.slice(0, 5));
+        } catch { setAtividades([]); }
       })(),
     ]);
 
@@ -467,6 +522,56 @@ export default function DashboardConsultor() {
             <span className="text-xs">Ir para Disparos</span>
           </Button>
         </div>
+
+        {/* ── Últimas Atividades ────────────────────────────────────────── */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Clock className="h-4 w-4 text-accent" /> Últimas Atividades
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {allLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex gap-3 items-center">
+                    <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />
+                    <div className="flex-1 space-y-1">
+                      <div className="h-3 w-32 bg-muted rounded animate-pulse" />
+                      <div className="h-2 w-48 bg-muted rounded animate-pulse" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : atividades.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhuma atividade recente
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {atividades.map((a) => (
+                  <div key={a.id} className="flex items-start gap-3">
+                    <div className={`p-1.5 rounded-full shrink-0 ${a.tipo === "call" ? "bg-green-500/10" : "bg-blue-500/10"}`}>
+                      {a.tipo === "call"
+                        ? <Phone className="h-3.5 w-3.5 text-green-400" />
+                        : <MessageCircle className="h-3.5 w-3.5 text-blue-400" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{a.label}</p>
+                      <p className="text-xs text-muted-foreground truncate">{a.sub}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[10px] text-muted-foreground">
+                        {a.ts ? format(new Date(a.ts), "dd/MM HH:mm", { locale: ptBR }) : "—"}
+                      </p>
+                      {a.positivo === true && <CheckCircle className="h-3 w-3 text-green-400 ml-auto mt-0.5" />}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

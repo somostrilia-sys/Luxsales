@@ -120,6 +120,190 @@ interface Company {
   logo_url?: string;
 }
 
+// ── WhatsApp Meta Section ──────────────────────────────────────────────────────
+
+interface ConsultorTier {
+  id: string;
+  name: string;
+  disparosHoje: number;
+  limite: number;
+}
+
+function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
+  const [tier, setTier] = useState(1000);
+  const [tierInput, setTierInput] = useState("1000");
+  const [consultores, setConsultores] = useState<ConsultorTier[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!companyId) return;
+    loadData();
+  }, [companyId]);
+
+  const loadData = async () => {
+    if (!companyId) return;
+    setLoading(true);
+    try {
+      // TIER
+      const { data: cfgData } = await supabase
+        .from("system_configs")
+        .select("value")
+        .eq("key", "meta_tier_limit")
+        .eq("company_id", companyId)
+        .maybeSingle();
+      const tierVal = cfgData?.value ? Number(cfgData.value) : 1000;
+      setTier(tierVal);
+      setTierInput(String(tierVal));
+
+      // Consultores ativos
+      const { data: collabs } = await supabase
+        .from("collaborators")
+        .select("id, name")
+        .eq("company_id", companyId)
+        .eq("active", true)
+        .order("name")
+        .limit(50);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const items: ConsultorTier[] = [];
+      const perConsultor = collabs && collabs.length > 0 ? Math.floor(tierVal / collabs.length) : 0;
+
+      for (const c of collabs || []) {
+        const { count } = await supabase
+          .from("smart_dispatches")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .eq("collaborator_id", c.id)
+          .gte("created_at", today.toISOString());
+        items.push({ id: c.id, name: c.name, disparosHoje: count ?? 0, limite: perConsultor });
+      }
+      setConsultores(items);
+    } catch { /* silencioso */ }
+    setLoading(false);
+  };
+
+  const saveTier = async () => {
+    if (!companyId) return;
+    setSaving(true);
+    try {
+      const newTier = parseInt(tierInput, 10) || 1000;
+      await supabase.from("system_configs").upsert(
+        { key: "meta_tier_limit", value: String(newTier), company_id: companyId },
+        { onConflict: "key,company_id" }
+      );
+      setTier(newTier);
+      toast.success("TIER salvo! Recarregando distribuição...");
+      await loadData();
+    } catch (e: any) {
+      toast.error("Erro ao salvar TIER: " + e.message);
+    }
+    setSaving(false);
+  };
+
+  const perConsultor = consultores.length > 0 ? Math.floor(tier / consultores.length) : 0;
+
+  return (
+    <Card className="shadow-sm bg-card/80 backdrop-blur-sm border-primary/20">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <MessageSquare className="h-5 w-5 text-primary" />
+          WhatsApp Meta — Distribuição TIER
+          <Badge variant="outline" className="ml-auto text-xs">CEO</Badge>
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">Gerencie o TIER Meta e veja como os disparos são distribuídos</p>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {/* TIER Atual */}
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="space-y-1 flex-1 min-w-[160px]">
+            <Label>TIER Meta (disparos/dia)</Label>
+            <div className="flex gap-2">
+              <select
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm flex-1"
+                value={tierInput}
+                onChange={e => setTierInput(e.target.value)}
+              >
+                <option value="1000">TIER 1 — 1.000/dia</option>
+                <option value="10000">TIER 2 — 10.000/dia</option>
+                <option value="100000">TIER 3 — 100.000/dia</option>
+                <option value="999999">TIER 4 — Ilimitado</option>
+              </select>
+              <Button size="sm" onClick={saveTier} disabled={saving} className="shrink-0">
+                {saving ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Salvando</> : "Salvar"}
+              </Button>
+            </div>
+          </div>
+          {consultores.length > 0 && (
+            <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-2 text-center">
+              <p className="text-2xl font-bold text-primary">{perConsultor.toLocaleString("pt-BR")}</p>
+              <p className="text-xs text-muted-foreground">disparos / consultor</p>
+              <p className="text-[10px] text-muted-foreground">{tier.toLocaleString("pt-BR")} ÷ {consultores.length} consultores</p>
+            </div>
+          )}
+        </div>
+
+        {/* Tabela de consultores */}
+        {loading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map(i => <div key={i} className="h-8 bg-muted animate-pulse rounded" />)}
+          </div>
+        ) : consultores.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">Nenhum consultor ativo encontrado</p>
+        ) : (
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Uso hoje por consultor</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/50 text-muted-foreground text-xs">
+                    <th className="text-left py-2 pr-4 font-medium">Consultor</th>
+                    <th className="text-right py-2 px-2 font-medium">Limite</th>
+                    <th className="text-right py-2 px-2 font-medium">Usados</th>
+                    <th className="text-right py-2 pl-2 font-medium">Disponíveis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {consultores.map(c => {
+                    const disponivel = Math.max(0, c.limite - c.disparosHoje);
+                    const usoPct = c.limite > 0 ? Math.round((c.disparosHoje / c.limite) * 100) : 0;
+                    return (
+                      <tr key={c.id} className="border-b border-border/30 hover:bg-muted/20">
+                        <td className="py-2 pr-4 font-medium truncate max-w-[140px]">{c.name}</td>
+                        <td className="text-right py-2 px-2 text-muted-foreground">{c.limite.toLocaleString("pt-BR")}</td>
+                        <td className="text-right py-2 px-2">
+                          <span className={usoPct >= 90 ? "text-red-400 font-semibold" : usoPct >= 70 ? "text-yellow-400" : "text-foreground"}>
+                            {c.disparosHoje.toLocaleString("pt-BR")}
+                          </span>
+                        </td>
+                        <td className="text-right py-2 pl-2 text-emerald-400 font-semibold">{disponivel.toLocaleString("pt-BR")}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-border/50 text-xs text-muted-foreground font-medium">
+                    <td className="py-2 pr-4">Total</td>
+                    <td className="text-right py-2 px-2">{tier.toLocaleString("pt-BR")}</td>
+                    <td className="text-right py-2 px-2">
+                      {consultores.reduce((a, c) => a + c.disparosHoje, 0).toLocaleString("pt-BR")}
+                    </td>
+                    <td className="text-right py-2 pl-2 text-emerald-400">
+                      {Math.max(0, tier - consultores.reduce((a, c) => a + c.disparosHoje, 0)).toLocaleString("pt-BR")}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function isCommercialRole(role: RoleOption): boolean {
   const name = role.name.toLowerCase();
   return (role.level === 2 || role.level === 3) &&
@@ -506,6 +690,9 @@ export default function Configuracoes() {
             </Button>
           </CardContent>
         </Card>
+
+        {/* ── WhatsApp Meta — Distribuição por Consultor (CEO only) ── */}
+        {isCEO && <WhatsAppMetaSection companyId={companyId} />}
 
         {/* ── MÓDULO 8: Configuração por Empresa (CEO only) ── */}
         {isCEO && (
