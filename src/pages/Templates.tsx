@@ -88,7 +88,8 @@ const scoreBadge = (s: number) => {
 export default function Templates() {
   const { collaborator } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
-  const effectiveCompanyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : collaborator?.company_id;  const [templates, setTemplates] = useState<Template[]>([]);
+  const effectiveCompanyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : collaborator?.company_id;
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("approved");
