@@ -248,46 +248,50 @@ export default function VoiceSimulate() {
 
     const recognition = new SpeechRecognition();
     recognition.lang = "pt-BR";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    let finalTranscript = "";
+    recognition.continuous = false;
+    recognition.interimResults = false;
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscript += result[0].transcript;
-        } else {
-          interim += result[0].transcript;
+      const result = event.results[0];
+      if (result && result.isFinal) {
+        const text = result[0].transcript.trim();
+        if (text) {
+          addEntry("lead", text);
+          callAiSimulator(text);
         }
-      }
-
-      if (finalTranscript.trim()) {
-        const text = finalTranscript.trim();
-        finalTranscript = "";
-        addEntry("lead", text);
-        callAiSimulator(text);
       }
     };
 
     recognition.onend = () => {
-      // Restart if still in call
-      if (sessionRef.current === "browser") {
-        try { recognition.start(); } catch {}
-      }
       setListening(false);
+      // Restart automatically if still in call
+      if (sessionRef.current === "browser") {
+        setTimeout(() => {
+          try {
+            recognition.start();
+            setListening(true);
+          } catch {}
+        }, 300);
+      }
     };
 
-    recognition.onstart = () => setListening(true);
+    recognition.onstart = () => {
+      setListening(true);
+      addSystem("🎤 Microfone ativo — fale agora");
+    };
     recognition.onerror = (e: any) => {
-      if (e.error !== "no-speech" && e.error !== "aborted") {
+      if (e.error === "not-allowed") {
+        addSystem("❌ Microfone bloqueado. Permita o acesso nas configurações do navegador.");
+      } else if (e.error !== "no-speech" && e.error !== "aborted") {
         addSystem(`⚠️ Erro microfone: ${e.error}`);
       }
     };
 
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (err: any) {
+      addSystem(`❌ Não foi possível iniciar o microfone: ${err.message}`);
+    }
     recognitionRef.current = recognition;
     sessionRef.current = "browser";
   }, [addSystem, addEntry, callAiSimulator]);
