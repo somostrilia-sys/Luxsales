@@ -116,6 +116,8 @@ export default function LeadsMaster() {
   const [fSegment, setFSegment] = useState("all");
   const [fSearch, setFSearch] = useState("");
   const [fSort, setFSort] = useState("created_at");
+  // FASE 1: filtro "apenas não distribuídos" (assigned_to IS NULL)
+  const [fOnlyUndistributed, setFOnlyUndistributed] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -205,6 +207,8 @@ export default function LeadsMaster() {
       if (fTemp !== "all") countQ = countQ.eq("lead_temperature", fTemp);
       if (fSegment !== "all") countQ = countQ.eq("segment", fSegment);
       if (fSearch.length >= 3) countQ = countQ.or(`lead_name.ilike.%${fSearch}%,phone_number.ilike.%${fSearch}%`);
+      // FASE 1: filtrar apenas leads não distribuídos (assigned_to IS NULL)
+      if (fOnlyUndistributed) countQ = countQ.is("assigned_to", null);
       const { count } = await countQ.abortSignal(controller.signal);
       setTotalRows(count || 0);
 
@@ -217,6 +221,8 @@ export default function LeadsMaster() {
       if (fTemp !== "all") query = query.eq("lead_temperature", fTemp);
       if (fSegment !== "all") query = query.eq("segment", fSegment);
       if (fSearch.length >= 3) query = query.or(`lead_name.ilike.%${fSearch}%,phone_number.ilike.%${fSearch}%`);
+      // FASE 1: filtrar apenas leads não distribuídos
+      if (fOnlyUndistributed) query = query.is("assigned_to", null);
 
       const offset = page * PAGE_SIZE;
       const { data, error } = await query
@@ -249,7 +255,7 @@ export default function LeadsMaster() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [company_id, user_role, page, fStatus, fTemp, fSegment, fSearch, fSort]);
+  }, [company_id, user_role, page, fStatus, fTemp, fSegment, fSearch, fSort, fOnlyUndistributed]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
@@ -449,6 +455,14 @@ export default function LeadsMaster() {
             className="h-8 text-xs w-[220px]"
             onChange={e => handleSearch(e.target.value)}
           />
+          {/* FASE 1: Toggle "apenas não distribuídos" */}
+          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            <Checkbox
+              checked={fOnlyUndistributed}
+              onCheckedChange={v => { setFOnlyUndistributed(Boolean(v)); setPage(0); }}
+            />
+            <span className="text-xs text-muted-foreground">Não distribuídos</span>
+          </label>
         </div>
 
         {/* Bulk Actions Bar */}
@@ -483,7 +497,7 @@ export default function LeadsMaster() {
               <div className="text-center py-12">
                 <Users className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
                 <p className="text-sm text-muted-foreground">Nenhum lead encontrado</p>
-                <Button variant="outline" size="sm" className="mt-3" onClick={() => { setFStatus("all"); setFTemp("all"); setFSegment("all"); setFSearch(""); setPage(0); }}>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => { setFStatus("all"); setFTemp("all"); setFSegment("all"); setFSearch(""); setFOnlyUndistributed(false); setPage(0); }}>
                   Limpar filtros
                 </Button>
               </div>
