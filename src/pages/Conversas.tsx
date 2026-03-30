@@ -360,7 +360,6 @@ export default function Conversas() {
         };
         setMessages((prev) => [...prev, sentMsg]);
         setMessageText("");
-        inputRef.current?.focus();
       } else {
         const d = await res.json().catch(() => ({}));
         toast.error(d.error || "Erro ao enviar mensagem");
@@ -369,6 +368,7 @@ export default function Conversas() {
       toast.error("Erro de conexão");
     }
     setSending(false);
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   // ── Send template ──
