@@ -133,6 +133,9 @@ export default function LeadsMaster() {
   const [distributeOpen, setDistributeOpen] = useState(false);
   const [priorityOpen, setPriorityOpen] = useState(false);
   const [distributeCollab, setDistributeCollab] = useState("");
+  const [distributeCompanyId, setDistributeCompanyId] = useState("");
+  const [distributeMode, setDistributeMode] = useState<"all" | "specific">("all");
+  const [companiesList, setCompaniesList] = useState<{ id: string; name: string }[]>([]);
   const [priorityValue, setPriorityValue] = useState([5]);
   const [actionLoading, setActionLoading] = useState(false);
   const [collabs, setCollabs] = useState<{ id: string; name: string }[]>([]);
@@ -301,15 +304,41 @@ export default function LeadsMaster() {
     setDetailLoading(false);
   };
 
+  // load consultants (commercial roles only) for a given company
+  const loadConsultantsForCompany = async (cid: string) => {
+    if (!cid) return;
+    try {
+      const { data } = await supabase
+        .from("collaborators")
+        .select("id, name, roles(level, name)")
+        .eq("company_id", cid)
+        .eq("active", true);
+      const filtered = (data || []).filter((c: any) => {
+        const role = Array.isArray(c.roles) ? c.roles[0] : c.roles;
+        const level = role?.level ?? 99;
+        const roleName = (role?.name ?? "").toLowerCase();
+        return [1, 2, 3].includes(level) &&
+          (roleName.includes("comercial") || roleName.includes("consultor") ||
+           roleName.includes("vendas") || roleName.includes("atend"));
+      });
+      setCollabs(filtered.map((c: any) => ({ id: c.id, name: c.name || c.id })));
+    } catch { /* silent */ }
+  };
+
   // load collabs for distribute modal
   const openDistribute = async () => {
+    const preselect = company_id ?? baseCompanyId;
+    if (preselect) setDistributeCompanyId(preselect);
+    setDistributeMode("all");
+    setDistributeCollab("");
+    setCollabs([]);
     setDistributeOpen(true);
-    if (collabs.length === 0) {
-      try {
-        const data = await callEdge("dispatch-permissions", { action: "list", ...base });
-        setCollabs((data.permissions || []).map((p: any) => ({ id: p.collaborator_id, name: p.name || p.collaborator_id })));
-      } catch { /* silent */ }
+    // Load company list for CEO
+    if (roleLevel === 0 && companiesList.length === 0) {
+      const { data } = await supabase.from("companies").select("id, name").order("name");
+      setCompaniesList(data || []);
     }
+    if (preselect) loadConsultantsForCompany(preselect);
   };
 
   // single lead actions
@@ -683,22 +712,70 @@ export default function LeadsMaster() {
       {/* ═══ Distribute Modal ═══ */}
       <Dialog open={distributeOpen} onOpenChange={setDistributeOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Distribuir para Colaborador</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <Label>Colaborador</Label>
-            <Select value={distributeCollab} onValueChange={setDistributeCollab}>
-              <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-              <SelectContent>
-                {collabs.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+          <DialogHeader><DialogTitle>Distribuir Leads</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            {/* Empresa — obrigatório */}
+            <div className="space-y-1.5">
+              <Label className="text-sm">Empresa <span className="text-red-400">*</span></Label>
+              <Select
+                value={distributeCompanyId}
+                onValueChange={async (v) => {
+                  setDistributeCompanyId(v);
+                  setCollabs([]);
+                  setDistributeCollab("");
+                  await loadConsultantsForCompany(v);
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Selecionar empresa..." /></SelectTrigger>
+                <SelectContent>
+                  {(companiesList.length > 0
+                    ? companiesList
+                    : [{ id: baseCompanyId, name: "Empresa atual" }]
+                  ).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Modo de distribuição */}
+            <div className="space-y-1.5">
+              <Label className="text-sm">Distribuir para</Label>
+              <Select value={distributeMode} onValueChange={(v: "all" | "specific") => { setDistributeMode(v); setDistributeCollab(""); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos consultores da empresa</SelectItem>
+                  <SelectItem value="specific">Consultor específico</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Consultor específico */}
+            {distributeMode === "specific" && (
+              <div className="space-y-1.5">
+                <Label className="text-sm">Consultor</Label>
+                <Select value={distributeCollab} onValueChange={setDistributeCollab}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar consultor..." /></SelectTrigger>
+                  <SelectContent>
+                    {collabs.length === 0
+                      ? <SelectItem value="__none" disabled>Nenhum consultor comercial encontrado</SelectItem>
+                      : collabs.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)
+                    }
+                  </SelectContent>
+                </Select>
+                {collabs.length === 0 && distributeCompanyId && (
+                  <p className="text-xs text-muted-foreground">Apenas consultores com perfil comercial (levels 1-3) são listados.</p>
+                )}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">{selectedPhones.length} lead(s) selecionado(s)</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDistributeOpen(false)}>Cancelar</Button>
-            <Button disabled={!distributeCollab || actionLoading}
+            <Button
+              disabled={!distributeCompanyId || (distributeMode === "specific" && !distributeCollab) || actionLoading}
               onClick={async () => {
-                await bulkAction("distribute", { collaborator_id: distributeCollab });
+                if (distributeMode === "all") {
+                  await bulkAction("distribute", { company_id: distributeCompanyId, distribute_to_all: true });
+                } else {
+                  await bulkAction("distribute", { collaborator_id: distributeCollab, company_id: distributeCompanyId });
+                }
                 setDistributeOpen(false);
               }}>
               {actionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null} Distribuir

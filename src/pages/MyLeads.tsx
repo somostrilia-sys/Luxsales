@@ -38,9 +38,12 @@ interface LeadRow {
   leadId: string;
   name: string | null;
   phone: string | null;
+  phoneNormalized: string | null;
   score: number | null;
   temperature: string | null;
   status: string | null;
+  interestStatus: string | null;
+  callAttempts: number;
   lastContact: string | null;
   notes: string | null;
 }
@@ -58,6 +61,8 @@ export default function MyLeads() {
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
 
+  const [counters, setCounters] = useState({ total: 0, pending: 0, interested: 0, processed: 0 });
+
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesTarget, setNotesTarget] = useState<{ poolId: string; current: string } | null>(null);
   const [notesText, setNotesText] = useState("");
@@ -70,16 +75,39 @@ export default function MyLeads() {
 
   useEffect(() => { setPage(0); }, [debouncedSearch, statusFilter, selectedCompanyId]);
 
+  const fetchCounters = useCallback(async () => {
+    if (!collaborator) return;
+    const make = () =>
+      supabase.from("consultant_lead_pool")
+        .select("*", { count: "exact", head: true })
+        .eq("collaborator_id", collaborator.id);
+    const [all, pending, interested, processed] = await Promise.all([
+      make(),
+      make().or("interest_status.is.null,interest_status.eq.pending"),
+      make().eq("interest_status", "interested"),
+      make().in("interest_status", ["not_interested_2", "discarded"]),
+    ]);
+    setCounters({
+      total: (all.count ?? 0),
+      pending: pending.count ?? 0,
+      interested: interested.count ?? 0,
+      processed: processed.count ?? 0,
+    });
+  }, [collaborator]);
+
+  useEffect(() => { fetchCounters(); }, [fetchCounters]);
+
   const fetchLeads = useCallback(async () => {
     if (!collaborator) return;
     setLoading(true);
     try {
       {
-        // Count (without search — search is client-side for joined tables)
+        // Count active leads (excluding discarded/not_interested_2)
         let cq = supabase
           .from("consultant_lead_pool")
           .select("*", { count: "exact", head: true })
-          .eq("collaborator_id", collaborator.id);
+          .eq("collaborator_id", collaborator.id)
+          .or("interest_status.is.null,interest_status.not.in.(not_interested_2,discarded)");
         if (statusFilter !== "all") cq = cq.eq("status", statusFilter);
         const { count } = await cq;
         setTotal(count ?? 0);
@@ -87,8 +115,9 @@ export default function MyLeads() {
         // Data
         let dq = supabase
           .from("consultant_lead_pool")
-          .select("id, status, notes, last_contact_at, priority, lead:leads_master(id, lead_name, phone_number, lead_score, lead_temperature)")
-          .eq("collaborator_id", collaborator.id);
+          .select("id, status, notes, last_contact_at, priority, call_attempts, interest_status, phone_normalized, lead:leads_master(id, lead_name, phone_number, lead_score, lead_temperature)")
+          .eq("collaborator_id", collaborator.id)
+          .or("interest_status.is.null,interest_status.not.in.(not_interested_2,discarded)");
         if (statusFilter !== "all") dq = dq.eq("status", statusFilter);
         const { data, error } = await dq
           .order("priority", { ascending: false })
@@ -100,9 +129,12 @@ export default function MyLeads() {
           leadId: r.lead?.id ?? r.id,
           name: r.lead?.lead_name ?? null,
           phone: r.lead?.phone_number ?? null,
+          phoneNormalized: r.phone_normalized ?? null,
           score: r.lead?.lead_score ?? null,
           temperature: r.lead?.lead_temperature ?? null,
           status: r.status,
+          interestStatus: r.interest_status ?? null,
+          callAttempts: r.call_attempts ?? 0,
           lastContact: r.last_contact_at,
           notes: r.notes,
         }));
@@ -172,8 +204,23 @@ export default function MyLeads() {
     <DashboardLayout>
       <PageHeader
         title="Meus Leads"
-        subtitle={`${total.toLocaleString("pt-BR")} leads`}
+        subtitle={`${total.toLocaleString("pt-BR")} leads ativos`}
       />
+
+      {/* Counters */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        {[
+          { label: "Total leads", value: counters.total, cls: "text-foreground" },
+          { label: "Pendentes", value: counters.pending, cls: "text-blue-400" },
+          { label: "Com interesse", value: counters.interested, cls: "text-green-400" },
+          { label: "Processados", value: counters.processed, cls: "text-muted-foreground" },
+        ].map(c => (
+          <div key={c.label} className="rounded-lg border border-border bg-card/60 px-4 py-3 text-center">
+            <p className={`text-xl font-bold ${c.cls}`}>{c.value.toLocaleString("pt-BR")}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{c.label}</p>
+          </div>
+        ))}
+      </div>
 
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[220px]">
@@ -236,7 +283,7 @@ export default function MyLeads() {
                     return (
                       <TableRow key={row.poolId ?? row.leadId}>
                         <TableCell className="font-medium">{row.name ?? "—"}</TableCell>
-                        <TableCell className="font-mono text-xs">{row.phone ?? "—"}</TableCell>
+                        <TableCell className="font-mono text-xs">{row.phoneNormalized ?? row.phone ?? "—"}</TableCell>
                         <TableCell>
                           {row.score != null ? (
                             <span className={`text-xs font-bold ${row.score >= 70 ? "text-green-400" : row.score >= 40 ? "text-yellow-400" : "text-red-400"}`}>

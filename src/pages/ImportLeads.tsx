@@ -66,6 +66,45 @@ const sourceOptions = [
   { value: "event", label: "Evento" },
 ];
 
+// ── phone normalization (JS equivalent of normalize_phone SQL) ──
+function normalizePhone(raw: string): { normalized: string | null; wasFixed: boolean } {
+  const cleaned = raw.replace(/\D/g, "");
+  let normalized: string | null = null;
+  let wasFixed = false;
+
+  if (cleaned.length >= 12 && cleaned.startsWith("55")) {
+    normalized = "+" + cleaned;
+    wasFixed = !raw.trim().startsWith("+");
+  } else if (cleaned.length === 11 && cleaned[2] === "9") {
+    normalized = "+55" + cleaned;
+    wasFixed = true;
+  } else if (cleaned.length === 10) {
+    normalized = "+55" + cleaned.slice(0, 2) + "9" + cleaned.slice(2);
+    wasFixed = true;
+  }
+
+  // Validate: +55XX9XXXXXXXX = 14 chars, index 4 = '9' (celular)
+  if (normalized !== null && (normalized.length !== 14 || normalized[4] !== "9")) {
+    normalized = null;
+    wasFixed = false;
+  }
+
+  return { normalized, wasFixed };
+}
+
+function computePhoneStats(rows: Record<string, string>[], phoneCol: string) {
+  let accepted = 0, corrected = 0, discarded = 0;
+  rows.forEach(row => {
+    const raw = (row[phoneCol] || "").trim();
+    if (!raw) { discarded++; return; }
+    const { normalized, wasFixed } = normalizePhone(raw);
+    if (!normalized) discarded++;
+    else if (wasFixed) corrected++;
+    else accepted++;
+  });
+  return { accepted, corrected, discarded };
+}
+
 interface ImportHistory {
   id: string; started_at: string; file_name: string; total: number;
   imported: number; duplicates: number; invalid: number; status: string;
@@ -203,6 +242,12 @@ export default function ImportLeads() {
           }
         }
       });
+      // normalize phone
+      if (lead.phone_number) {
+        const { normalized } = normalizePhone(String(lead.phone_number));
+        if (normalized) lead.phone_normalized = normalized;
+        else { lead.phone_normalized = null; }
+      }
       // extra data
       const mappedCols = new Set(Object.values(mapping));
       const extra: Record<string, string> = {};
@@ -220,7 +265,7 @@ export default function ImportLeads() {
         lead.tags = [...((lead.tags as string[]) || []), ...et];
       }
       return lead;
-    }).filter(l => l.phone_number);
+    }).filter(l => l.phone_number && l.phone_normalized !== null);
 
     if (allLeads.length === 0) { toast.error("Nenhum lead válido encontrado"); setImporting(false); return; }
 
@@ -455,11 +500,35 @@ export default function ImportLeads() {
               </div>
 
               {/* Summary */}
-              <div className="rounded-lg bg-muted/30 border border-border p-4 space-y-1 text-sm">
-                <p><strong>{rawRows.length.toLocaleString("pt-BR")}</strong> leads para importar</p>
-                <p>Arquivo: <Badge variant="secondary" className="text-xs">{fileName}</Badge></p>
-                <p>Fonte: {sourceOptions.find(o => o.value === source)?.label}</p>
-              </div>
+              {(() => {
+                const phoneStats = mapping.phone_number ? computePhoneStats(rawRows, mapping.phone_number) : null;
+                return (
+                  <div className="rounded-lg bg-muted/30 border border-border p-4 space-y-2 text-sm">
+                    <p><strong>{rawRows.length.toLocaleString("pt-BR")}</strong> leads para importar</p>
+                    <p>Arquivo: <Badge variant="secondary" className="text-xs">{fileName}</Badge></p>
+                    <p>Fonte: {sourceOptions.find(o => o.value === source)?.label}</p>
+                    {phoneStats && (
+                      <div className="pt-1 border-t border-border/50 grid grid-cols-3 gap-2 text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle className="h-3.5 w-3.5 text-green-400" />
+                          <span><strong className="text-green-400">{phoneStats.accepted.toLocaleString("pt-BR")}</strong> aceitos</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5 text-yellow-400" />
+                          <span><strong className="text-yellow-400">{phoneStats.corrected.toLocaleString("pt-BR")}</strong> corrigidos</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <XCircle className="h-3.5 w-3.5 text-red-400" />
+                          <span><strong className="text-red-400">{phoneStats.discarded.toLocaleString("pt-BR")}</strong> descartados</span>
+                        </div>
+                        {phoneStats.discarded > 0 && (
+                          <p className="col-span-3 text-muted-foreground">Telefones fixos ou inválidos são descartados automaticamente.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Import button */}
               <Button onClick={doImport} disabled={importing} className="w-full">

@@ -97,6 +97,7 @@ interface CompanyConfig {
     threshold: number;
     roles: string[];
     interval: string;
+    metaTierDaily: number;
   };
   ai: {
     model: string;
@@ -109,7 +110,7 @@ interface CompanyConfig {
 const COMPANY_CONFIG_DEFAULTS: CompanyConfig = {
   voip: { servidor: "192.168.0.206", porta: 5060, numero: "", ativo: true },
   whatsapp: { numero: "", token: "", tier: 1000, phoneNumberId: "", businessAccountId: "" },
-  distribution: { batchSize: 5000, threshold: 500, roles: [], interval: "manual" },
+  distribution: { batchSize: 5000, threshold: 500, roles: [], interval: "manual", metaTierDaily: 250 },
   ai: { model: "claude-haiku-20240307", tone: "consultivo", temperature: 0.7, maxTokens: 500 },
 };
 
@@ -196,11 +197,18 @@ export default function Configuracoes() {
     setSavingCompany(cid);
     try {
       const cfg = companyConfigs[cid] ?? COMPANY_CONFIG_DEFAULTS;
+      // Save full JSON blob
       const { error } = await supabase.from("system_configs").upsert(
         { key: `company_config_${cid}`, value: JSON.stringify(cfg), company_id: cid },
         { onConflict: "key" }
       );
       if (error) throw error;
+      // Also save flat keys for edge functions
+      await supabase.from("system_configs").upsert([
+        { key: `distribution_batch_size_${cid}`, value: String(cfg.distribution.batchSize), company_id: cid },
+        { key: `distribution_threshold_${cid}`, value: String(cfg.distribution.threshold), company_id: cid },
+        { key: `meta_tier_daily_${cid}`, value: String(cfg.distribution.metaTierDaily ?? 250), company_id: cid },
+      ], { onConflict: "key" });
       toast.success("Configurações da empresa salvas!");
     } catch (e: any) {
       toast.error("Erro ao salvar: " + e.message);
@@ -641,6 +649,18 @@ export default function Configuracoes() {
                                     <SelectItem value="weekly">Semanal</SelectItem>
                                   </SelectContent>
                                 </Select>
+                              </div>
+                              <div className="col-span-2 space-y-1">
+                                <Label className="text-xs">TIER Meta diário</Label>
+                                <p className="text-xs text-muted-foreground">Limite diário de disparos da Meta para esta empresa</p>
+                                <Input
+                                  className="h-8 text-sm"
+                                  type="number"
+                                  min={0}
+                                  placeholder="250"
+                                  value={cfg.distribution.metaTierDaily ?? 250}
+                                  onChange={e => updateCompanyConfig(company.id, "distribution", "metaTierDaily", parseInt(e.target.value) || 250)}
+                                />
                               </div>
                             </div>
                           </TabsContent>
