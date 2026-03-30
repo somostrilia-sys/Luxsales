@@ -196,6 +196,29 @@ export default function VoiceSimulate() {
     }
   }, []);
 
+  // Limpar markdown e formatar para fala natural
+  const cleanForTTS = (text: string): string => {
+    return text
+      .replace(/\*\*([^*]+)\*\*/g, "$1")   // **bold** → bold
+      .replace(/\*([^*]+)\*/g, "$1")        // *italic* → italic
+      .replace(/#{1,6}\s/g, "")             // # headers
+      .replace(/[-•]\s/g, "")               // bullets
+      .replace(/\n{2,}/g, ". ")             // double newlines → period
+      .replace(/\n/g, ", ")                 // single newline → comma
+      .replace(/[`_~]/g, "")               // backticks, underscores
+      .replace(/\s{2,}/g, " ")             // multiple spaces
+      .trim();
+  };
+
+  const VOICE_SYSTEM_PROMPT = `Você está em uma LIGAÇÃO TELEFÔNICA. Responda SEMPRE de forma curta e natural, como uma pessoa real falando ao telefone.
+
+REGRAS OBRIGATÓRIAS:
+- Máximo 2-3 frases curtas por resposta
+- NUNCA use markdown, bullets, asteriscos ou formatação
+- NUNCA faça listas ou tópicos
+- Fale de forma coloquial e direta
+- Seja conciso como num telefonema real`;
+
   const callAiSimulator = useCallback(async (userMessage: string) => {
     setAiThinking(true);
     conversationRef.current.push({ role: "user", content: userMessage });
@@ -203,7 +226,11 @@ export default function VoiceSimulate() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
-      // Só LLM — sem TTS no cloud, TTS é local via XTTS
+      const messagesWithSystem = [
+        { role: "system", content: VOICE_SYSTEM_PROMPT },
+        ...conversationRef.current,
+      ];
+
       const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
         method: "POST",
         headers: {
@@ -212,18 +239,21 @@ export default function VoiceSimulate() {
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
         },
         body: JSON.stringify({
-          messages: conversationRef.current,
+          messages: messagesWithSystem,
           company_id: companyId,
           context: { phone_number: phoneNumber },
+          system_prompt: VOICE_SYSTEM_PROMPT,
         }),
       });
 
       const data = await res.json();
-      const aiText = data.text || data.response || data.message || "...";
+      const rawText = data.text || data.response || data.message || "...";
+      // Limpar e truncar para TTS rápido
+      const aiText = cleanForTTS(rawText).slice(0, 200);
       conversationRef.current.push({ role: "assistant", content: aiText });
       addEntry("ai", aiText);
 
-      // TTS via XTTS local (voz do Alex, speed 1.15)
+      // TTS via XTTS
       await playXTTS(aiText);
     } catch (err: any) {
       addSystem(`❌ Erro IA: ${err.message || "falha na conexão"}`);
