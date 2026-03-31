@@ -54,7 +54,7 @@ export default function ConfigWhatsApp() {
     const { data: companies } = await supabase
       .from("companies")
       .select("id, name")
-      .not("id", "in", "('d33b6a84-8f72-4441-b2eb-dd151a31ac12','6fa2b90c-e123-4fcc-8e8b-c639f58636f8')")
+      .not("id", "in", "(d33b6a84-8f72-4441-b2eb-dd151a31ac12,6fa2b90c-e123-4fcc-8e8b-c639f58636f8)")
       .order("name");
 
     if (!companies) { setLoading(false); return; }
