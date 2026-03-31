@@ -27,8 +27,6 @@ interface TranscriptEntry {
   ts: string;
 }
 
-declare const JsSIP: any;
-
 // ── Web Speech API types ──
 interface SpeechRecognitionEvent {
   resultIndex: number;
@@ -56,7 +54,6 @@ export default function VoiceSimulate() {
   const [sipUser, setSipUser] = useState("");
   const [sipPass, setSipPass] = useState("");
   const [sipTransport, setSipTransport] = useState("WSS");
-  const [sipConnected, setSipConnected] = useState(false);
   const [savingSip, setSavingSip] = useState(false);
   const [loadingSip, setLoadingSip] = useState(true);
 
@@ -72,7 +69,6 @@ export default function VoiceSimulate() {
   const ttsPlayingRef = useRef(false);
   const recognitionStartingRef = useRef(false);
   const recognitionRef = useRef<any>(null);
-  const uaRef = useRef<any>(null);
   const sessionRef = useRef<any>(null);
   const conversationRef = useRef<{ role: string; content: string }[]>([]);
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -723,121 +719,116 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
     addSystem("📵 Modo Rápido encerrado");
   }, [disconnectRealtime, addSystem]);
 
-  // ══════════════════════════════════════════
-  // ── MODO VOIP: SIP via JsSIP ──
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════
+  // ── MODO VOIP: Pipeline Real (ESL Controller + FreeSWITCH)
+  // ══════════════════════════════════════════════════════════
 
-  const connectSip = useCallback(() => {
-    if (typeof JsSIP === "undefined") {
-      addSystem("❌ JsSIP não carregado. Recarregue a página.");
+  const voipCallUuidRef = useRef<string | null>(null);
+  const voipPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Originar chamada real via pipeline (Edge Function → VPS tunnel → ESL → FreeSWITCH)
+  const startVoipCall = useCallback(async () => {
+    if (!phoneNumber || phoneNumber.replace(/\D/g, "").length < 10) {
+      toast.error("Informe um número válido com DDD");
       return;
     }
-    if (!sipHost || !sipUser) {
-      toast.error("Configure host e usuário SIP primeiro");
-      return;
-    }
+
+    setInCall(true);
+    setCallTimer(0);
+    setTranscript([]);
+    timerRef.current = setInterval(() => setCallTimer((p) => p + 1), 1000);
+    addSystem("📞 Originando chamada via pipeline VoIP...");
 
     try {
-      // Disconnect previous
-      if (uaRef.current) {
-        uaRef.current.stop();
-        uaRef.current = null;
+      let authToken = SUPABASE_ANON_KEY;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) authToken = session.access_token;
+      } catch {}
+
+      const res = await fetch(`${EDGE_BASE}/orchestrator-proxy`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          _path: "/call",
+          to: phoneNumber.replace(/\D/g, ""),
+          company_id: companyId,
+        }),
+        signal: AbortSignal.timeout(20000),
+      });
+
+      const data = await res.json();
+      if (data.success && data.uuid) {
+        voipCallUuidRef.current = data.uuid;
+        addSystem(`✅ Chamada originada: ${data.destination}`);
+        addSystem(`🔊 Pipeline IA ativo — Whisper → Qwen → XTTS (Lucas)`);
+
+        // Poll call status every 3s
+        voipPollRef.current = setInterval(async () => {
+          try {
+            const pollRes = await fetch(`${EDGE_BASE}/orchestrator-proxy?path=${encodeURIComponent("/calls")}`, {
+              headers: { Authorization: `Bearer ${authToken}`, apikey: SUPABASE_ANON_KEY },
+              signal: AbortSignal.timeout(5000),
+            });
+            const calls = await pollRes.json();
+            const myCall = Array.isArray(calls) ? calls.find((c: any) => c.uuid === voipCallUuidRef.current) : null;
+
+            if (!myCall && voipCallUuidRef.current) {
+              // Call ended on server side
+              endVoipCall("Chamada encerrada pelo servidor");
+            }
+          } catch {}
+        }, 3000);
+      } else {
+        addSystem(`❌ Erro: ${data.error || "Falha ao originar"}`);
+        endVoipCall("Falha ao originar chamada");
       }
-
-      const wsPort = sipTransport === "WSS" ? "7443" : "5066";
-      const wsUri = `${sipTransport.toLowerCase()}://${sipHost}:${wsPort}`;
-      const socket = new JsSIP.WebSocketInterface(wsUri);
-      const config = {
-        sockets: [socket],
-        uri: `sip:${sipUser}@${sipHost}`,
-        password: sipPass,
-        display_name: "LuxSales",
-        register: true,
-      };
-
-      const ua = new JsSIP.UA(config);
-
-      ua.on("registered", () => {
-        setSipConnected(true);
-        addSystem("✅ Registrado no servidor SIP");
-      });
-      ua.on("unregistered", () => {
-        setSipConnected(false);
-        addSystem("⚠️ Desconectado do SIP");
-      });
-      ua.on("registrationFailed", (e: any) => {
-        setSipConnected(false);
-        addSystem(`❌ Falha no registro SIP: ${e?.cause || "desconhecido"}`);
-      });
-      ua.on("newRTCSession", (data: any) => {
-        if (data.originator === "remote") {
-          data.session.answer({ mediaConstraints: { audio: true, video: false } });
-        }
-      });
-
-      ua.start();
-      uaRef.current = ua;
-      addSystem("🔄 Conectando ao servidor SIP...");
     } catch (err: any) {
-      addSystem(`❌ Erro SIP: ${err.message}`);
+      addSystem(`❌ Pipeline indisponível: ${err.message}`);
+      endVoipCall("Pipeline offline");
     }
-  }, [sipHost, sipUser, sipPass, sipTransport, addSystem]);
+  }, [phoneNumber, companyId, addSystem]);
 
-  const startSipCall = useCallback(() => {
-    if (!uaRef.current || !sipConnected) return;
+  const endVoipCall = useCallback(async (reason?: string) => {
+    // Hangup no servidor
+    if (voipCallUuidRef.current) {
+      try {
+        let authToken = SUPABASE_ANON_KEY;
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) authToken = session.access_token;
+        } catch {}
 
-    const target = `sip:${phoneNumber}@${sipHost}`;
-    const options = {
-      mediaConstraints: { audio: true, video: false },
-      rtcOfferConstraints: { offerToReceiveAudio: true },
-    };
-
-    const session = uaRef.current.call(target, options);
-
-    session.on("connecting", () => addSystem("📞 Chamando..."));
-    session.on("accepted", () => {
-      setInCall(true);
-      setCallTimer(0);
-      timerRef.current = setInterval(() => setCallTimer((p) => p + 1), 1000);
-      addSystem("✅ Chamada aceita");
-    });
-    session.on("confirmed", () => {
-      const streams = session.connection?.getRemoteStreams?.();
-      if (streams?.length && audioRef.current) {
-        audioRef.current.srcObject = streams[0];
-      }
-    });
-    session.on("ended", () => endSipCall("Chamada encerrada"));
-    session.on("failed", (e: any) => endSipCall(`Chamada falhou: ${e?.cause || "código desconhecido"}`));
-
-    if (session.connection) {
-      session.connection.ontrack = (event: RTCTrackEvent) => {
-        if (audioRef.current && event.streams?.[0]) {
-          audioRef.current.srcObject = event.streams[0];
-        }
-      };
+        await fetch(`${EDGE_BASE}/orchestrator-proxy`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+            apikey: SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ _path: "/hangup", uuid: voipCallUuidRef.current }),
+          signal: AbortSignal.timeout(5000),
+        });
+      } catch {}
     }
 
-    sessionRef.current = session;
-  }, [sipConnected, sipHost, phoneNumber, addSystem]);
-
-  const endSipCall = useCallback((reason: string) => {
-    if (sessionRef.current && sessionRef.current !== "browser") {
-      sessionRef.current.terminate?.();
-    }
+    voipCallUuidRef.current = null;
+    if (voipPollRef.current) { clearInterval(voipPollRef.current); voipPollRef.current = null; }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     setInCall(false);
-    setSipConnected(false);
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = null;
-    sessionRef.current = null;
-    addSystem(`📵 ${reason}`);
+    addSystem(`📵 ${reason || "Chamada encerrada"}`);
   }, [addSystem]);
+
+  // (JsSIP removido — VoIP agora usa pipeline real via ESL controller)
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       recognitionRef.current?.stop();
-      uaRef.current?.stop();
       window.speechSynthesis?.cancel();
       bgAudioRef.current?.pause();
       if (timerRef.current) clearInterval(timerRef.current);
@@ -1013,15 +1004,48 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
             </div>
           </TabsContent>
 
-          {/* ── VOIP MODE ── */}
+          {/* ── VOIP MODE — Pipeline Real ── */}
           <TabsContent value="voip" className="mt-4">
             <div className="flex gap-4" style={{ minHeight: 550 }}>
               <div className="w-[400px] shrink-0 space-y-4">
-                {/* SIP Config */}
+                {/* Pipeline Info */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Phone className="h-4 w-4" /> Ligação VoIP Real
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground space-y-2">
+                    <p>Origina uma ligação real via FreeSWITCH + Telnyx/Allgar. A IA (Lucas) conversa automaticamente.</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full ${pipelineOnline ? "bg-green-500" : "bg-red-500"}`} />
+                        <span>Pipeline {pipelineOnline ? "Online" : "Offline"}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-blue-500" />
+                        <span>STT: Whisper</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-purple-500" />
+                        <span>LLM: Qwen 14B</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-orange-500" />
+                        <span>TTS: XTTS (Lucas)</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground/60 pt-1">
+                      Latência estimada: ~1.5s (STT 500ms + LLM 200ms + TTS 600ms)
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* SIP Config — salva no banco pra quando Allgar mandar credenciais */}
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Settings className="h-4 w-4" /> Configuração VoIP / SIP Trunk
+                      <Settings className="h-4 w-4" /> SIP Trunk (Allgar)
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -1032,134 +1056,79 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <Label className="text-xs">Host / IP</Label>
-                            <Input
-                              value={sipHost}
-                              onChange={(e) => setSipHost(e.target.value)}
-                              placeholder="sip.allgar.com.br"
-                              disabled={sipConnected}
-                            />
+                            <Input value={sipHost} onChange={(e) => setSipHost(e.target.value)} placeholder="sip.allgar.com.br" disabled={inCall} />
                           </div>
                           <div>
                             <Label className="text-xs">Porta</Label>
-                            <Input
-                              value={sipPort}
-                              onChange={(e) => setSipPort(e.target.value)}
-                              placeholder="5060"
-                              disabled={sipConnected}
-                            />
+                            <Input value={sipPort} onChange={(e) => setSipPort(e.target.value)} placeholder="5060" disabled={inCall} />
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <Label className="text-xs">Usuário</Label>
-                            <Input
-                              value={sipUser}
-                              onChange={(e) => setSipUser(e.target.value)}
-                              placeholder="usuario"
-                              disabled={sipConnected}
-                            />
+                            <Input value={sipUser} onChange={(e) => setSipUser(e.target.value)} placeholder="usuario" disabled={inCall} />
                           </div>
                           <div>
                             <Label className="text-xs">Senha</Label>
-                            <Input
-                              type="password"
-                              value={sipPass}
-                              onChange={(e) => setSipPass(e.target.value)}
-                              placeholder="••••••"
-                              disabled={sipConnected}
-                            />
+                            <Input type="password" value={sipPass} onChange={(e) => setSipPass(e.target.value)} placeholder="••••••" disabled={inCall} />
                           </div>
                         </div>
-                        <div>
-                          <Label className="text-xs">Transporte</Label>
-                          <Select value={sipTransport} onValueChange={setSipTransport} disabled={sipConnected}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="WSS">WSS (WebSocket Seguro)</SelectItem>
-                              <SelectItem value="WS">WS (WebSocket)</SelectItem>
-                              <SelectItem value="UDP">UDP</SelectItem>
-                              <SelectItem value="TCP">TCP</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <Button size="sm" variant="outline" onClick={saveSipConfig} disabled={savingSip || inCall} className="w-full">
+                          {savingSip ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+                          Salvar Credenciais SIP
+                        </Button>
+                        <div className="flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-200">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                          <span>As credenciais SIP são usadas pelo FreeSWITCH no servidor. Após salvar, o trunk precisa ser configurado no servidor VoIP.</span>
                         </div>
-
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline" onClick={saveSipConfig} disabled={savingSip || sipConnected}>
-                            {savingSip ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
-                            Salvar Config
-                          </Button>
-                          {!sipConnected ? (
-                            <Button size="sm" onClick={connectSip} disabled={!sipHost || !sipUser}>
-                              Conectar SIP
-                            </Button>
-                          ) : (
-                            <Button size="sm" variant="destructive" onClick={() => {
-                              uaRef.current?.stop();
-                              uaRef.current = null;
-                              setSipConnected(false);
-                              addSystem("🔌 Desconectado do SIP");
-                            }}>
-                              Desconectar
-                            </Button>
-                          )}
-                        </div>
-
-                        {!sipHost && (
-                          <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-200">
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                            <span>Aguardando dados do provedor VoIP (Allgar). Preencha quando receber as credenciais SIP.</span>
-                          </div>
-                        )}
                       </>
                     )}
                   </CardContent>
                 </Card>
 
-                {/* SIP Status */}
+                {/* Discador VoIP */}
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <span className={`h-2.5 w-2.5 rounded-full ${sipConnected ? "bg-green-500" : "bg-gray-500"}`} />
-                      Conexão SIP
+                      <Phone className="h-4 w-4" /> Discador
                     </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                      {sipConnected ? "Registrado e pronto para chamadas" : sipHost ? "Desconectado — clique 'Conectar SIP'" : "Configure as credenciais acima"}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                {/* Call */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Chamada VoIP</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <Input
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="Número de telefone"
-                      disabled={inCall || !sipConnected}
+                      placeholder="(31) 99744-1277"
+                      disabled={inCall}
                     />
                     {!inCall ? (
                       <Button
                         className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
-                        disabled={!sipConnected}
-                        onClick={startSipCall}
+                        disabled={!pipelineOnline}
+                        onClick={startVoipCall}
                       >
-                        <Phone className="h-4 w-4" /> Iniciar Chamada
+                        <Phone className="h-4 w-4" /> {pipelineOnline ? "Ligar Agora" : "Pipeline Offline"}
                       </Button>
                     ) : (
                       <>
-                        <div className="text-center text-2xl font-mono font-bold">{formatTimer(callTimer)}</div>
+                        <div className="flex items-center justify-between">
+                          <Badge className="gap-1 bg-green-500/15 text-green-500 border-green-500/30 animate-pulse">
+                            <Phone className="h-3 w-3" /> Em chamada
+                          </Badge>
+                          <span className="font-mono text-lg font-bold">{formatTimer(callTimer)}</span>
+                        </div>
                         <Button
                           className="w-full gap-2 bg-red-600 hover:bg-red-700 text-white"
-                          onClick={() => endSipCall("Chamada encerrada pelo operador")}
+                          onClick={() => endVoipCall("Chamada encerrada pelo operador")}
                         >
-                          <PhoneOff className="h-4 w-4" /> Encerrar
+                          <PhoneOff className="h-4 w-4" /> Desligar
                         </Button>
                       </>
+                    )}
+                    {!pipelineOnline && !inCall && (
+                      <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-200">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        <span>Pipeline VoIP offline. Verifique: FreeSWITCH, ESL Controller, Whisper, XTTS, Qwen.</span>
+                      </div>
                     )}
                   </CardContent>
                 </Card>
