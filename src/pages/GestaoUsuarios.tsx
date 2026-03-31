@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Loader2, Users2, Plus, Copy, Ban, Pencil, Link, CheckCircle2,
+  Loader2, Users2, Plus, Copy, Ban, Pencil, Link, CheckCircle2, ChevronDown,
 } from "lucide-react";
 import { SUPABASE_URL } from "@/lib/constants";
 
@@ -323,29 +323,39 @@ export default function GestaoUsuarios() {
   };
 
   const createInvite = async () => {
-    if (!inviteCompany || !inviteRole) {
-      toast.error("Selecione a empresa e o cargo");
+    if (!inviteCompany) {
+      toast.error("Selecione a empresa");
       return;
     }
     setCreatingInvite(true);
 
     const token = crypto.randomUUID();
     let expiresAt: string | null = null;
-    if (inviteValidity !== "0") {
+    const validity = inviteValidity || "7";
+    if (validity !== "0") {
       const d = new Date();
-      d.setDate(d.getDate() + parseInt(inviteValidity));
+      d.setDate(d.getDate() + parseInt(validity));
       expiresAt = d.toISOString();
     }
 
-    const maxUses = inviteMaxUses === "0" ? null : parseInt(inviteMaxUses);
+    const maxUses = inviteMaxUses === "0" ? null : parseInt(inviteMaxUses || "1");
+
+    // Se cargo não selecionado, usar o primeiro role level 3 (colaborador) como default
+    let roleId = inviteRole;
+    if (!roleId && roles.length > 0) {
+      const defaultRole = roles.find(r => r.level === 3) || roles[roles.length - 1];
+      roleId = defaultRole.id;
+    }
+
+    const perms = inviteRole ? invitePerms.filter(p => p.can_view || p.can_edit) : [];
 
     const { error } = await supabase.from("invite_links").insert({
       token,
       company_id: inviteCompany,
-      role_id: inviteRole,
+      role_id: roleId || null,
       invited_name: inviteName || null,
       invited_email: inviteEmail || null,
-      permissions: invitePerms.filter(p => p.can_view || p.can_edit),
+      permissions: perms,
       expires_at: expiresAt,
       max_uses: maxUses,
       used_count: 0,
@@ -672,20 +682,11 @@ export default function GestaoUsuarios() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Nome (opcional)</Label>
-                  <Input placeholder="Nome do convidado" value={inviteName} onChange={e => setInviteName(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Email (opcional)</Label>
-                  <Input type="email" placeholder="email@exemplo.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
-                </div>
-              </div>
+              <p className="text-sm text-muted-foreground">O convidado preenche nome, email e senha ao acessar o link.</p>
 
               {isCEO && (
                 <div className="space-y-1.5">
-                  <Label>Empresa</Label>
+                  <Label>Empresa <span className="text-destructive">*</span></Label>
                   <Select value={inviteCompany} onValueChange={setInviteCompany}>
                     <SelectTrigger><SelectValue placeholder="Selecionar empresa" /></SelectTrigger>
                     <SelectContent>
@@ -697,70 +698,92 @@ export default function GestaoUsuarios() {
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <Label>Cargo</Label>
-                <Select value={inviteRole} onValueChange={(v) => { setInviteRole(v); const r = roles.find(r => r.id === v); if (r) setInvitePerms(defaultPerms(r.level)); }}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar cargo" /></SelectTrigger>
-                  <SelectContent>
-                    {roles.map(r => (
-                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Opções avançadas (colapsável) */}
+              <details className="group">
+                <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                  <ChevronDown className="h-3 w-3 group-open:rotate-180 transition-transform" />
+                  Opções avançadas
+                </summary>
+                <div className="space-y-4 pt-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Nome (opcional)</Label>
+                      <Input placeholder="Pré-preencher nome" value={inviteName} onChange={e => setInviteName(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Email (opcional)</Label>
+                      <Input type="email" placeholder="Pré-preencher email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Validade</Label>
-                  <Select value={inviteValidity} onValueChange={setInviteValidity}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="7">7 dias</SelectItem>
-                      <SelectItem value="30">30 dias</SelectItem>
-                      <SelectItem value="0">Sem expiração</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Usos máximos</Label>
-                  <Select value={inviteMaxUses} onValueChange={setInviteMaxUses}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1 uso</SelectItem>
-                      <SelectItem value="5">5 usos</SelectItem>
-                      <SelectItem value="0">Ilimitado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Cargo (o convidado pode alterar se vazio)</Label>
+                    <Select value={inviteRole} onValueChange={(v) => { setInviteRole(v); const r = roles.find(r => r.id === v); if (r) setInvitePerms(defaultPerms(r.level)); }}>
+                      <SelectTrigger><SelectValue placeholder="Colaborador (padrão)" /></SelectTrigger>
+                      <SelectContent>
+                        {roles.map(r => (
+                          <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <div>
-                <Label className="mb-2 block">Permissões</Label>
-                <div className="grid grid-cols-3 gap-1 text-xs font-medium text-muted-foreground px-1 mb-1">
-                  <span>Módulo</span>
-                  <span className="text-center">Ver</span>
-                  <span className="text-center">Editar</span>
-                </div>
-                <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                  {invitePerms.map((p, idx) => (
-                    <div key={p.module} className="grid grid-cols-3 gap-1 items-center px-1 py-1 rounded hover:bg-secondary/30">
-                      <span className="text-sm">{MODULES.find(m => m.key === p.module)?.label}</span>
-                      <div className="flex justify-center">
-                        <Checkbox checked={p.can_view} onCheckedChange={() => toggleInvitePerm(idx, "can_view")} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Validade</Label>
+                      <Select value={inviteValidity} onValueChange={setInviteValidity}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="7">7 dias</SelectItem>
+                          <SelectItem value="30">30 dias</SelectItem>
+                          <SelectItem value="0">Sem expiração</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Usos máximos</Label>
+                      <Select value={inviteMaxUses} onValueChange={setInviteMaxUses}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 uso</SelectItem>
+                          <SelectItem value="5">5 usos</SelectItem>
+                          <SelectItem value="0">Ilimitado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {inviteRole && (
+                    <div>
+                      <Label className="mb-2 block text-xs">Permissões</Label>
+                      <div className="grid grid-cols-3 gap-1 text-xs font-medium text-muted-foreground px-1 mb-1">
+                        <span>Módulo</span>
+                        <span className="text-center">Ver</span>
+                        <span className="text-center">Editar</span>
                       </div>
-                      <div className="flex justify-center">
-                        <Checkbox checked={p.can_edit} onCheckedChange={() => toggleInvitePerm(idx, "can_edit")} />
+                      <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                        {invitePerms.map((p, idx) => (
+                          <div key={p.module} className="grid grid-cols-3 gap-1 items-center px-1 py-1 rounded hover:bg-secondary/30">
+                            <span className="text-sm">{MODULES.find(m => m.key === p.module)?.label}</span>
+                            <div className="flex justify-center">
+                              <Checkbox checked={p.can_view} onCheckedChange={() => toggleInvitePerm(idx, "can_view")} />
+                            </div>
+                            <div className="flex justify-center">
+                              <Checkbox checked={p.can_edit} onCheckedChange={() => toggleInvitePerm(idx, "can_edit")} />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
+              </details>
 
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowCreateInvite(false)}>Cancelar</Button>
-                <Button onClick={createInvite} disabled={creatingInvite || !inviteRole || !inviteCompany}>
+                <Button onClick={createInvite} disabled={creatingInvite || !inviteCompany}>
                   {creatingInvite && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Criar Convite
+                  Gerar Link de Convite
                 </Button>
               </DialogFooter>
             </div>
