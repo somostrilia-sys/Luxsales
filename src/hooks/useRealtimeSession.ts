@@ -82,22 +82,30 @@ export function useRealtimeSession({
       setIsConnecting(true);
       try {
         // 1. Get ephemeral token from edge function
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        let authToken = SUPABASE_ANON_KEY;
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) authToken = session.access_token;
+        } catch {}
+
         const res = await fetch(`${EDGE_BASE}/realtime-session`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token || SUPABASE_ANON_KEY}`,
+            Authorization: `Bearer ${authToken}`,
             apikey: SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({ system_prompt: systemPrompt, voice: "shimmer" }),
         });
 
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error("[Realtime] token fetch failed:", res.status, errText);
+          throw new Error(`Token error ${res.status}: ${errText}`);
+        }
         const tokenData = await res.json();
-        if (!res.ok || !tokenData.token) {
-          throw new Error(tokenData.error || "Falha ao obter token da sessão Realtime");
+        if (!tokenData.token) {
+          throw new Error(tokenData.error || "Token vazio na resposta");
         }
         const ephemeralToken = tokenData.token;
 
