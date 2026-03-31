@@ -108,10 +108,11 @@ export default function Disparos() {
   const { collaborator } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
 
+  const FALLBACK_COMPANY_ID = "70967469-9a9b-4e29-a744-410e41eb47a5"; // Objetivo
   const companyId =
     selectedCompanyId && selectedCompanyId !== "all"
       ? selectedCompanyId
-      : collaborator?.company_id || "";
+      : collaborator?.company_id || FALLBACK_COMPANY_ID;
 
   const [activeTab, setActiveTab] = useState("disparar");
 
@@ -223,14 +224,22 @@ export default function Disparos() {
     if (!companyId || !collaborator?.id) return;
     setLoadingLimit(true);
     try {
-      // Buscar tier limit pelo key específico da empresa
-      const { data: configs } = await supabase
+      // Buscar tier: primeiro por empresa, fallback pro global (atualizado pela Meta API)
+      const { data: companyTier } = await supabase
         .from("system_configs")
         .select("key, value")
         .eq("key", `meta_tier_daily_${companyId}`);
 
-      const tierValue = configs?.[0]?.value;
-      const metaTierLimit = parseInt(tierValue || "250", 10);
+      let tierValue = companyTier?.[0]?.value;
+      if (!tierValue) {
+        const { data: globalTier } = await supabase
+          .from("system_configs")
+          .select("value")
+          .eq("key", "meta_tier_limit")
+          .maybeSingle();
+        tierValue = globalTier?.value;
+      }
+      const metaTierLimit = parseInt(tierValue || "1000", 10);
 
       // Contar consultores + gestores COMERCIAIS ativos (quem dispara)
       // Buscar role IDs de "Consultor Comercial" e "Gestor(a) Comercial"
