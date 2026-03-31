@@ -476,19 +476,49 @@ export default function Templates() {
           ),
         });
       }
-      const res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
+      // Adicionar examples pras variáveis (obrigatório pela Meta)
+      const bodyComp = components.find((c: any) => c.type === "BODY");
+      if (bodyComp) {
+        const varMatches = bodyComp.text.match(/\{\{\d+\}\}/g) || [];
+        if (varMatches.length > 0) {
+          const examples = varMatches.map((_: string, i: number) => {
+            const defaults = ["João", "Onix 2024", "150", "SP", "12345"];
+            return defaults[i] || `exemplo${i + 1}`;
+          });
+          bodyComp.example = { body_text: [examples] };
+        }
+      }
+
+      // Tentar create, se já existe tentar update
+      let res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
         method: "POST",
         headers,
         body: JSON.stringify({
           action: "create",
           company_id: effectiveCompanyId,
           name: tmpl.name,
-          category: (tmpl.category || "MARKETING").toUpperCase(),
+          category: (tmpl.category || "UTILITY").toUpperCase(),
           language: "pt_BR",
           components,
         }),
       });
-      const data = await res.json();
+      let data = await res.json();
+      // Se já existe, tentar update
+      if (!res.ok && data?.details?.error?.error_subcode === 2388024) {
+        res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            action: "update",
+            company_id: effectiveCompanyId,
+            name: tmpl.name,
+            category: (tmpl.category || "UTILITY").toUpperCase(),
+            language: "pt_BR",
+            components,
+          }),
+        });
+        data = await res.json();
+      }
       if (res.ok) {
         // Mark draft as submitted
         await supabase.from("wa_templates")
