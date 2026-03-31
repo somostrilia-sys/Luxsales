@@ -309,7 +309,7 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
           </div>
           <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-center">
             <p className="text-lg font-bold text-primary">{tier > 0 ? tier.toLocaleString("pt-BR") : "—"}</p>
-            <p className="text-[10px] text-muted-foreground">{tierLabel.replace("TIER_", "TIER ").replace("K", "K/dia")}</p>
+            <p className="text-[10px] text-muted-foreground">{tierLabel === "STANDARD" ? "Standard (1K/dia)" : tierLabel.replace("TIER_", "TIER ").replace("K", "K/dia")}</p>
           </div>
           <div className="rounded-lg border border-border px-3 py-2 text-center">
             <p className="text-lg font-bold">{usagePct}%</p>

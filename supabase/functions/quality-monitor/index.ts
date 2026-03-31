@@ -16,10 +16,13 @@ const supabase = createClient(
 const META_API = "https://graph.facebook.com/v22.0";
 
 const TIER_LIMITS: Record<string, number> = {
+  STANDARD: 1000,
+  TIER_250: 250,
   TIER_1K: 1000,
   TIER_10K: 10000,
   TIER_100K: 100000,
   TIER_UNLIMITED: 999999,
+  UNLIMITED: 999999,
 };
 
 Deno.serve(async (req) => {
@@ -107,12 +110,15 @@ async function checkQuality(body: any) {
 
   const metaData = await res.json();
 
-  // Mapear tier
+  // Mapear tier (Meta API pode retornar STANDARD, TIER_1K, etc.)
   const tierMap: Record<string, string> = {
+    STANDARD: "STANDARD",
+    TIER_250: "TIER_250",
     TIER_1K: "TIER_1K",
     TIER_10K: "TIER_10K",
     TIER_100K: "TIER_100K",
     TIER_UNLIMITED: "TIER_UNLIMITED",
+    UNLIMITED: "TIER_UNLIMITED",
   };
 
   const quality = metaData.quality_rating || "UNKNOWN";
