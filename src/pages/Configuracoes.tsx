@@ -10,12 +10,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Users, Phone, MessageSquare, Bot, Building2, ChevronDown, ChevronUp, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, Users, Phone, MessageSquare, Bot, Building2, ChevronDown, ChevronUp, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 
 interface Config {
   horarioInicio: string;
@@ -130,41 +131,99 @@ interface ConsultorTier {
 }
 
 function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
-  const [tier, setTier] = useState(1000);
-  const [tierInput, setTierInput] = useState("1000");
+  const [tier, setTier] = useState(0);
+  const [tierLabel, setTierLabel] = useState("—");
+  const [quality, setQuality] = useState("UNKNOWN");
+  const [usagePct, setUsagePct] = useState(0);
+  const [conversations24h, setConversations24h] = useState(0);
+  const [blocks24h, setBlocks24h] = useState(0);
+  const [verifiedName, setVerifiedName] = useState("");
   const [consultores, setConsultores] = useState<ConsultorTier[]>([]);
   const [totalConsultoresAtivos, setTotalConsultoresAtivos] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastCheck, setLastCheck] = useState<string | null>(null);
 
   useEffect(() => {
     if (!companyId) return;
     loadData();
   }, [companyId]);
 
+  const fetchMetaTier = async () => {
+    if (!companyId) return;
+    try {
+      const res = await fetch(`${EDGE_BASE}/quality-monitor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ action: "check", company_id: companyId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const tierLimit = data.tier_limit || 0;
+        setTier(tierLimit);
+        setTierLabel(data.tier || "UNKNOWN");
+        setQuality(data.quality || "UNKNOWN");
+        setUsagePct(data.usage_pct || 0);
+        setConversations24h(data.conversations_24h || 0);
+        setBlocks24h(data.blocks_24h || 0);
+        setVerifiedName(data.verified_name || "");
+        setLastCheck(new Date().toLocaleTimeString("pt-BR"));
+
+        // Sincronizar tier no system_configs para que Disparos use o valor real
+        await supabase.from("system_configs").upsert(
+          { key: "meta_tier_limit", value: String(tierLimit), company_id: companyId },
+          { onConflict: "key,company_id" }
+        );
+        return tierLimit;
+      }
+    } catch { /* silencioso */ }
+
+    // Fallback: buscar do último check salvo
+    const { data: latest } = await supabase
+      .from("meta_quality_tracking")
+      .select("quality_rating, messaging_limit_tier, tier_limit, usage_pct, conversations_24h, blocks_24h, checked_at")
+      .eq("company_id", companyId)
+      .order("checked_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latest) {
+      setTier(latest.tier_limit || 0);
+      setTierLabel(latest.messaging_limit_tier || "UNKNOWN");
+      setQuality(latest.quality_rating || "UNKNOWN");
+      setUsagePct(latest.usage_pct || 0);
+      setConversations24h(latest.conversations_24h || 0);
+      setBlocks24h(latest.blocks_24h || 0);
+      setLastCheck(latest.checked_at ? new Date(latest.checked_at).toLocaleTimeString("pt-BR") : null);
+      return latest.tier_limit || 0;
+    }
+
+    // Último fallback: system_configs
+    const { data: cfgData } = await supabase
+      .from("system_configs")
+      .select("value")
+      .eq("key", "meta_tier_limit")
+      .eq("company_id", companyId)
+      .maybeSingle();
+    const tierVal = cfgData?.value ? Number(cfgData.value) : 1000;
+    setTier(tierVal);
+    setTierLabel(tierVal >= 100000 ? "TIER_100K" : tierVal >= 10000 ? "TIER_10K" : "TIER_1K");
+    return tierVal;
+  };
+
   const loadData = async () => {
     if (!companyId) return;
     setLoading(true);
     try {
-      // TIER
-      const { data: cfgData } = await supabase
-        .from("system_configs")
-        .select("value")
-        .eq("key", "meta_tier_limit")
-        .eq("company_id", companyId)
-        .maybeSingle();
-      const tierVal = cfgData?.value ? Number(cfgData.value) : 1000;
-      setTier(tierVal);
-      setTierInput(String(tierVal));
+      const tierVal = await fetchMetaTier() || 1000;
 
-      // Consultores ativos — buscar roles elegíveis (CEO + Gestor Comercial + Consultor Comercial)
+      // Consultores ativos
       const { data: eligibleRoles } = await supabase
         .from("roles")
         .select("id, name, level")
         .eq("company_id", companyId)
         .in("level", [2, 3]);
 
-      // Gestor Comercial + Consultor Comercial = operacionais (CEO/Diretor só analisa)
       const eligibleRoleIds = (eligibleRoles || [])
         .filter(r => {
           const name = r.name.toLowerCase();
@@ -172,6 +231,13 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
                  (name.includes("gestor") && name.includes("comercial"));
         })
         .map(r => r.id);
+
+      if (eligibleRoleIds.length === 0) {
+        setTotalConsultoresAtivos(0);
+        setConsultores([]);
+        setLoading(false);
+        return;
+      }
 
       const [{ count: totalCount }, { data: collabs }] = await Promise.all([
         supabase
@@ -195,7 +261,6 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-
       const items: ConsultorTier[] = [];
       const perConsultor = totalAtivos > 0 ? Math.floor(tierVal / totalAtivos) : 0;
 
@@ -213,24 +278,16 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
     setLoading(false);
   };
 
-  const saveTier = async () => {
-    if (!companyId) return;
-    setSaving(true);
-    try {
-      const newTier = parseInt(tierInput, 10) || 1000;
-      await supabase.from("system_configs").upsert(
-        { key: "meta_tier_limit", value: String(newTier), company_id: companyId },
-        { onConflict: "key,company_id" }
-      );
-      setTier(newTier);
-      toast.success("TIER salvo! Recarregando distribuição...");
-      await loadData();
-    } catch (e: any) {
-      toast.error("Erro ao salvar TIER: " + e.message);
-    }
-    setSaving(false);
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchMetaTier();
+    toast.success("TIER atualizado da Meta API");
+    await loadData();
+    setRefreshing(false);
   };
 
+  const qualityColor = quality === "GREEN" ? "text-green-500" : quality === "YELLOW" ? "text-yellow-500" : quality === "RED" ? "text-red-500" : "text-muted-foreground";
+  const qualityBg = quality === "GREEN" ? "bg-green-500/10 border-green-500/30" : quality === "YELLOW" ? "bg-yellow-500/10 border-yellow-500/30" : quality === "RED" ? "bg-red-500/10 border-red-500/30" : "bg-muted/50 border-border";
   const perConsultor = totalConsultoresAtivos > 0 ? Math.floor(tier / totalConsultoresAtivos) : 0;
 
   return (
@@ -238,40 +295,54 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-primary" />
-          WhatsApp Meta — Distribuição TIER
+          WhatsApp Meta — TIER & Qualidade
           <Badge variant="outline" className="ml-auto text-xs">CEO</Badge>
         </CardTitle>
-        <p className="text-sm text-muted-foreground">Gerencie o TIER Meta e veja como os disparos são distribuídos</p>
+        <p className="text-sm text-muted-foreground">Dados em tempo real da API Meta — atualiza automaticamente</p>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* TIER Atual */}
-        <div className="flex items-end gap-3 flex-wrap">
-          <div className="space-y-1 flex-1 min-w-[160px]">
-            <Label>TIER Meta (disparos/dia)</Label>
-            <div className="flex gap-2">
-              <select
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm flex-1"
-                value={tierInput}
-                onChange={e => setTierInput(e.target.value)}
-              >
-                <option value="1000">TIER 1 — 1.000/dia</option>
-                <option value="10000">TIER 2 — 10.000/dia</option>
-                <option value="100000">TIER 3 — 100.000/dia</option>
-                <option value="999999">TIER 4 — Ilimitado</option>
-              </select>
-              <Button size="sm" onClick={saveTier} disabled={saving} className="shrink-0">
-                {saving ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Salvando</> : "Salvar"}
-              </Button>
-            </div>
+        {/* Status Meta */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className={`rounded-lg border px-3 py-2 text-center ${qualityBg}`}>
+            <p className={`text-lg font-bold ${qualityColor}`}>{quality}</p>
+            <p className="text-[10px] text-muted-foreground">Qualidade</p>
           </div>
-          {totalConsultoresAtivos > 0 && (
-            <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-2 text-center">
+          <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-center">
+            <p className="text-lg font-bold text-primary">{tier > 0 ? tier.toLocaleString("pt-BR") : "—"}</p>
+            <p className="text-[10px] text-muted-foreground">{tierLabel.replace("TIER_", "TIER ").replace("K", "K/dia")}</p>
+          </div>
+          <div className="rounded-lg border border-border px-3 py-2 text-center">
+            <p className="text-lg font-bold">{usagePct}%</p>
+            <p className="text-[10px] text-muted-foreground">Uso 24h ({conversations24h.toLocaleString("pt-BR")})</p>
+          </div>
+          <div className="rounded-lg border border-border px-3 py-2 text-center">
+            <p className="text-lg font-bold">{blocks24h}</p>
+            <p className="text-[10px] text-muted-foreground">Bloqueios 24h</p>
+          </div>
+        </div>
+
+        {/* Refresh + info */}
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-muted-foreground">
+            {verifiedName && <span className="font-medium">{verifiedName}</span>}
+            {lastCheck && <span className="ml-2">Atualizado: {lastCheck}</span>}
+          </div>
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`h-3.5 w-3.5 mr-1 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Atualizando..." : "Atualizar da Meta"}
+          </Button>
+        </div>
+
+        {/* Distribuição por consultor */}
+        {totalConsultoresAtivos > 0 && (
+          <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-2 flex items-center gap-4">
+            <div>
               <p className="text-2xl font-bold text-primary">{perConsultor.toLocaleString("pt-BR")}</p>
               <p className="text-xs text-muted-foreground">disparos / consultor / dia</p>
-              <p className="text-[10px] text-muted-foreground">{tier.toLocaleString("pt-BR")} ÷ {totalConsultoresAtivos} consultores ativos</p>
             </div>
-          )}
-        </div>
+            <p className="text-[10px] text-muted-foreground">{tier.toLocaleString("pt-BR")} ÷ {totalConsultoresAtivos} consultores ativos</p>
+          </div>
+        )}
 
         {/* Tabela de consultores */}
         {loading ? (
@@ -279,7 +350,7 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
             {[1, 2, 3].map(i => <div key={i} className="h-8 bg-muted animate-pulse rounded" />)}
           </div>
         ) : consultores.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">Nenhum consultor ativo encontrado</p>
+          <p className="text-sm text-muted-foreground text-center py-4">Nenhum consultor comercial ativo encontrado</p>
         ) : (
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Uso hoje por consultor</p>
@@ -808,16 +879,11 @@ export default function Configuracoes() {
                                 <Input className="h-8 text-sm" placeholder="+55119..." value={cfg.whatsapp.numero} onChange={e => updateCompanyConfig(company.id, "whatsapp", "numero", e.target.value)} />
                               </div>
                               <div className="space-y-1">
-                                <Label className="text-xs">TIER Meta</Label>
-                                <Select value={String(cfg.whatsapp.tier)} onValueChange={v => updateCompanyConfig(company.id, "whatsapp", "tier", parseInt(v))}>
-                                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="1000">TIER 1 — 1.000/dia</SelectItem>
-                                    <SelectItem value="10000">TIER 2 — 10.000/dia</SelectItem>
-                                    <SelectItem value="100000">TIER 3 — 100.000/dia</SelectItem>
-                                    <SelectItem value="999999">TIER 4 — Ilimitado</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                <Label className="text-xs">TIER Meta (automático)</Label>
+                                <div className="h-8 flex items-center px-3 rounded-md border border-input bg-muted/50 text-sm text-muted-foreground">
+                                  {cfg.whatsapp.tier >= 100000 ? "TIER 3 — 100K/dia" : cfg.whatsapp.tier >= 10000 ? "TIER 2 — 10K/dia" : cfg.whatsapp.tier >= 1000 ? "TIER 1 — 1K/dia" : "Não detectado"}
+                                </div>
+                                <p className="text-[10px] text-muted-foreground">Obtido automaticamente da API Meta</p>
                               </div>
                               <div className="space-y-1">
                                 <Label className="text-xs">Phone Number ID</Label>
