@@ -367,8 +367,7 @@ export default function LeadsMaster() {
   const [undistributedCount, setUndistributedCount] = useState(0);
   useEffect(() => {
     (async () => {
-      const cid = company_id ?? baseCompanyId;
-      if (!cid) return;
+      const cid = company_id ?? baseCompanyId ?? FALLBACK_COMPANY_ID;
       // Contar leads da EMPRESA selecionada para distribuição
       let q = supabase.from("consultant_lead_pool").select("*", { count: "exact", head: true });
       if (cid) q = q.eq("company_id", cid);
