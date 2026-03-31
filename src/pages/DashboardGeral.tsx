@@ -159,9 +159,14 @@ function KpiRowSkeleton() {
 export default function DashboardGeral() {
   const { company_id: baseCompanyId, user_role } = useCompany();
   const { selectedCompanyId } = useCompanyFilter();
-  const { collaborator, isCEO } = useCollaborator();
+  const { collaborator, isCEO, isColaborador } = useCollaborator();
   const company_id = selectedCompanyId !== "all" ? selectedCompanyId : baseCompanyId;
   const navigate = useNavigate();
+
+  // Redirecionar consultor (level 3) para /my-leads
+  useEffect(() => {
+    if (isColaborador) navigate("/my-leads", { replace: true });
+  }, [isColaborador, navigate]);
 
   // Edge-function data (existing sections)
   const [data, setData] = useState<DashboardData>(defaultData);
@@ -252,10 +257,11 @@ export default function DashboardGeral() {
   }, [company_id, user_role]);
 
   useEffect(() => {
+    if (!isCEO) { setLoading(false); return; }
     fetchDashboard();
     const interval = setInterval(() => fetchDashboard(true), 60000);
     return () => clearInterval(interval);
-  }, [fetchDashboard]);
+  }, [fetchDashboard, isCEO]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // KPI modal
