@@ -128,7 +128,10 @@ const SOURCE_OPTIONS = [
 export default function Templates() {
   const { collaborator, isCEO } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
-  const effectiveCompanyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : collaborator?.company_id;
+  const FALLBACK_COMPANY_ID = "70967469-9a9b-4e29-a744-410e41eb47a5"; // Objetivo
+  const WALK_HOLDING_ID = "d33b6a84-8f72-4441-b2eb-dd151a31ac12";
+  const rawEffective = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : collaborator?.company_id;
+  const effectiveCompanyId = rawEffective === WALK_HOLDING_ID ? FALLBACK_COMPANY_ID : (rawEffective || FALLBACK_COMPANY_ID);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
