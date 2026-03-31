@@ -711,9 +711,12 @@ function TabConversasEncerradas({
         .order("last_message_at", { ascending: false })
         .limit(100);
 
-      // wa_conversations não tem collaborator_id — filtrar apenas por company_id
+      // Filtrar wa_conversations por collaborator_id quando disponível
       if (roleLevel === 0) {
         if (companyId && companyId !== "all") query = query.eq("company_id", companyId);
+      } else if (roleLevel > 0 && collaboratorId) {
+        query = query.eq("collaborator_id", collaboratorId);
+        if (collaboratorCompanyId) query = query.eq("company_id", collaboratorCompanyId);
       } else if (collaboratorCompanyId) {
         query = query.eq("company_id", collaboratorCompanyId);
       } else if (companyId && companyId !== "all") {
