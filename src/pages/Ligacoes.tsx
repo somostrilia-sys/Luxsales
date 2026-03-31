@@ -6,6 +6,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
+import { resolveCompanyFilter } from "@/lib/companyFilter";
 import { supabase } from "@/lib/supabase";
 import { EDGE_BASE } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -769,24 +771,24 @@ function TabLigacoes({
 // ═══════════════════════════════════════════════════════════════════════════════
 // ABA HISTÓRICO
 // ═══════════════════════════════════════════════════════════════════════════════
-function TabHistorico({ companyId }: { companyId: string | undefined }) {
+function TabHistorico({ companyId }: { companyId: string | null | undefined }) {
   const [calls, setCalls] = useState<CallLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
 
   const fetchCalls = useCallback(async () => {
-    if (!companyId) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("calls")
         .select(
           "id, lead_phone, lead_name, duration_seconds, status, created_at, transcript, ai_summary, ai_analysis, call_summary"
         )
-        .eq("company_id", companyId)
         .order("created_at", { ascending: false })
         .limit(100);
+      if (companyId) query = query.eq("company_id", companyId);
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -947,7 +949,8 @@ function TabHistorico({ companyId }: { companyId: string | undefined }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function Ligacoes() {
   const { collaborator, roleLevel } = useCollaborator();
-  const companyId = collaborator?.company_id;
+  const { selectedCompanyId } = useCompanyFilter();
+  const companyId = resolveCompanyFilter(selectedCompanyId, collaborator?.company_id);
   const collaboratorId = collaborator?.id ?? "";
   const isCEO = roleLevel === 0;
 
