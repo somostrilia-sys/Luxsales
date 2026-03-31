@@ -148,6 +148,7 @@ function TemplatePickerDialog({
   sending,
   title,
   onSend,
+  emptyMessage = "Nenhum template aprovado encontrado",
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -155,6 +156,7 @@ function TemplatePickerDialog({
   sending: boolean;
   title: string;
   onSend: (name: string) => void;
+  emptyMessage?: string;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -163,7 +165,7 @@ function TemplatePickerDialog({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         {templates.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">Nenhum template aprovado encontrado</p>
+          <p className="text-sm text-muted-foreground py-4 text-center">{emptyMessage}</p>
         ) : (
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {templates.map((t) => (
@@ -220,6 +222,16 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
   const [targetPhone, setTargetPhone] = useState<string | null>(null);
   const [sendingTemplate, setSendingTemplate] = useState(false);
 
+  // Summary inline expand
+  const [summaryExpanded, setSummaryExpanded] = useState<Set<string>>(new Set());
+
+  // Reactivate lead
+  const [reactivatableMap, setReactivatableMap] = useState<Map<string, string>>(new Map());
+  const [reactivateOpen, setReactivateOpen] = useState(false);
+  const [reactivateTarget, setReactivateTarget] = useState<{ poolId: string; phone: string; name: string | null } | null>(null);
+  const [reactivateTemplates, setReactivateTemplates] = useState<TemplateItem[]>([]);
+  const [reactivating, setReactivating] = useState(false);
+
   const fetchCalls = useCallback(async () => {
     setLoading(true);
     try {
@@ -266,7 +278,30 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
 
       const { data, error } = await query;
       if (error) throw error;
-      setCalls((data as CallLog[]) || []);
+      const callData = (data as CallLog[]) || [];
+      setCalls(callData);
+
+      // Fetch reactivatable leads from consultant_lead_pool
+      const phones = callData.map(c => c.lead_phone).filter(Boolean) as string[];
+      if (phones.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let poolQ: any = supabase
+          .from("consultant_lead_pool")
+          .select("id, phone_normalized, collaborator_id")
+          .in("interest_status", ["not_interested_1", "not_interested_2"])
+          .in("phone_normalized", phones);
+        if (roleLevel !== 0 && collaboratorId) {
+          poolQ = poolQ.eq("collaborator_id", collaboratorId);
+        }
+        const { data: poolData } = await poolQ;
+        const m = new Map<string, string>();
+        for (const p of (poolData || []) as Array<{ id: string; phone_normalized: string | null }>) {
+          if (p.phone_normalized) m.set(p.phone_normalized, p.id);
+        }
+        setReactivatableMap(m);
+      } else {
+        setReactivatableMap(new Map());
+      }
     } catch (err) {
       console.error("Error fetching calls:", err);
       setCalls([]);
@@ -321,6 +356,51 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
 
   const toggleExpand = (id: string) =>
     setExpanded((prev) => (prev === id ? null : id));
+
+  const toggleSummaryExpand = (id: string) =>
+    setSummaryExpanded(prev => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+
+  const openReactivateDialog = async (poolId: string, phone: string, name: string | null) => {
+    setReactivateTarget({ poolId, phone, name });
+    const compId = collaboratorCompanyId || companyId;
+    const { data } = await supabase
+      .from("whatsapp_meta_templates")
+      .select("name, status, language")
+      .eq("company_id", compId)
+      .eq("category", "UTILITY")
+      .eq("status", "APPROVED");
+    setReactivateTemplates((data as TemplateItem[]) || []);
+    setReactivateOpen(true);
+  };
+
+  const confirmReactivate = async (_templateName: string) => {
+    if (!reactivateTarget) return;
+    setReactivating(true);
+    try {
+      const { error } = await supabase
+        .from("consultant_lead_pool")
+        .update({ interest_status: "pending", call_attempts: 0 })
+        .eq("id", reactivateTarget.poolId);
+      if (error) throw error;
+      toast.success("Lead reativado com sucesso!");
+      setReactivateOpen(false);
+      setReactivatableMap(prev => {
+        const m = new Map(prev);
+        for (const [ph, pid] of m.entries()) {
+          if (pid === reactivateTarget.poolId) { m.delete(ph); break; }
+        }
+        return m;
+      });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao reativar lead");
+    } finally {
+      setReactivating(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -382,6 +462,9 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
             const summaryText = getSummaryText(call.transcript);
             const phone = call.lead_phone || "—";
             const name = call.lead_name || phone;
+            const sumText = call.lucas_summary || summaryText;
+            const isSumExp = summaryExpanded.has(call.id);
+            const needsTruncation = sumText.length > 120;
 
             return (
               <Card
@@ -428,6 +511,33 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
                       )}
                     </div>
                   </div>
+
+                  {/* Inline summary preview — visible in collapsed state */}
+                  {!isExpanded && sumText && (
+                    <div className="mt-1.5 ml-11" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-start gap-1.5">
+                        {call.lucas_summary && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] py-0 h-4 px-1.5 shrink-0 bg-purple-500/15 text-purple-400 border-purple-500/30"
+                          >
+                            IA
+                          </Badge>
+                        )}
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {isSumExp || !needsTruncation ? sumText : `${sumText.slice(0, 120)}…`}
+                        </p>
+                      </div>
+                      {needsTruncation && (
+                        <button
+                          className="text-xs text-primary hover:underline mt-0.5"
+                          onClick={() => toggleSummaryExpand(call.id)}
+                        >
+                          {isSumExp ? "ver menos" : "ver mais"}
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {isExpanded && (
                     <div className="mt-3 space-y-3 border-t pt-3">
@@ -496,6 +606,19 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
                           <Send className="h-3 w-3 mr-1" /> Disparar WA com Lucas
                         </Button>
                         <LigarButton phone={phone} leadName={call.lead_name} />
+                        {reactivatableMap.has(call.lead_phone || "") && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
+                            onClick={() => {
+                              const poolId = reactivatableMap.get(call.lead_phone || "")!;
+                              openReactivateDialog(poolId, call.lead_phone || "", call.lead_name);
+                            }}
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" /> Reativar
+                          </Button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -513,6 +636,16 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
         sending={sendingTemplate}
         title="Selecionar Template Aprovado"
         onSend={sendTemplate}
+      />
+
+      <TemplatePickerDialog
+        open={reactivateOpen}
+        onOpenChange={setReactivateOpen}
+        templates={reactivateTemplates}
+        sending={reactivating}
+        title={`Reativar Lead — ${reactivateTarget?.name || reactivateTarget?.phone || ""}`}
+        onSend={confirmReactivate}
+        emptyMessage="Nenhum template aprovado. Crie na página Templates."
       />
     </div>
   );
