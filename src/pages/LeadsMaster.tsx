@@ -369,18 +369,12 @@ export default function LeadsMaster() {
     (async () => {
       const cid = company_id ?? baseCompanyId;
       if (!cid) return;
-      // Contar leads não distribuídos (collaborator_id NULL) OU todos os leads elegíveis pra redistribuição
-      let q = supabase.from("consultant_lead_pool").select("*", { count: "exact", head: true })
-        .is("collaborator_id", null);
-      const { count: undist } = await q;
-      if ((undist ?? 0) > 0) {
-        setUndistributedCount(undist ?? 0);
-      } else {
-        // Todos distribuídos — contar total pra redistribuição
-        const { count: total } = await supabase.from("consultant_lead_pool")
-          .select("*", { count: "exact", head: true });
-        setUndistributedCount(total ?? 0);
-      }
+      // Contar leads da EMPRESA selecionada para distribuição
+      const cid = company_id ?? baseCompanyId;
+      let q = supabase.from("consultant_lead_pool").select("*", { count: "exact", head: true });
+      if (cid) q = q.eq("company_id", cid);
+      const { count: total } = await q;
+      setUndistributedCount(total ?? 0);
     })();
   }, [company_id, baseCompanyId, leads]);
 
