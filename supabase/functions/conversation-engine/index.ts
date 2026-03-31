@@ -703,13 +703,15 @@ async function sendWhatsAppMessage(
   if (!cfg.meta_whatsapp_token || !cfg.meta_phone_number_id) {
     const { data: cred } = await supabase
       .from("whatsapp_meta_credentials")
-      .select("access_token, phone_number_id")
+      .select("meta_access_token, meta_phone_number_id, meta_display_phone")
       .eq("company_id", companyId)
       .eq("is_active", true)
+      .not("meta_access_token", "eq", "")
       .maybeSingle();
     if (cred) {
-      cfg.meta_whatsapp_token = cfg.meta_whatsapp_token || cred.access_token;
-      cfg.meta_phone_number_id = cfg.meta_phone_number_id || cred.phone_number_id;
+      cfg.meta_whatsapp_token = cfg.meta_whatsapp_token || cred.meta_access_token;
+      cfg.meta_phone_number_id = cfg.meta_phone_number_id || cred.meta_phone_number_id;
+      cfg.meta_display_phone = cred.meta_display_phone || "";
     }
   }
 
@@ -746,8 +748,8 @@ async function sendWhatsAppMessage(
         company_id: companyId,
         message_id: messageId,
         direction: "outbound",
-        phone_from: cfg.meta_phone_number_id,
-        phone_to: phone,
+        phone_from: (cfg.meta_display_phone || "").replace(/[^0-9]/g, "") || cfg.meta_phone_number_id,
+        phone_to: phone.replace(/[^0-9]/g, ""),
         phone_number_id: cfg.meta_phone_number_id,
         type: "text",
         body: text,
@@ -967,13 +969,6 @@ REGRAS:
   const needsHandoff = aiResponse.includes("[HUMAN_TAKEOVER]");
   aiResponse = aiResponse.replace("[HUMAN_TAKEOVER]", "").trim();
 
-  // Salvar resposta do assistente
-  await supabase.from("wa_messages").insert({
-    conversation_id: conversation.id,
-    role: "assistant",
-    content: aiResponse,
-  });
-
   // Atualizar contador de turnos
   await supabase.from("wa_conversations").update({
     turn_count: turnCount + 1,
@@ -981,26 +976,9 @@ REGRAS:
     ...(needsHandoff ? { status: "human_takeover", human_mode: true } : {}),
   }).eq("id", conversation.id);
 
-  // Enviar via whatsapp-meta-send
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-  let sent = false;
-  try {
-    const sendRes = await fetch(`${supabaseUrl}/functions/v1/whatsapp-meta-send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({ to: phone, type: "text", text: aiResponse }),
-      signal: AbortSignal.timeout(15000),
-    });
-    const sendData = await sendRes.json();
-    sent = sendRes.ok && (sendData.ok || sendData.success);
-  } catch (e) {
-    console.error("[CLOSER_SEND] error:", e);
-  }
+  // Enviar via sendWhatsAppMessage (insere em whatsapp_meta_messages → trigger sync_meta_to_wa → wa_messages)
+  const sendResult = await sendWhatsAppMessage(company_id, phone, aiResponse);
+  const sent = sendResult.success;
 
   return json({
     success: true,

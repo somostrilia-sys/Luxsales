@@ -152,20 +152,13 @@ Transcrição: ${transcriptText}`;
 
   const conversationId = conversation.id;
 
-  // Salvar primeira mensagem do assistente
-  await supabase.from("wa_messages").insert({
-    conversation_id: conversationId,
-    role: "assistant",
-    content: analysis.opening_message,
-  });
-
-  // Enviar WhatsApp via whatsapp-meta-send
+  // Enviar WhatsApp via send-meta-message (insere em whatsapp_meta_messages → trigger → wa_messages)
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   let sent = false;
   try {
-    const sendRes = await fetch(`${supabaseUrl}/functions/v1/whatsapp-meta-send`, {
+    const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-meta-message`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -175,6 +168,7 @@ Transcrição: ${transcriptText}`;
         to: phone,
         type: "text",
         text: analysis.opening_message,
+        company_id: company_id,
       }),
       signal: AbortSignal.timeout(15000),
     });
