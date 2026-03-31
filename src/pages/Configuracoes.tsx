@@ -133,6 +133,7 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
   const [tier, setTier] = useState(1000);
   const [tierInput, setTierInput] = useState("1000");
   const [consultores, setConsultores] = useState<ConsultorTier[]>([]);
+  const [totalConsultoresAtivos, setTotalConsultoresAtivos] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -156,20 +157,30 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
       setTier(tierVal);
       setTierInput(String(tierVal));
 
-      // Consultores ativos
-      const { data: collabs } = await supabase
-        .from("collaborators")
-        .select("id, name")
-        .eq("company_id", companyId)
-        .eq("active", true)
-        .order("name")
-        .limit(50);
+      // Consultores ativos — COUNT total (para cálculo correto) + lista (para tabela)
+      const [{ count: totalCount }, { data: collabs }] = await Promise.all([
+        supabase
+          .from("collaborators")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .eq("active", true),
+        supabase
+          .from("collaborators")
+          .select("id, name")
+          .eq("company_id", companyId)
+          .eq("active", true)
+          .order("name")
+          .limit(50),
+      ]);
+
+      const totalAtivos = totalCount ?? collabs?.length ?? 0;
+      setTotalConsultoresAtivos(totalAtivos);
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
       const items: ConsultorTier[] = [];
-      const perConsultor = collabs && collabs.length > 0 ? Math.floor(tierVal / collabs.length) : 0;
+      const perConsultor = totalAtivos > 0 ? Math.floor(tierVal / totalAtivos) : 0;
 
       for (const c of collabs || []) {
         const { count } = await supabase
@@ -203,7 +214,7 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
     setSaving(false);
   };
 
-  const perConsultor = consultores.length > 0 ? Math.floor(tier / consultores.length) : 0;
+  const perConsultor = totalConsultoresAtivos > 0 ? Math.floor(tier / totalConsultoresAtivos) : 0;
 
   return (
     <Card className="shadow-sm bg-card/80 backdrop-blur-sm border-primary/20">
@@ -236,11 +247,11 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
               </Button>
             </div>
           </div>
-          {consultores.length > 0 && (
+          {totalConsultoresAtivos > 0 && (
             <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-2 text-center">
               <p className="text-2xl font-bold text-primary">{perConsultor.toLocaleString("pt-BR")}</p>
-              <p className="text-xs text-muted-foreground">disparos / consultor</p>
-              <p className="text-[10px] text-muted-foreground">{tier.toLocaleString("pt-BR")} ÷ {consultores.length} consultores</p>
+              <p className="text-xs text-muted-foreground">disparos / consultor / dia</p>
+              <p className="text-[10px] text-muted-foreground">{tier.toLocaleString("pt-BR")} ÷ {totalConsultoresAtivos} consultores ativos</p>
             </div>
           )}
         </div>

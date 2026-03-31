@@ -33,6 +33,7 @@ interface PoolLead {
   call_attempts: number;
   last_call_at: string | null;
   priority: number;
+  lead_category: string | null;
 }
 
 interface CallLog {
@@ -84,6 +85,20 @@ const CALL_LABEL: Record<CallStatus, string> = {
 
 const formatDuration = (s: number) =>
   `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+
+const getScore = (lead: PoolLead): number => {
+  if (lead.interest_status === "interested") return 90;
+  if (lead.call_attempts === 0) return 70;
+  if (lead.interest_status === "not_interested_1") return 40;
+  return Math.max(20, 65 - (lead.call_attempts * 10));
+};
+
+const getTemperatura = (lead: PoolLead): { label: string; color: string } => {
+  if (lead.interest_status === "interested") return { label: "Quente", color: "text-red-400" };
+  if (lead.interest_status === "not_interested_1") return { label: "Frio", color: "text-blue-400" };
+  if (lead.call_attempts === 0) return { label: "Novo", color: "text-emerald-400" };
+  return { label: "Morno", color: "text-yellow-400" };
+};
 
 const formatDate = (iso: string | null) => {
   if (!iso) return "—";
@@ -214,8 +229,8 @@ function TabLigacoes({
       const validStatuses = ["pending", "unknown", "not_interested_1"];
       // CEO sees all leads from the company; consultants see only their own
       let countQ = supabase.from("consultant_lead_pool").select("id, phone_normalized").in("interest_status", validStatuses);
+      if (isCEO && companyId) countQ = countQ.eq("company_id", companyId);
       if (!isCEO) countQ = countQ.eq("collaborator_id", collaboratorId);
-      // Filter by company via join if CEO
       const { data: allData } = await countQ;
       const invalidCount = (allData || []).filter(l => !l.phone_normalized).length;
       setInvalidPhoneCount(invalidCount);
@@ -223,9 +238,10 @@ function TabLigacoes({
       // Load queue — works regardless of VoIP status (it's just a list)
       let query = supabase
         .from("consultant_lead_pool")
-        .select("id, collaborator_id, lead_name, phone, phone_normalized, interest_status, call_attempts, last_call_at, priority")
+        .select("id, collaborator_id, lead_name, phone, phone_normalized, interest_status, call_attempts, last_call_at, priority, lead_category")
         .in("interest_status", validStatuses)
         .limit(parseInt(batchSize));
+      if (isCEO && companyId) query = query.eq("company_id", companyId);
       if (!isCEO) query = query.eq("collaborator_id", collaboratorId);
       const { data, error } = await query;
 
@@ -663,32 +679,39 @@ function TabLigacoes({
             </CardTitle>
           </CardHeader>
           <div className="divide-y divide-border/40 max-h-72 overflow-y-auto">
-            {queue.slice(0, 25).map((lead, idx) => (
-              <div key={lead.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-xs text-muted-foreground w-5 shrink-0 text-right">
-                    {idx + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{lead.lead_name ?? "—"}</p>
-                    <p className="text-xs font-mono text-muted-foreground">{displayPhone(lead)}</p>
+            {queue.slice(0, 25).map((lead, idx) => {
+              const temp = getTemperatura(lead);
+              const score = getScore(lead);
+              return (
+                <div key={lead.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-xs text-muted-foreground w-5 shrink-0 text-right">
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{lead.lead_name ?? "—"}</p>
+                      <p className="text-xs font-mono text-muted-foreground">{displayPhone(lead)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[10px] font-semibold hidden sm:inline ${temp.color}`}>
+                      {temp.label}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground hidden sm:inline">
+                      {score}pts · {lead.call_attempts || 0}t
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] px-1.5 py-0 border-0 ${
+                        INTEREST_COLORS[lead.interest_status ?? "pending"] ?? "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {INTEREST_LABELS[lead.interest_status ?? "pending"] ?? lead.interest_status}
+                    </Badge>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs text-muted-foreground hidden sm:inline">
-                    {lead.call_attempts || 0} tent.
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] px-1.5 py-0 border-0 ${
-                      INTEREST_COLORS[lead.interest_status ?? "pending"] ?? "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {INTEREST_LABELS[lead.interest_status ?? "pending"] ?? lead.interest_status}
-                  </Badge>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {queue.length > 25 && (
               <div className="px-4 py-2.5 text-xs text-muted-foreground text-center">
                 +{queue.length - 25} leads na fila...

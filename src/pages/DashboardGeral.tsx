@@ -813,8 +813,12 @@ export default function DashboardGeral() {
             {chartsLoading ? (
               <Skeleton className="h-[220px] w-full" />
             ) : funnelData.every((d) => d.value === 0) ? (
-              <div className="flex items-center justify-center h-[220px] text-sm text-muted-foreground">
-                Sem dados
+              <div className="flex flex-col items-center justify-center h-[220px] gap-3 text-muted-foreground">
+                <BarChart3 className="h-10 w-10 opacity-20" />
+                <div className="text-center">
+                  <p className="text-sm font-medium">Funil ainda vazio</p>
+                  <p className="text-xs opacity-60 mt-1">Comece ligando para seus leads — os dados aparecerão aqui</p>
+                </div>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
@@ -846,8 +850,12 @@ export default function DashboardGeral() {
               {chartsLoading ? (
                 <Skeleton className="h-[200px] w-full" />
               ) : !hasCallsData ? (
-                <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
-                  Sem dados no período
+                <div className="flex flex-col items-center justify-center h-[200px] gap-3 text-muted-foreground">
+                  <Phone className="h-8 w-8 opacity-20" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium">Nenhuma ligação nos últimos 30 dias</p>
+                    <p className="text-xs opacity-60 mt-1">Comece ligando para seus leads!</p>
+                  </div>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={200}>
@@ -884,8 +892,12 @@ export default function DashboardGeral() {
               {chartsLoading ? (
                 <Skeleton className="h-[200px] w-full" />
               ) : !hasDispatchData ? (
-                <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
-                  Sem dados no período
+                <div className="flex flex-col items-center justify-center h-[200px] gap-3 text-muted-foreground">
+                  <Send className="h-8 w-8 opacity-20" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium">Nenhum disparo nos últimos 30 dias</p>
+                    <p className="text-xs opacity-60 mt-1">Qualifique leads por ligação e dispare via WhatsApp</p>
+                  </div>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={200}>
@@ -922,8 +934,12 @@ export default function DashboardGeral() {
             {chartsLoading ? (
               <Skeleton className="h-[200px] w-full" />
             ) : topConsultores.length === 0 ? (
-              <div className="flex items-center justify-center h-[120px] text-sm text-muted-foreground">
-                Sem dados de consultores
+              <div className="flex flex-col items-center justify-center h-[120px] gap-2 text-muted-foreground">
+                <Users className="h-8 w-8 opacity-20" />
+                <div className="text-center">
+                  <p className="text-sm font-medium">Nenhum consultor com atividade ainda</p>
+                  <p className="text-xs opacity-60 mt-0.5">Os dados aparecerão conforme as ligações forem realizadas</p>
+                </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
