@@ -512,34 +512,32 @@ export default function Templates() {
           components,
         }),
       });
-      let data = await res.json();
-      // Se já existe, tentar update
-      if (!res.ok && data?.details?.error?.error_subcode === 2388024) {
-        res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            action: "update",
-            company_id: effectiveCompanyId,
-            name: tmpl.name,
-            category: (tmpl.category || "UTILITY").toUpperCase(),
-            language: "pt_BR",
-            components,
-          }),
-        });
-        data = await res.json();
-      }
+      const data = await res.json();
       if (res.ok) {
         // Mark draft as submitted
+        const finalName = data.renamed || tmpl.name;
         await supabase.from("wa_templates")
-          .update({ status: "submitted" })
+          .update({ status: "submitted", name: finalName })
           .eq("name", tmpl.name)
-          .eq("company_id", effectiveCompanyId);
-        toast.success("Template submetido à Meta — aguardando aprovação");
+          .eq("status", "draft");
+        const msg = data.renamed
+          ? `Template submetido como "${data.renamed}" — aguardando aprovação`
+          : "Template submetido à Meta — aguardando aprovação";
+        toast.success(msg);
         fetchDrafts();
         fetchTemplates();
       } else {
-        toast.error(data.error || "Erro ao submeter");
+        // Traduzir erros da Meta
+        const metaErr = data?.details?.error;
+        let errorMsg = data.error || "Erro ao submeter";
+        if (metaErr?.error_subcode === 2388024) {
+          errorMsg = "Já existe template com esse nome na Meta. Tente gerar com nome diferente.";
+        } else if (metaErr?.error_subcode === 2388299) {
+          errorMsg = "Variáveis {{N}} não podem estar no início/fim da mensagem.";
+        } else if (metaErr?.error_user_msg) {
+          errorMsg = metaErr.error_user_msg;
+        }
+        toast.error(errorMsg);
       }
     } catch {
       toast.error("Erro de conexão");
