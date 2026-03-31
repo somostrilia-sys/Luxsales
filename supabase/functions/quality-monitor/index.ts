@@ -83,8 +83,8 @@ async function checkQuality(body: any) {
     }
   }
 
-  // 2. Fallback: credenciais globais (só se não for company_only)
-  if (!company_only && (!cfg.meta_whatsapp_token || !cfg.meta_phone_number_id)) {
+  // 2. Fallback: credenciais globais (só se empresa não tem credentials próprias)
+  if (!cfg.meta_whatsapp_token || !cfg.meta_phone_number_id) {
     const { data: globalConfig } = await supabase
       .from("system_configs")
       .select("key, value")

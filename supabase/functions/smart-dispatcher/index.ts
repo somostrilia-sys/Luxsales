@@ -582,30 +582,32 @@ async function sendViaMeta(
   template: any,
   params?: any
 ) {
-  // Buscar credenciais
-  const { data: config } = await supabase
-    .from("system_configs")
-    .select("key, value")
-    .in("key", ["meta_whatsapp_token", "meta_phone_number_id"]);
+  // Buscar credenciais da empresa primeiro
+  let token = "";
+  let phoneNumberId = "";
 
-  const configMap: Record<string, string> = {};
-  for (const c of config || []) configMap[c.key] = c.value;
+  const { data: cred } = await supabase
+    .from("whatsapp_meta_credentials")
+    .select("meta_access_token, meta_phone_number_id")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .not("meta_access_token", "eq", "")
+    .maybeSingle();
 
-  let token = configMap.meta_whatsapp_token;
-  let phoneNumberId = configMap.meta_phone_number_id;
+  if (cred) {
+    token = cred.meta_access_token;
+    phoneNumberId = cred.meta_phone_number_id;
+  }
 
-  // Fallback: whatsapp_meta_credentials
+  // Fallback: system_configs (global)
   if (!token || !phoneNumberId) {
-    const { data: cred } = await supabase
-      .from("whatsapp_meta_credentials")
-      .select("access_token, phone_number_id")
-      .eq("company_id", companyId)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (cred) {
-      token = token || cred.access_token;
-      phoneNumberId = phoneNumberId || cred.phone_number_id;
+    const { data: config } = await supabase
+      .from("system_configs")
+      .select("key, value")
+      .in("key", ["meta_whatsapp_token", "meta_phone_number_id"]);
+    for (const c of config || []) {
+      if (c.key === "meta_whatsapp_token" && !token) token = c.value;
+      if (c.key === "meta_phone_number_id" && !phoneNumberId) phoneNumberId = c.value;
     }
   }
 

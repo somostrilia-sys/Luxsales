@@ -692,26 +692,32 @@ async function sendWhatsAppMessage(
   phone: string,
   text: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const { data: config } = await supabase
-    .from("system_configs")
-    .select("key, value")
-    .in("key", ["meta_whatsapp_token", "meta_phone_number_id"]);
-
   const cfg: Record<string, string> = {};
-  for (const c of config || []) cfg[c.key] = c.value;
 
+  // 1. Buscar credenciais da empresa primeiro
+  const { data: cred } = await supabase
+    .from("whatsapp_meta_credentials")
+    .select("meta_access_token, meta_phone_number_id, meta_display_phone")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .not("meta_access_token", "eq", "")
+    .maybeSingle();
+
+  if (cred) {
+    cfg.meta_whatsapp_token = cred.meta_access_token;
+    cfg.meta_phone_number_id = cred.meta_phone_number_id;
+    cfg.meta_display_phone = cred.meta_display_phone || "";
+  }
+
+  // 2. Fallback: system_configs (global)
   if (!cfg.meta_whatsapp_token || !cfg.meta_phone_number_id) {
-    const { data: cred } = await supabase
-      .from("whatsapp_meta_credentials")
-      .select("meta_access_token, meta_phone_number_id, meta_display_phone")
-      .eq("company_id", companyId)
-      .eq("is_active", true)
-      .not("meta_access_token", "eq", "")
-      .maybeSingle();
-    if (cred) {
-      cfg.meta_whatsapp_token = cfg.meta_whatsapp_token || cred.meta_access_token;
-      cfg.meta_phone_number_id = cfg.meta_phone_number_id || cred.meta_phone_number_id;
-      cfg.meta_display_phone = cred.meta_display_phone || "";
+    const { data: config } = await supabase
+      .from("system_configs")
+      .select("key, value")
+      .in("key", ["meta_whatsapp_token", "meta_phone_number_id"]);
+    for (const c of config || []) {
+      if (c.key === "meta_whatsapp_token" && !cfg.meta_whatsapp_token) cfg.meta_whatsapp_token = c.value;
+      if (c.key === "meta_phone_number_id" && !cfg.meta_phone_number_id) cfg.meta_phone_number_id = c.value;
     }
   }
 
