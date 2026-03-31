@@ -205,6 +205,10 @@ export default function DashboardGeral() {
   });
   const [tierLoading, setTierLoading] = useState(true);
 
+  // ── Distribuição de leads por consultor ───────────────────────────────────────
+  const [leadsPerConsultor, setLeadsPerConsultor] = useState<{ name: string; leads: number }[]>([]);
+  const [leadsConsultorLoading, setLeadsConsultorLoading] = useState(true);
+
   // ── Charts ────────────────────────────────────────────────────────────────────
   const [funnelData, setFunnelData] = useState<{ name: string; value: number }[]>([]);
   const [callsPerDay, setCallsPerDay] = useState<{ date: string; calls: number }[]>([]);
@@ -468,6 +472,36 @@ export default function DashboardGeral() {
   }, [selectedCompanyId]);
 
   // ─────────────────────────────────────────────────────────────────────────────
+  // Distribuição de leads por consultor
+  // ─────────────────────────────────────────────────────────────────────────────
+  const fetchLeadsPerConsultor = useCallback(async () => {
+    setLeadsConsultorLoading(true);
+    const filter = selectedCompanyId !== "all" ? selectedCompanyId : null;
+    try {
+      let q = supabase
+        .from("consultant_lead_pool")
+        .select("collaborator_id, collaborators!inner(name)");
+      if (filter) q = (q as any).eq("company_id", filter);
+      const { data } = await q;
+      const map: Record<string, { name: string; count: number }> = {};
+      ((data ?? []) as any[]).forEach((row) => {
+        const id: string = row.collaborator_id;
+        const name: string = row.collaborators?.name ?? "—";
+        if (!map[id]) map[id] = { name, count: 0 };
+        map[id].count++;
+      });
+      const sorted = Object.values(map)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10)
+        .map(({ name, count }) => ({ name, leads: count }));
+      setLeadsPerConsultor(sorted);
+    } catch {
+      setLeadsPerConsultor([]);
+    }
+    setLeadsConsultorLoading(false);
+  }, [selectedCompanyId]);
+
+  // ─────────────────────────────────────────────────────────────────────────────
   // Charts
   // ─────────────────────────────────────────────────────────────────────────────
   const fetchCharts = useCallback(async () => {
@@ -578,7 +612,8 @@ export default function DashboardGeral() {
     fetchWaKpis();
     fetchTierKpis();
     fetchCharts();
-  }, [fetchOpKpis, fetchCallKpis, fetchWaKpis, fetchTierKpis, fetchCharts]);
+    fetchLeadsPerConsultor();
+  }, [fetchOpKpis, fetchCallKpis, fetchWaKpis, fetchTierKpis, fetchCharts, fetchLeadsPerConsultor]);
 
   const refreshAll = () => {
     fetchDashboard(true);
@@ -587,6 +622,7 @@ export default function DashboardGeral() {
     fetchWaKpis();
     fetchTierKpis();
     fetchCharts();
+    fetchLeadsPerConsultor();
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -973,6 +1009,38 @@ export default function DashboardGeral() {
                   </tbody>
                 </table>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Distribuição de Leads por Consultor ──────────────────────── */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Users className="h-4 w-4 text-blue-400" /> Distribuição de Leads por Consultor
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {leadsConsultorLoading ? (
+              <Skeleton className="h-[220px] w-full" />
+            ) : leadsPerConsultor.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-[220px] gap-3 text-muted-foreground">
+                <Users className="h-10 w-10 opacity-20" />
+                <div className="text-center">
+                  <p className="text-sm font-medium">Nenhum lead distribuído ainda</p>
+                  <p className="text-xs opacity-60 mt-1">Os dados aparecerão conforme os leads forem distribuídos</p>
+                </div>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={leadsPerConsultor} margin={{ left: 0, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={40} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip formatter={(v: number) => fmt(v)} />
+                  <Bar dataKey="leads" name="Leads" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             )}
           </CardContent>
         </Card>

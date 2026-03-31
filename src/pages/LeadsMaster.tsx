@@ -93,7 +93,7 @@ const statusLabels: Record<string, { label: string; cls: string }> = {
 
 const tempEmoji: Record<string, string> = { hot: "🔥", warm: "🌡️", cold: "❄️", dead: "💀" };
 
-function calcScore(lead: { total_call_attempts: number; interest_status?: string | null; last_call_at: string | null; phone_normalized: string | null }): number {
+function calcScore(lead: { total_call_attempts: number; interest_status?: string | null; last_call_at: string | null; phone_number?: string | null }): number {
   let score = 0;
   if (lead.total_call_attempts === 1) score += 20;
   else if (lead.total_call_attempts >= 2 && lead.total_call_attempts <= 3) score += 15;
@@ -106,7 +106,7 @@ function calcScore(lead: { total_call_attempts: number; interest_status?: string
     if (diffH < 24) score += 20;
     else if (diffH < 168) score += 10;
   }
-  if (lead.phone_normalized) score += 10;
+  if (lead.phone_number) score += 10;
   return Math.max(0, Math.min(100, score));
 }
 
@@ -118,8 +118,8 @@ function calcTempLabel(score: number): { label: string; cls: string } {
 
 // ── types ──
 interface Lead {
-  id: string; phone_number: string; phone_normalized: string | null; lead_name: string; status: string; lead_score: number; lead_temperature: string;
-  segment: string; total_call_attempts: number; last_call_at: string | null; created_at: string; interest_status?: string | null;
+  id: string; phone_number: string; lead_name: string; status: string; lead_score: number; lead_temperature: string;
+  segment: string; total_call_attempts: number; last_call_at: string | null; created_at: string;
 }
 interface Stats {
   total: number; new: number; queued_call: number; called: number; opted_in: number;
@@ -256,7 +256,7 @@ export default function LeadsMaster() {
       // Data query
       let query = supabase
         .from("leads_master")
-        .select("id, lead_name, phone_number, phone_normalized, status, lead_score, lead_temperature, segment, total_call_attempts, last_call_at, created_at, interest_status");
+        .select("id, lead_name, phone_number, status, lead_score, lead_temperature, segment, total_call_attempts, last_call_at, created_at");
       if (company_id) query = query.eq("company_id", company_id);
       if (fStatus !== "all") query = query.eq("status", fStatus);
       if (fTemp !== "all") query = query.eq("lead_temperature", fTemp);
@@ -370,7 +370,6 @@ export default function LeadsMaster() {
       const cid = company_id ?? baseCompanyId;
       if (!cid) return;
       // Contar leads da EMPRESA selecionada para distribuição
-      const cid = company_id ?? baseCompanyId;
       let q = supabase.from("consultant_lead_pool").select("*", { count: "exact", head: true });
       if (cid) q = q.eq("company_id", cid);
       const { count: total } = await q;
@@ -647,8 +646,8 @@ export default function LeadsMaster() {
                           </td>
                           <td className="py-2 px-2"><Badge variant="outline" className={`text-xs ${st.cls}`}>{st.label}</Badge></td>
                           <td className="py-2 px-2 font-mono text-xs">
-                            {l.phone_normalized
-                              ? fmtPhone(l.phone_normalized)
+                            {l.phone_number
+                              ? fmtPhone(l.phone_number)
                               : <span className="flex items-center gap-1">{fmtPhone(l.phone_number)} <span className="text-[9px] bg-red-500/20 text-red-400 px-1 rounded">Fixo</span></span>
                             }
                           </td>

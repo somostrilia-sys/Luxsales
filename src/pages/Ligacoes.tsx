@@ -34,6 +34,8 @@ interface PoolLead {
   last_call_at: string | null;
   priority: number;
   lead_category: string | null;
+  dispatched: boolean | null;
+  responded_at: string | null;
 }
 
 interface CallLog {
@@ -86,19 +88,24 @@ const CALL_LABEL: Record<CallStatus, string> = {
 const formatDuration = (s: number) =>
   `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
-const getScore = (lead: PoolLead): number => {
-  if (lead.interest_status === "interested") return 90;
-  if (lead.call_attempts === 0) return 70;
-  if (lead.interest_status === "not_interested_1") return 40;
-  return Math.max(20, 65 - (lead.call_attempts * 10));
-};
+function calcScore(lead: PoolLead): { score: number; label: string; emoji: string } {
+  let s = 0;
+  if (lead.interest_status === "interested") s += 40;
+  else if (lead.interest_status === "callback") s += 20;
+  if (lead.dispatched) s += 20;
+  if (lead.responded_at) s += 15;
+  if (lead.call_attempts === 0) s += 10;
+  else if (lead.call_attempts === 1) s += 5;
+  if (s >= 60) return { score: s, label: "Hot", emoji: "🔥" };
+  if (s >= 30) return { score: s, label: "Morno", emoji: "🌡️" };
+  return { score: s, label: "Frio", emoji: "❄️" };
+}
 
-const getTemperatura = (lead: PoolLead): { label: string; color: string } => {
-  if (lead.interest_status === "interested") return { label: "Quente", color: "text-red-400" };
-  if (lead.interest_status === "not_interested_1") return { label: "Frio", color: "text-blue-400" };
-  if (lead.call_attempts === 0) return { label: "Novo", color: "text-emerald-400" };
-  return { label: "Morno", color: "text-yellow-400" };
-};
+const attemptLabel = (n: number) => n === 0 ? "1ª lig." : `${n + 1}ª tent.`;
+const attemptColor = (n: number) =>
+  n === 0 ? "bg-emerald-500/20 text-emerald-400" :
+  n < 4   ? "bg-yellow-500/20 text-yellow-400" :
+            "bg-red-500/20 text-red-400";
 
 const formatDate = (iso: string | null) => {
   if (!iso) return "—";
@@ -238,7 +245,7 @@ function TabLigacoes({
       // Load queue — works regardless of VoIP status (it's just a list)
       let query = supabase
         .from("consultant_lead_pool")
-        .select("id, collaborator_id, lead_name, phone, phone_normalized, interest_status, call_attempts, last_call_at, priority, lead_category")
+        .select("id, collaborator_id, lead_name, phone, phone_normalized, interest_status, call_attempts, last_call_at, priority, lead_category, dispatched, responded_at")
         .in("interest_status", validStatuses)
         .limit(parseInt(batchSize));
       if (isCEO && companyId) query = query.eq("company_id", companyId);
@@ -361,10 +368,10 @@ function TabLigacoes({
       if (currentLead.interest_status === "not_interested_1") {
         newInterestStatus = "not_interested_2";
         removeFromQueue = true;
-        toast.info("Lead descartado após 2ª recusa");
+        toast.info("Lead marcado como sem interesse (2ª recusa — descartado)");
       } else {
         newInterestStatus = "not_interested_1";
-        toast.info("1ª recusa — voltando pro final da fila");
+        toast.info("Lead marcado como sem interesse");
       }
     } else {
       // no_answer
@@ -378,12 +385,21 @@ function TabLigacoes({
     }
 
     // Update DB
+    const statusUpdate =
+      result === "no_interest" && newInterestStatus === "not_interested_2"
+        ? { status: "discarded" }
+        : result === "no_interest"
+        ? { status: "closed" }
+        : newAttempts >= 5
+        ? { status: "discarded" }
+        : {};
     await supabase
       .from("consultant_lead_pool")
       .update({
         interest_status: newInterestStatus,
         call_attempts: newAttempts,
         last_call_at: new Date().toISOString(),
+        ...statusUpdate,
         ...(dispatchAvailable ? { dispatch_available: true } : {}),
       })
       .eq("id", currentLead.id);
@@ -680,8 +696,8 @@ function TabLigacoes({
           </CardHeader>
           <div className="divide-y divide-border/40 max-h-72 overflow-y-auto">
             {queue.slice(0, 25).map((lead, idx) => {
-              const temp = getTemperatura(lead);
-              const score = getScore(lead);
+              const sc = calcScore(lead);
+              const attempts = lead.call_attempts || 0;
               return (
                 <div key={lead.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
                   <div className="flex items-center gap-3 min-w-0">
@@ -689,17 +705,29 @@ function TabLigacoes({
                       {idx + 1}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{lead.lead_name ?? "—"}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-sm font-medium truncate">{lead.lead_name ?? "—"}</p>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] px-1.5 py-0 border-0 shrink-0 ${
+                            sc.label === "Hot"   ? "bg-red-500/20 text-red-400" :
+                            sc.label === "Morno" ? "bg-yellow-500/20 text-yellow-400" :
+                                                   "bg-blue-500/20 text-blue-400"
+                          }`}
+                        >
+                          {sc.emoji} {sc.label} {sc.score}
+                        </Badge>
+                      </div>
                       <p className="text-xs font-mono text-muted-foreground">{displayPhone(lead)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[10px] font-semibold hidden sm:inline ${temp.color}`}>
-                      {temp.label}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground hidden sm:inline">
-                      {score}pts · {lead.call_attempts || 0}t
-                    </span>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] px-1.5 py-0 border-0 hidden sm:inline-flex ${attemptColor(attempts)}`}
+                    >
+                      {attemptLabel(attempts)}
+                    </Badge>
                     <Badge
                       variant="outline"
                       className={`text-[10px] px-1.5 py-0 border-0 ${
