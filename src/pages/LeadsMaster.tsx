@@ -405,11 +405,9 @@ export default function LeadsMaster() {
     setActionLoading(true);
     try {
       await callEdge("lead-distributor", {
-        action: "distribute",
+        action: "mass-distribute-pool",
         ...base,
         company_id: targetCompanyId,
-        phone_numbers: [], // vazio = distribuir todos não-distribuídos
-        distribute_all_undistributed: true,
         ...(mode === "all"
           ? { distribute_to_all: true }
           : { collaborator_id: collabId }),
