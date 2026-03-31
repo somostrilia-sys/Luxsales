@@ -251,8 +251,8 @@ export default function VoiceSimulate() {
       const localRes = await fetch(XTTS_LOCAL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-        signal: AbortSignal.timeout(8000),
+        body: JSON.stringify({ text, speed: 1.15 }),
+        signal: AbortSignal.timeout(6000),
       });
       if (localRes.ok) {
         const blob = await localRes.blob();
@@ -349,13 +349,16 @@ export default function VoiceSimulate() {
 
       const systemPrompt = `${knowledgeContext || "Você é Lucas, consultor da Objetivo."}
 
-GUARDRAILS TÉCNICOS (obedecer SEMPRE, sem exceção):
-1. Texto puro. ZERO markdown, bullets, asteriscos, emojis ou formatação.
-2. Máximo 2 frases curtas por resposta.
-3. ANTI-LOOP: Leia TODAS as mensagens anteriores. Se você já disse algo, NÃO repita. Se já se apresentou, NÃO se apresente de novo. Se já perguntou algo, NÃO pergunte de novo.
-4. AVANCE a conversa: cada resposta deve trazer informação NOVA ou fazer uma pergunta DIFERENTE.
-5. Se o lead já respondeu positivamente, vá direto ao ponto: explique o serviço, pergunte o veículo, dê o preço.
-6. NUNCA comece com "Aqui é o Lucas" se já se apresentou antes.`;
+REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
+- Fale como humano ao telefone. Frases curtas e naturais, como conversa real.
+- MÁXIMO 2 frases por vez. Seja direto.
+- NUNCA use markdown, bullets, asteriscos, emojis, listas ou formatação.
+- NUNCA repita o que já disse. Leia todo o histórico.
+- Se já se apresentou, NÃO se apresente de novo.
+- AVANCE: cada fala traz algo novo ou faz pergunta diferente.
+- Se o lead mostrou interesse: pergunte o veículo e dê o preço.
+- Fale de forma CONTÍNUA e fluida, sem pausas longas entre palavras.
+- Use contrações naturais: "tô", "tá", "né", "pro", "pra".`;
 
       const messagesWithSystem = [
         { role: "system", content: systemPrompt },
@@ -377,7 +380,7 @@ GUARDRAILS TÉCNICOS (obedecer SEMPRE, sem exceção):
           system_prompt: systemPrompt,
           context: { phone_number: phoneNumber },
           llm_provider: "claude",
-          max_tokens: 120,
+          max_tokens: 80,
         }),
       });
 
@@ -385,7 +388,7 @@ GUARDRAILS TÉCNICOS (obedecer SEMPRE, sem exceção):
       if (data.error) { console.error("ai-simulator error:", data.error); }
       const rawText = data.text || data.response || data.message || "...";
       // Limpar e truncar para TTS rápido
-      const aiText = smartTruncate(cleanForTTS(rawText));
+      const aiText = smartTruncate(cleanForTTS(rawText), 150);
       conversationRef.current.push({ role: "assistant", content: aiText });
       addEntry("ai", aiText);
 
