@@ -382,7 +382,7 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
           company_id: companyId,
           system_prompt: systemPrompt,
           context: { phone_number: phoneNumber },
-          llm_provider: "claude",
+          llm_provider: "openai",
           max_tokens: 80,
         }),
       });
