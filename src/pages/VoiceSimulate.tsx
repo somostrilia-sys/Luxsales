@@ -168,15 +168,18 @@ export default function VoiceSimulate() {
       .replace(/\*([^*]+)\*/g, "$1")          // *italic* → italic
       .replace(/#{1,6}\s/g, "")               // # headers
       .replace(/[-•]\s/g, "")                 // bullets
-      .replace(/\n{2,}/g, " ")               // double newlines → espaço (NÃO ponto — evita pausa)
-      .replace(/\n/g, " ")                   // single newline → espaço (NÃO vírgula)
+      .replace(/\n{2,}/g, " ")               // double newlines → espaço
+      .replace(/\n/g, " ")                   // single newline → espaço
       .replace(/[`_~]/g, "")                 // backticks, underscores
       .replace(/,\s*,/g, ",")               // vírgulas duplas → uma
       .replace(/\.\s*\./g, ".")             // pontos duplos → um
       .replace(/,\s*\./g, ".")             // vírgula antes de ponto → só ponto
-      .replace(/:\s/g, ", ")               // dois pontos → vírgula (flui melhor no TTS)
+      .replace(/:\s/g, ", ")               // dois pontos → vírgula
       .replace(/;\s/g, ", ")               // ponto-vírgula → vírgula
       .replace(/\s{2,}/g, " ")               // multiple spaces
+      .replace(/\.$/g, "")                    // remover ponto final (XTTS lê "ponto")
+      .replace(/\.\s*$/g, "")                 // ponto final + espaço
+      .replace(/\s+$/g, "")                   // trim final
       .trim();
   };
 
@@ -252,7 +255,7 @@ export default function VoiceSimulate() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, speed: 1.15 }),
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(4000),
       });
       if (localRes.ok) {
         const blob = await localRes.blob();
