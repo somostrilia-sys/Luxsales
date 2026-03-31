@@ -342,7 +342,8 @@ export default function VoiceSimulate() {
       if (data) {
         const parts = [];
         if (data.system_prompt) parts.push(data.system_prompt);
-        if (data.knowledge_base) parts.push(`\nBASE DE CONHECIMENTO:\n${data.knowledge_base}`);
+        // NÃO passar knowledge_base na ligação — só o system_prompt
+        // A base de conhecimento é para o closer no WhatsApp, não para o qualificador
         if (data.personality) parts.push(`\nPERSONALIDADE: ${data.personality}`);
         if (data.tone) parts.push(`\nTOM: ${data.tone}`);
         if (data.forbidden_words?.length) parts.push(`\nNUNCA diga: ${data.forbidden_words.join(", ")}`);
