@@ -157,20 +157,37 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
       setTier(tierVal);
       setTierInput(String(tierVal));
 
-      // Consultores ativos — COUNT total (para cálculo correto) + lista (para tabela)
+      // Consultores ativos — buscar roles elegíveis (CEO + Gestor Comercial + Consultor Comercial)
+      const { data: eligibleRoles } = await supabase
+        .from("roles")
+        .select("id, name, level")
+        .eq("company_id", companyId)
+        .in("level", [0, 2, 3]);
+
+      const eligibleRoleIds = (eligibleRoles || [])
+        .filter(r => {
+          const name = r.name.toLowerCase();
+          return r.level === 0 ||
+            (name.includes("consultor") && name.includes("comercial")) ||
+            (name.includes("gestor") && name.includes("comercial"));
+        })
+        .map(r => r.id);
+
       const [{ count: totalCount }, { data: collabs }] = await Promise.all([
         supabase
           .from("collaborators")
           .select("id", { count: "exact", head: true })
           .eq("company_id", companyId)
-          .eq("active", true),
+          .eq("active", true)
+          .in("role_id", eligibleRoleIds),
         supabase
           .from("collaborators")
           .select("id, name")
           .eq("company_id", companyId)
           .eq("active", true)
+          .in("role_id", eligibleRoleIds)
           .order("name")
-          .limit(50),
+          .limit(100),
       ]);
 
       const totalAtivos = totalCount ?? collabs?.length ?? 0;
