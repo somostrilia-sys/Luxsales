@@ -146,6 +146,128 @@ serve(async (req) => {
         return jsonResponse({ ok: true, transcript: transcript?.transcript })
       }
 
+      case 'transcribe_and_analyze': {
+        // Pipeline completo: transcrever → analisar → salvar em calls
+        const { recording_id, call_id: taCallId, company_id: taCompanyId } = body
+
+        const { data: recording } = await supabase
+          .from('call_recordings')
+          .select('*')
+          .eq('id', recording_id)
+          .single()
+
+        if (!recording?.recording_url) {
+          return jsonResponse({ error: 'Gravação não encontrada' }, 404)
+        }
+
+        // 1. Transcrever com Deepgram
+        await supabase
+          .from('call_recordings')
+          .update({ transcription_status: 'processing' })
+          .eq('id', recording_id)
+
+        let transcriptText = ''
+        const deepgramKey = Deno.env.get('DEEPGRAM_API_KEY')
+
+        if (deepgramKey) {
+          try {
+            const dgResponse = await retryWithBackoff(() => fetchWithTimeout('https://api.deepgram.com/v1/listen?' + new URLSearchParams({
+              model: 'nova-2',
+              language: 'pt-BR',
+              punctuate: 'true',
+              diarize: 'true',
+              smart_format: 'true',
+              paragraphs: 'true',
+            }), {
+              method: 'POST',
+              headers: {
+                'Authorization': `Token ${deepgramKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ url: recording.recording_url }),
+            }, 60000))
+
+            if (dgResponse.ok) {
+              const dgResult = await dgResponse.json()
+              const transcript = dgResult.results?.channels?.[0]?.alternatives?.[0]
+              transcriptText = transcript?.transcript || ''
+
+              await supabase
+                .from('call_recordings')
+                .update({
+                  transcription_status: 'completed',
+                  transcription_text: transcriptText,
+                  transcription_segments: transcript?.paragraphs?.paragraphs || [],
+                  transcription_confidence: transcript?.confidence || 0,
+                  transcription_provider: 'deepgram',
+                  transcription_language: 'pt-BR',
+                })
+                .eq('id', recording_id)
+            } else {
+              await supabase
+                .from('call_recordings')
+                .update({ transcription_status: 'failed', transcription_error: `Deepgram: ${dgResponse.status}` })
+                .eq('id', recording_id)
+            }
+          } catch (err) {
+            console.error('[transcribe_and_analyze] Deepgram error:', err)
+            await supabase
+              .from('call_recordings')
+              .update({ transcription_status: 'failed', transcription_error: String(err) })
+              .eq('id', recording_id)
+          }
+        } else {
+          console.warn('[transcribe_and_analyze] DEEPGRAM_API_KEY não configurada')
+          await supabase
+            .from('call_recordings')
+            .update({ transcription_status: 'failed', transcription_error: 'DEEPGRAM_API_KEY não configurada' })
+            .eq('id', recording_id)
+        }
+
+        // 2. Analisar com Claude (se transcrição ok)
+        if (transcriptText.length > 20 && ANTHROPIC_API_KEY) {
+          try {
+            const analysis = await analyzeWithClaude(transcriptText, null)
+
+            // Salvar análise na tabela calls (principal)
+            await supabase
+              .from('calls')
+              .update({
+                transcript: transcriptText,
+                call_summary: analysis.summary,
+                sentiment: analysis.sentiment,
+                interest_detected: analysis.lead_temperature === 'hot' || analysis.lead_temperature === 'warm',
+                ai_analysis: analysis,
+              })
+              .eq('id', taCallId)
+
+            // Também salvar em call_logs se existir
+            await supabase
+              .from('call_logs')
+              .update({
+                sentiment_overall: analysis.sentiment,
+                sentiment_scores: analysis.sentiment_scores,
+                detected_intents: analysis.intents,
+                extracted_entities: analysis.entities,
+                conversation_quality_score: analysis.quality_score,
+                goal_achieved: analysis.goal_achieved,
+                goal_details: analysis.goal_details,
+                lead_temperature: analysis.lead_temperature,
+                next_action: analysis.next_action,
+                ai_summary: analysis.summary,
+                lucas_summary: analysis.summary,
+              })
+              .eq('call_id', taCallId)
+
+            console.log(`[transcribe_and_analyze] Call ${taCallId} analyzed: ${analysis.sentiment}, ${analysis.lead_temperature}`)
+          } catch (err) {
+            console.error('[transcribe_and_analyze] Claude analysis error:', err)
+          }
+        }
+
+        return jsonResponse({ ok: true, transcribed: transcriptText.length > 0 })
+      }
+
       case 'campaign_insights': {
         // Gerar insights de uma campanha
         const { campaign_id, company_id } = body

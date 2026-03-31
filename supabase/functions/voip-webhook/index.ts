@@ -127,18 +127,39 @@ serve(async (req) => {
           description: `Chamada ${call.direction}: ${call.destination_number} (${duration}s)`,
         })
 
-        // Se tem gravação, registrar
+        // Se tem gravação, registrar e disparar transcrição
         if (recording_file) {
-          await supabase.from('call_recordings').insert({
+          const { data: rec } = await supabase.from('call_recordings').insert({
             call_id,
             company_id: call.company_id,
-            recording_url: recording_file, // URL temporária no VPS
+            recording_url: recording_file,
             duration_seconds: duration,
             format: 'wav',
             sample_rate: 8000,
-            channels: 2, // stereo (caller + callee)
+            channels: 2,
             transcription_status: 'pending',
-          })
+          }).select('id').single()
+
+          // Trigger automático de transcrição + análise
+          if (rec?.id && duration >= 10) {
+            const baseUrl = Deno.env.get('SUPABASE_URL')!
+            const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+            // Transcrição assíncrona (fire-and-forget)
+            fetch(`${baseUrl}/functions/v1/voip-ai-bridge`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serviceKey}`,
+              },
+              body: JSON.stringify({
+                action: 'transcribe_and_analyze',
+                recording_id: rec.id,
+                call_id,
+                company_id: call.company_id,
+              }),
+            }).catch(err => console.error('[VoIP Webhook] Erro ao disparar transcrição:', err))
+          }
         }
 
         // Atualizar analytics diário
