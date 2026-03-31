@@ -124,12 +124,13 @@ interface Company {
 // ── Meta Status por Empresa (inline no módulo 8) ─────────────────────────────
 
 function CompanyMetaStatus({ companyId, phoneNumberId, token }: { companyId: string; phoneNumberId: string; token: string }) {
+  const connected = !!(phoneNumberId && token);
   const [status, setStatus] = useState<{ quality: string; tier: string; tier_limit: number; usage_pct: number; blocks_24h: number; verified_name: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchStatus = async () => {
-    if (!phoneNumberId || !token) { setError("Configure Phone Number ID e Token"); return; }
+    if (!connected) return;
     setLoading(true);
     setError(null);
     try {
@@ -150,48 +151,83 @@ function CompanyMetaStatus({ companyId, phoneNumberId, token }: { companyId: str
   };
 
   useEffect(() => {
-    if (phoneNumberId && token) fetchStatus();
+    if (connected) fetchStatus();
   }, [companyId, phoneNumberId]);
-
-  if (!phoneNumberId || !token) return null;
 
   const qColor = status?.quality === "GREEN" ? "text-green-500" : status?.quality === "YELLOW" ? "text-yellow-500" : status?.quality === "RED" ? "text-red-500" : "text-muted-foreground";
   const qBg = status?.quality === "GREEN" ? "bg-green-500/10 border-green-500/30" : status?.quality === "YELLOW" ? "bg-yellow-500/10 border-yellow-500/30" : status?.quality === "RED" ? "bg-red-500/10 border-red-500/30" : "bg-muted/50 border-border";
 
   return (
-    <div className="space-y-2 pt-2">
+    <div className="space-y-2 pt-3 border-t border-border/50 mt-3">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Status Meta (tempo real)</p>
-        <Button variant="ghost" size="sm" onClick={fetchStatus} disabled={loading} className="h-6 px-2 text-[10px]">
-          <RefreshCw className={`h-3 w-3 mr-1 ${loading ? "animate-spin" : ""}`} />
-          {loading ? "..." : "Atualizar"}
-        </Button>
+        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Status WhatsApp Meta</p>
+        {connected && (
+          <Button variant="ghost" size="sm" onClick={fetchStatus} disabled={loading} className="h-6 px-2 text-[10px]">
+            <RefreshCw className={`h-3 w-3 mr-1 ${loading ? "animate-spin" : ""}`} />
+            {loading ? "..." : "Atualizar"}
+          </Button>
+        )}
       </div>
-      {error ? (
-        <p className="text-xs text-destructive">{error}</p>
-      ) : status ? (
-        <div className="grid grid-cols-4 gap-2">
-          <div className={`rounded border px-2 py-1.5 text-center ${qBg}`}>
-            <p className={`text-sm font-bold ${qColor}`}>{status.quality}</p>
-            <p className="text-[9px] text-muted-foreground">Qualidade</p>
+
+      {!connected ? (
+        <div className="rounded-lg border border-dashed border-yellow-500/40 bg-yellow-500/5 p-3 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <XCircle className="h-4 w-4 text-yellow-500 shrink-0" />
+            <p className="text-sm font-medium text-yellow-600">WhatsApp n&atilde;o conectado</p>
           </div>
-          <div className="rounded border border-primary/20 bg-primary/5 px-2 py-1.5 text-center">
-            <p className="text-sm font-bold text-primary">{status.tier_limit > 0 ? status.tier_limit.toLocaleString("pt-BR") : "—"}</p>
-            <p className="text-[9px] text-muted-foreground">{status.tier === "STANDARD" ? "Standard/dia" : (status.tier || "").replace("TIER_", "").replace("K", "K/dia")}</p>
-          </div>
-          <div className="rounded border px-2 py-1.5 text-center">
-            <p className="text-sm font-bold">{status.usage_pct}%</p>
-            <p className="text-[9px] text-muted-foreground">Uso 24h</p>
-          </div>
-          <div className="rounded border px-2 py-1.5 text-center">
-            <p className="text-sm font-bold">{status.blocks_24h}</p>
-            <p className="text-[9px] text-muted-foreground">Bloqueios</p>
+          <p className="text-xs text-muted-foreground">Para ativar disparos e ver o tier Meta desta empresa:</p>
+          <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-0.5">
+            <li>Acesse o <strong>Meta Business Suite</strong> e copie o <strong>Phone Number ID</strong></li>
+            <li>Gere um <strong>Token de Acesso Permanente</strong> no painel de desenvolvedores</li>
+            <li>Cole o <strong>Business Account ID</strong> (WABA ID)</li>
+            <li>Preencha os campos acima e clique em <strong>Testar Conex&atilde;o</strong></li>
+          </ol>
+          <div className="grid grid-cols-4 gap-2 pt-2">
+            <div className="rounded border border-dashed border-border px-2 py-1.5 text-center opacity-40">
+              <p className="text-sm font-bold">—</p>
+              <p className="text-[9px] text-muted-foreground">Qualidade</p>
+            </div>
+            <div className="rounded border border-dashed border-border px-2 py-1.5 text-center opacity-40">
+              <p className="text-sm font-bold">—</p>
+              <p className="text-[9px] text-muted-foreground">Tier/dia</p>
+            </div>
+            <div className="rounded border border-dashed border-border px-2 py-1.5 text-center opacity-40">
+              <p className="text-sm font-bold">—</p>
+              <p className="text-[9px] text-muted-foreground">Uso 24h</p>
+            </div>
+            <div className="rounded border border-dashed border-border px-2 py-1.5 text-center opacity-40">
+              <p className="text-sm font-bold">—</p>
+              <p className="text-[9px] text-muted-foreground">Bloqueios</p>
+            </div>
           </div>
         </div>
+      ) : error ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : status ? (
+        <>
+          <div className="grid grid-cols-4 gap-2">
+            <div className={`rounded border px-2 py-1.5 text-center ${qBg}`}>
+              <p className={`text-sm font-bold ${qColor}`}>{status.quality}</p>
+              <p className="text-[9px] text-muted-foreground">Qualidade</p>
+            </div>
+            <div className="rounded border border-primary/20 bg-primary/5 px-2 py-1.5 text-center">
+              <p className="text-sm font-bold text-primary">{status.tier_limit > 0 ? status.tier_limit.toLocaleString("pt-BR") : "—"}</p>
+              <p className="text-[9px] text-muted-foreground">{status.tier === "STANDARD" ? "Standard/dia" : (status.tier || "").replace("TIER_", "").replace("K", "K/dia")}</p>
+            </div>
+            <div className="rounded border px-2 py-1.5 text-center">
+              <p className="text-sm font-bold">{status.usage_pct}%</p>
+              <p className="text-[9px] text-muted-foreground">Uso 24h</p>
+            </div>
+            <div className="rounded border px-2 py-1.5 text-center">
+              <p className="text-sm font-bold">{status.blocks_24h}</p>
+              <p className="text-[9px] text-muted-foreground">Bloqueios</p>
+            </div>
+          </div>
+          {status.verified_name && <p className="text-[10px] text-muted-foreground">Verified: {status.verified_name}</p>}
+        </>
       ) : loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />Consultando Meta API...</div>
       ) : null}
-      {status?.verified_name && <p className="text-[10px] text-muted-foreground">Verified: {status.verified_name}</p>}
     </div>
   );
 }
