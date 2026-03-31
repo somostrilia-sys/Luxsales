@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { EDGE_BASE } from "@/lib/constants";
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 
 interface UseRealtimeSessionOptions {
   onUserSpeech: (text: string) => void;
@@ -89,11 +89,8 @@ export function useRealtimeSession({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
-            apikey:
-              import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-              import.meta.env.VITE_SUPABASE_ANON_KEY ||
-              "",
+            Authorization: `Bearer ${session?.access_token || SUPABASE_ANON_KEY}`,
+            apikey: SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({ system_prompt: systemPrompt, voice: "shimmer" }),
         });
