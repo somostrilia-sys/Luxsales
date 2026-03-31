@@ -14,8 +14,10 @@ import { EDGE_BASE } from "@/lib/constants";
 import { toast } from "sonner";
 import {
   Loader2, Phone, PhoneOff, Mic, MicOff, Settings, Volume2,
-  AlertTriangle, CheckCircle, XCircle, Save,
+  AlertTriangle, CheckCircle, XCircle, Save, Zap,
 } from "lucide-react";
+
+import { useRealtimeSession } from "@/hooks/useRealtimeSession";
 
 import { resolveCompanyFilter, resolveCompanyRequired } from "@/lib/companyFilter";
 
@@ -46,6 +48,7 @@ export default function VoiceSimulate() {
   const [listening, setListening] = useState(false);
   const [aiThinking, setAiThinking] = useState(false);
   const [ttsPlaying, setTtsPlaying] = useState(false);
+  const [realtimeMode, setRealtimeMode] = useState(false);
 
   // VoIP config
   const [sipHost, setSipHost] = useState("");
@@ -156,6 +159,18 @@ export default function VoiceSimulate() {
   const addEntry = useCallback((type: "lead" | "ai", text: string) => {
     setTranscript((prev) => [...prev, { type, text, ts: new Date().toLocaleTimeString("pt-BR") }]);
   }, []);
+
+  // ── OpenAI Realtime session hook (Modo Rápido) ──
+  const {
+    connect: connectRealtime,
+    disconnect: disconnectRealtime,
+    isConnected: realtimeConnected,
+    isConnecting: realtimeConnecting,
+  } = useRealtimeSession({
+    onUserSpeech: (text) => addEntry("lead", text),
+    onAISpeech: (text) => addEntry("ai", text),
+    onSystem: addSystem,
+  });
 
   // ══════════════════════════════════════════════
   // ── MODO BROWSER: Web Speech + AI Simulator ──
@@ -635,6 +650,37 @@ REGRAS DE LIGAÇÃO:
     addSystem("📵 Chamada simulada encerrada");
   }, [addSystem]);
 
+  // ══════════════════════════════════════════════
+  // ── MODO RÁPIDO: OpenAI Realtime (WebRTC) ──
+  // ══════════════════════════════════════════════
+
+  const startRealtimeCall = useCallback(async () => {
+    setInCall(true);
+    setCallTimer(0);
+    setTranscript([]);
+    timerRef.current = setInterval(() => setCallTimer((p) => p + 1), 1000);
+    addSystem("⚡ Iniciando Modo Rápido (OpenAI Realtime)...");
+
+    const systemPrompt = `${knowledgeContext || "Você é Lucas, consultor da proteção veicular."}
+
+REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
+- Fale como humano ao telefone. Frases curtas e naturais, como conversa real.
+- MÁXIMO 2 frases por vez. Seja direto.
+- NUNCA use markdown, bullets, asteriscos, emojis, listas ou formatação.
+- Use contrações naturais: "tô", "tá", "né", "pro", "pra".
+- Inicie a conversa se apresentando brevemente e perguntando se o lead tem interesse.`;
+
+    await connectRealtime(systemPrompt);
+  }, [connectRealtime, addSystem, knowledgeContext]);
+
+  const endRealtimeCall = useCallback(() => {
+    disconnectRealtime();
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+    setInCall(false);
+    addSystem("📵 Modo Rápido encerrado");
+  }, [disconnectRealtime, addSystem]);
+
   // ══════════════════════════════════════════
   // ── MODO VOIP: SIP via JsSIP ──
   // ══════════════════════════════════════════
@@ -825,47 +871,83 @@ REGRAS DE LIGAÇÃO:
                       disabled={inCall}
                     />
 
+                    {/* Modo Rápido toggle */}
+                    <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <Zap className={`h-3.5 w-3.5 ${realtimeMode ? "text-yellow-400" : "text-muted-foreground"}`} />
+                        <span className="text-sm font-medium">
+                          {realtimeMode ? "Modo Rápido (Realtime)" : "Modo XTTS (Claude)"}
+                        </span>
+                      </div>
+                      <button
+                        disabled={inCall}
+                        onClick={() => setRealtimeMode((v) => !v)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${realtimeMode ? "bg-yellow-500" : "bg-muted"}`}
+                        role="switch"
+                        aria-checked={realtimeMode}
+                      >
+                        <span
+                          className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${realtimeMode ? "translate-x-4" : "translate-x-0"}`}
+                        />
+                      </button>
+                    </div>
+
                     {!inCall ? (
                       <Button
-                        className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
-                        onClick={startBrowserCall}
+                        className={`w-full gap-2 text-white ${realtimeMode ? "bg-yellow-600 hover:bg-yellow-700" : "bg-green-600 hover:bg-green-700"}`}
+                        onClick={realtimeMode ? startRealtimeCall : startBrowserCall}
                       >
-                        <Mic className="h-4 w-4" /> Iniciar Simulação
+                        {realtimeMode ? <Zap className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                        {realtimeMode ? "Iniciar Modo Rápido" : "Iniciar Simulação"}
                       </Button>
                     ) : (
                       <>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            {listening ? (
-                              <Badge className="gap-1 bg-green-500/15 text-green-500 border-green-500/30 animate-pulse">
-                                <Mic className="h-3 w-3" /> Ouvindo...
-                              </Badge>
+                            {realtimeMode ? (
+                              realtimeConnecting ? (
+                                <Badge variant="outline" className="gap-1 text-yellow-400 border-yellow-400/30">
+                                  <Loader2 className="h-3 w-3 animate-spin" /> Conectando...
+                                </Badge>
+                              ) : realtimeConnected ? (
+                                <Badge className="gap-1 bg-yellow-500/15 text-yellow-400 border-yellow-500/30 animate-pulse">
+                                  <Zap className="h-3 w-3" /> Realtime ativo
+                                </Badge>
+                              ) : null
                             ) : (
-                              <Badge variant="outline" className="gap-1 text-muted-foreground">
-                                <MicOff className="h-3 w-3" /> Mic pausado
-                              </Badge>
-                            )}
-                            {aiThinking && (
-                              <Badge variant="outline" className="gap-1 text-blue-400 border-blue-400/30">
-                                <Loader2 className="h-3 w-3 animate-spin" /> IA pensando...
-                              </Badge>
-                            )}
-                            {ttsPlaying && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="gap-1 text-yellow-400 border-yellow-400/30 hover:bg-yellow-400/10 animate-pulse"
-                                onClick={interruptTTS}
-                              >
-                                <Volume2 className="h-3 w-3" /> Interromper e Falar
-                              </Button>
+                              <>
+                                {listening ? (
+                                  <Badge className="gap-1 bg-green-500/15 text-green-500 border-green-500/30 animate-pulse">
+                                    <Mic className="h-3 w-3" /> Ouvindo...
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="gap-1 text-muted-foreground">
+                                    <MicOff className="h-3 w-3" /> Mic pausado
+                                  </Badge>
+                                )}
+                                {aiThinking && (
+                                  <Badge variant="outline" className="gap-1 text-blue-400 border-blue-400/30">
+                                    <Loader2 className="h-3 w-3 animate-spin" /> IA pensando...
+                                  </Badge>
+                                )}
+                                {ttsPlaying && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="gap-1 text-yellow-400 border-yellow-400/30 hover:bg-yellow-400/10 animate-pulse"
+                                    onClick={interruptTTS}
+                                  >
+                                    <Volume2 className="h-3 w-3" /> Interromper e Falar
+                                  </Button>
+                                )}
+                              </>
                             )}
                           </div>
                           <span className="font-mono text-lg font-bold">{formatTimer(callTimer)}</span>
                         </div>
                         <Button
                           className="w-full gap-2 bg-red-600 hover:bg-red-700 text-white"
-                          onClick={endBrowserCall}
+                          onClick={realtimeMode ? endRealtimeCall : endBrowserCall}
                         >
                           <PhoneOff className="h-4 w-4" /> Encerrar Simulação
                         </Button>
