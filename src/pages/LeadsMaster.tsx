@@ -369,10 +369,18 @@ export default function LeadsMaster() {
     (async () => {
       const cid = company_id ?? baseCompanyId;
       if (!cid) return;
-      let q = supabase.from("leads").select("*", { count: "exact", head: true })
-        .is("assigned_to", null).eq("company_id", cid);
-      const { count } = await q;
-      setUndistributedCount(count ?? 0);
+      // Contar leads não distribuídos (collaborator_id NULL) OU todos os leads elegíveis pra redistribuição
+      let q = supabase.from("consultant_lead_pool").select("*", { count: "exact", head: true })
+        .is("collaborator_id", null);
+      const { count: undist } = await q;
+      if ((undist ?? 0) > 0) {
+        setUndistributedCount(undist ?? 0);
+      } else {
+        // Todos distribuídos — contar total pra redistribuição
+        const { count: total } = await supabase.from("consultant_lead_pool")
+          .select("*", { count: "exact", head: true });
+        setUndistributedCount(total ?? 0);
+      }
     })();
   }, [company_id, baseCompanyId, leads]);
 
@@ -902,8 +910,8 @@ export default function LeadsMaster() {
                 <p className="text-sm font-medium">Distribuição em massa</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {undistributedCount > 0
-                    ? `${undistributedCount.toLocaleString("pt-BR")} leads não distribuídos serão atribuídos automaticamente aos consultores comerciais da empresa.`
-                    : "Nenhum lead pendente de distribuição para esta empresa."}
+                    ? `${undistributedCount.toLocaleString("pt-BR")} leads serão distribuídos/redistribuídos entre os consultores comerciais da empresa.`
+                    : "Nenhum lead disponível para distribuição."}
                 </p>
               </div>
             )}
@@ -911,7 +919,7 @@ export default function LeadsMaster() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDistributeOpen(false)}>Cancelar</Button>
             <Button
-              disabled={!distributeCompanyId || (distributeMode === "specific" && !distributeCollab) || actionLoading || (selectedPhones.length === 0 && undistributedCount === 0)}
+              disabled={!distributeCompanyId || (distributeMode === "specific" && !distributeCollab) || actionLoading}
               onClick={async () => {
                 if (selectedPhones.length > 0) {
                   // Distribuição dos selecionados
