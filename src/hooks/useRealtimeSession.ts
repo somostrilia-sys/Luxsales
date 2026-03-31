@@ -117,7 +117,15 @@ export function useRealtimeSession({
         const pc = new RTCPeerConnection();
         pcRef.current = pc;
 
-        // 4. Remote audio output
+        // 4. Monitor ICE state — auto-disconnect on failure
+        pc.oniceconnectionstatechange = () => {
+          if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
+            onSystemRef.current("⚠️ Conexão WebRTC perdida — reconectando...");
+            disconnect();
+          }
+        };
+
+        // 5. Remote audio output
         pc.ontrack = (event) => {
           if (!audioElRef.current) {
             audioElRef.current = new Audio();
@@ -153,6 +161,8 @@ export function useRealtimeSession({
 
         dc.onclose = () => {
           setIsConnected(false);
+          // Auto-cleanup on close
+          disconnect();
         };
 
         // 7. Create SDP offer and exchange with OpenAI

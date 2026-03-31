@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/lib/supabase";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
-import { EDGE_BASE } from "@/lib/constants";
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { toast } from "sonner";
 import {
   Loader2, Phone, PhoneOff, Mic, MicOff, Settings, Volume2,
@@ -125,15 +125,20 @@ export default function VoiceSimulate() {
     setSavingSip(false);
   };
 
-  // ── Health check for pipeline ──
+  // ── Health check for pipeline (via edge function — skip if HTTPS to avoid mixed-content) ──
   const checkHealth = useCallback(async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      let authToken = "";
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        authToken = session?.access_token || "";
+      } catch {}
       const res = await fetch(`${EDGE_BASE}/orchestrator-proxy?path=${encodeURIComponent("/health")}`, {
         headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+          Authorization: `Bearer ${authToken || SUPABASE_ANON_KEY}`,
+          apikey: SUPABASE_ANON_KEY,
         },
+        signal: AbortSignal.timeout(5000),
       });
       setPipelineOnline(res.ok);
     } catch {
@@ -143,7 +148,7 @@ export default function VoiceSimulate() {
 
   useEffect(() => {
     checkHealth();
-    const iv = setInterval(checkHealth, 15000);
+    const iv = setInterval(checkHealth, 60000); // 60s — reduz chamadas desnecessárias
     return () => clearInterval(iv);
   }, [checkHealth]);
 
@@ -281,13 +286,17 @@ export default function VoiceSimulate() {
     } catch {
       // Tentativa 2: via Edge Function proxy (mais lento, ~3-5s)
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        let proxyAuth = SUPABASE_ANON_KEY;
+        try {
+          const { data: { session: s2 } } = await supabase.auth.getSession();
+          if (s2?.access_token) proxyAuth = s2.access_token;
+        } catch {}
         const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+            Authorization: `Bearer ${proxyAuth}`,
+            apikey: SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({ action: "tts", text, tts_url: "http://134.122.17.106/api/tts" }),
         });
@@ -364,7 +373,11 @@ export default function VoiceSimulate() {
     conversationRef.current.push({ role: "user", content: userMessage });
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      let authToken = SUPABASE_ANON_KEY;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) authToken = session.access_token;
+      } catch {}
 
       const systemPrompt = `${knowledgeContext || "Você é Lucas, consultor da Objetivo."}
 
@@ -388,8 +401,8 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+          Authorization: `Bearer ${authToken}`,
+          apikey: SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
           action: "respond",
@@ -401,11 +414,16 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
           llm_provider: "claude",
           max_tokens: 100,
         }),
+        signal: AbortSignal.timeout(15000), // 15s timeout
       });
 
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`API ${res.status}: ${errText.slice(0, 100)}`);
+      }
       const data = await res.json();
       if (data.error) { console.error("ai-simulator error:", data.error); }
-      const rawText = data.text || data.response || data.message || "...";
+      const rawText = data.text || data.response || data.message || "Pode repetir?";
       // Limpar e truncar para TTS rápido
       const aiText = smartTruncate(cleanForTTS(rawText), 300);
       conversationRef.current.push({ role: "assistant", content: aiText });
@@ -545,7 +563,11 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
     setAiThinking(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      let authToken = SUPABASE_ANON_KEY;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) authToken = session.access_token;
+      } catch {}
 
       // Buscar opening_message do script da empresa (priorizar com knowledge_base)
       let openingMessage = "";
@@ -586,13 +608,13 @@ REGRAS DE LIGAÇÃO:
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+            Authorization: `Bearer ${authToken}`,
+            apikey: SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({
             messages: [
               { role: "system", content: systemPrompt },
-              { role: "user", content: "Inicie a ligação. Você está ligando para um lead interessado em proteção veicular. Cumprimente-o." },
+              { role: "user", content: "Inicie a ligação. Você está ligando para um lead. Cumprimente-o brevemente." },
             ],
             company_id: companyId,
             context: { phone_number: phoneNumber },
@@ -600,7 +622,7 @@ REGRAS DE LIGAÇÃO:
           }),
         });
         const data = await res.json();
-        openingMessage = smartTruncate(cleanForTTS(data.text || data.response || data.message || "Olá, aqui é o Lucas! Tudo bem? Vi que você tem interesse em proteção veicular, posso te ajudar?"));
+        openingMessage = smartTruncate(cleanForTTS(data.text || data.response || data.message || "Opa, tudo bem? Aqui é o Lucas da Objetivo, tem um minutinho?"));
       }
 
       const cleanOpening = smartTruncate(cleanForTTS(openingMessage));
@@ -635,19 +657,36 @@ REGRAS DE LIGAÇÃO:
   }, [ttsPlaying, inCall, interruptTTS]);
 
   const endBrowserCall = useCallback(() => {
-    recognitionRef.current?.stop();
+    // Parar reconhecimento de voz
+    try { recognitionRef.current?.stop(); } catch {}
     recognitionRef.current = null;
+    recognitionStartingRef.current = false;
     sessionRef.current = null;
+
+    // Parar TTS em andamento
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current.currentTime = 0;
+      ttsAudioRef.current = null;
+    }
+    ttsPlayingRef.current = false;
+    setTtsPlaying(false);
+
     window.speechSynthesis?.cancel();
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
+
     // Parar background office
     if (bgAudioRef.current) {
       bgAudioRef.current.pause();
       bgAudioRef.current = null;
     }
+
+    // Limpar conversa
+    conversationRef.current = [];
     setInCall(false);
     setListening(false);
+    setAiThinking(false);
     addSystem("📵 Chamada simulada encerrada");
   }, [addSystem]);
 
@@ -678,7 +717,9 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
     disconnectRealtime();
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
+    conversationRef.current = [];
     setInCall(false);
+    setAiThinking(false);
     addSystem("📵 Modo Rápido encerrado");
   }, [disconnectRealtime, addSystem]);
 
