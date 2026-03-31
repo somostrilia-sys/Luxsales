@@ -85,10 +85,11 @@ function KpiRowSkeleton() {
 
 export default function DashboardConsultor() {
   const { company_id } = useCompany();
-  const { collaborator } = useCollaborator();
+  const { collaborator, isColaborador, isGestor, isCEO, isDiretor } = useCollaborator();
   const navigate = useNavigate();
 
   const collaboratorId = collaborator?.id;
+  const isIndividual = isColaborador;
 
   // Period toggle
   const [period, setPeriod] = useState<"today" | "week" | "month">("today");
@@ -146,7 +147,8 @@ export default function DashboardConsultor() {
   };
 
   const fetchAll = useCallback(async () => {
-    if (!collaboratorId || !company_id) return;
+    if (!company_id) return;
+    if (isIndividual && !collaboratorId) return;
     setAllLoading(true);
 
     const periodStart = getPeriodStart(period);
@@ -157,12 +159,13 @@ export default function DashboardConsultor() {
       (async () => {
         setLeadsLoading(true);
         try {
-          const { count } = await supabase
+          let q = supabase
             .from("consultant_lead_pool")
             .select("id", { count: "exact", head: true })
             .eq("company_id", company_id)
-            .eq("collaborator_id", collaboratorId)
             .neq("status", "done");
+          if (isIndividual) q = q.eq("collaborator_id", collaboratorId!);
+          const { count } = await q;
           setLeadsAtivos(count ?? 0);
         } catch { setLeadsAtivos(0); }
         setLeadsLoading(false);
@@ -172,21 +175,22 @@ export default function DashboardConsultor() {
       (async () => {
         setCallsLoading(true);
         try {
-          const [ligRes, interRes] = await Promise.all([
-            // Leads com ligações feitas no período (call_attempts > 0 e last_contact_at no período)
-            supabase
-              .from("consultant_lead_pool")
-              .select("id", { count: "exact", head: true })
-              .eq("collaborator_id", collaboratorId)
-              .gt("call_attempts", 0)
-              .gte("last_contact_at", periodStart),
-            // Leads com interesse (total, sem filtro de período)
-            supabase
-              .from("consultant_lead_pool")
-              .select("id", { count: "exact", head: true })
-              .eq("collaborator_id", collaboratorId)
-              .eq("interest_status", "interested"),
-          ]);
+          let ligQ = supabase
+            .from("consultant_lead_pool")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", company_id)
+            .gt("call_attempts", 0)
+            .gte("last_contact_at", periodStart);
+          let interQ = supabase
+            .from("consultant_lead_pool")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", company_id)
+            .eq("interest_status", "interested");
+          if (isIndividual) {
+            ligQ = ligQ.eq("collaborator_id", collaboratorId!);
+            interQ = interQ.eq("collaborator_id", collaboratorId!);
+          }
+          const [ligRes, interRes] = await Promise.all([ligQ, interQ]);
           setLigacoesHoje(ligRes.count ?? 0);
           setLigacoesAtendidas(0); // não mais usado
           setLeadsInteresse(interRes.count ?? 0);
@@ -223,12 +227,13 @@ export default function DashboardConsultor() {
             limite = totalCollabs && totalCollabs > 0 ? Math.floor(tierLimit / totalCollabs) : 0;
           } catch { /* ignore */ }
 
-          const { count: dispHoje } = await supabase
+          let dispQ = supabase
             .from("smart_dispatches")
             .select("id", { count: "exact", head: true })
             .eq("company_id", company_id)
-            .eq("collaborator_id", collaboratorId)
             .gte("created_at", today);
+          if (isIndividual) dispQ = dispQ.eq("collaborator_id", collaboratorId!);
+          const { count: dispHoje } = await dispQ;
 
           const usados = dispHoje ?? 0;
           setDisparosHoje(usados);
@@ -243,12 +248,13 @@ export default function DashboardConsultor() {
       // Conversas ativas
       (async () => {
         try {
-          const { count } = await supabase
+          let waQ = supabase
             .from("wa_conversations")
             .select("id", { count: "exact", head: true })
             .eq("company_id", company_id)
-            .eq("collaborator_id", collaboratorId)
             .neq("status", "closed");
+          if (isIndividual) waQ = waQ.eq("collaborator_id", collaboratorId!);
+          const { count } = await waQ;
           setConversasAtivas(count ?? 0);
         } catch { setConversasAtivas(0); }
       })(),
@@ -256,23 +262,26 @@ export default function DashboardConsultor() {
       // Meta do mês + conversões
       (async () => {
         try {
-          // Buscar meta configurada para este consultor
-          const { data: metaData } = await supabase
-            .from("collaborator_goals")
-            .select("monthly_conversions")
-            .eq("collaborator_id", collaboratorId)
-            .maybeSingle();
-
-          if (metaData?.monthly_conversions) {
-            setMetaMes(metaData.monthly_conversions);
+          // Buscar meta configurada — só faz sentido para consultor individual
+          if (isIndividual && collaboratorId) {
+            const { data: metaData } = await supabase
+              .from("collaborator_goals")
+              .select("monthly_conversions")
+              .eq("collaborator_id", collaboratorId)
+              .maybeSingle();
+            if (metaData?.monthly_conversions) {
+              setMetaMes(metaData.monthly_conversions);
+            }
           }
 
-          const { count: convMes } = await supabase
+          let convQ = supabase
             .from("leads_master")
             .select("id", { count: "exact", head: true })
             .eq("company_id", company_id)
             .eq("status", "converted")
             .gte("updated_at", month);
+          if (isIndividual && collaboratorId) convQ = convQ.eq("collaborator_id", collaboratorId);
+          const { count: convMes } = await convQ;
 
           setConversoesMes(convMes ?? 0);
         } catch {
@@ -284,20 +293,23 @@ export default function DashboardConsultor() {
       // Últimas atividades (5 mais recentes: ligações + WA)
       (async () => {
         try {
-          const [callsRes, waRes] = await Promise.all([
-            supabase
-              .from("call_logs")
-              .select("id, lead_name, lead_phone, status, goal_achieved, created_at")
-              .eq("collaborator_id", collaboratorId)
-              .order("created_at", { ascending: false })
-              .limit(5),
-            supabase
-              .from("wa_conversations")
-              .select("id, lead_name, phone, status, last_message_at, last_message")
-              .eq("collaborator_id", collaboratorId)
-              .order("last_message_at", { ascending: false })
-              .limit(5),
-          ]);
+          let callLogQ = supabase
+            .from("call_logs")
+            .select("id, lead_name, lead_phone, status, goal_achieved, created_at")
+            .eq("company_id", company_id)
+            .order("created_at", { ascending: false })
+            .limit(5);
+          let waLogQ = supabase
+            .from("wa_conversations")
+            .select("id, lead_name, phone, status, last_message_at, last_message")
+            .eq("company_id", company_id)
+            .order("last_message_at", { ascending: false })
+            .limit(5);
+          if (isIndividual && collaboratorId) {
+            callLogQ = callLogQ.eq("collaborator_id", collaboratorId);
+            waLogQ = waLogQ.eq("collaborator_id", collaboratorId);
+          }
+          const [callsRes, waRes] = await Promise.all([callLogQ, waLogQ]);
           const items: AtividadeItem[] = [];
           for (const c of callsRes.data || []) {
             items.push({
@@ -325,7 +337,7 @@ export default function DashboardConsultor() {
     ]);
 
     setAllLoading(false);
-  }, [collaboratorId, company_id, period]);
+  }, [collaboratorId, company_id, period, isIndividual]);
 
   useEffect(() => {
     fetchAll();
@@ -340,8 +352,14 @@ export default function DashboardConsultor() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <PageHeader
-            title="Meus Números"
-            subtitle={`Olá, ${collaborator?.name?.split(" ")[0] ?? "Consultor"}! Aqui está sua performance.`}
+            title={isIndividual ? "Meus Números" : isGestor ? "Números da Equipe" : "Números Gerais"}
+            subtitle={
+              isIndividual
+                ? `Olá, ${collaborator?.name?.split(" ")[0] ?? "Consultor"}! Aqui está sua performance.`
+                : isGestor
+                ? `Olá, ${collaborator?.name?.split(" ")[0] ?? "Gestor"}! Performance agregada da equipe.`
+                : `Olá, ${collaborator?.name?.split(" ")[0] ?? ""}! Visão geral da empresa.`
+            }
           />
           <Button variant="outline" size="sm" onClick={fetchAll} disabled={allLoading}>
             <RefreshCw className={`h-4 w-4 mr-1.5 ${allLoading ? "animate-spin" : ""}`} />
@@ -369,14 +387,14 @@ export default function DashboardConsultor() {
         {/* ── LINHA 1 — Meus Leads & Ligações ──────────────────────────── */}
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
-            Minha Fila
+            {isIndividual ? "Minha Fila" : "Fila da Equipe"}
           </p>
           {leadsLoading || callsLoading ? (
             <KpiRowSkeleton />
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <KpiCard
-                label="Meus Leads Ativos"
+                label={isIndividual ? "Meus Leads Ativos" : "Leads Ativos"}
                 value={leadsAtivos}
                 icon={Users}
                 color="text-blue-400"
