@@ -17,8 +17,9 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
+import { EDGE_BASE } from "@/lib/constants";
 
-const API_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/dashboard-calls";
+const API_URL = `${EDGE_BASE}/dashboard-calls`;
 const AUTH_HEADER = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4";
 const PAGE_SIZE = 20;
 

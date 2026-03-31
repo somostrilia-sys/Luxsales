@@ -129,6 +129,7 @@ export default function Conversas() {
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageTsRef = useRef<string | null>(null);
+  const seenMsgIdsRef = useRef<Set<string>>(new Set());
 
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
@@ -183,8 +184,21 @@ export default function Conversas() {
     }
   }, [messages]);
 
+  // Função de dedup usando ref (imune a race conditions do React state)
+  const addMessagesDeduped = useCallback((newMsgs: ChatMessage[]) => {
+    setMessages((prev) => {
+      const toAdd = newMsgs.filter((m) => !seenMsgIdsRef.current.has(m.id));
+      if (toAdd.length === 0) return prev;
+      toAdd.forEach((m) => seenMsgIdsRef.current.add(m.id));
+      return [...prev, ...toAdd];
+    });
+  }, []);
+
   const selectedConv = conversations.find((c) => c.id === selectedConvId) ?? null;
-  const windowIsOpen = selectedConv ? checkWindowOpen(selectedConv.window_expires_at) : false;
+  // Janela aberta se qualquer fonte (wa_conversations ou lifecycle) indicar que está válida
+  const windowIsOpen = selectedConv
+    ? checkWindowOpen(selectedConv.window_expires_at) || (lifecycle?.window_open === true && checkWindowOpen(lifecycle?.window_expires_at ?? null))
+    : false;
 
   const loadConversations = useCallback(
     async (silent = false) => {
@@ -299,13 +313,16 @@ export default function Conversas() {
 
         const phones = Array.from(seen.values()).map((c) => normalizePhone(c.phone));
         if (phones.length > 0) {
-          const { data: lifecycles } = await supabase
+          let lcQuery = supabase
             .from("lead_whatsapp_lifecycle")
             .select("phone_number, window_open, window_expires_at")
-            .eq("company_id", companyId)
             .in("phone_number", phones)
-            .limit(100)
-            .abortSignal(controller.signal);
+            .limit(200);
+          // Filtrar por empresa só se não for "Todas Empresas"
+          if (selectedCompanyId && selectedCompanyId !== "all") {
+            lcQuery = lcQuery.eq("company_id", companyId);
+          }
+          const { data: lifecycles } = await lcQuery.abortSignal(controller.signal);
 
           if (lifecycles) {
             for (const lc of lifecycles) {
@@ -313,9 +330,12 @@ export default function Conversas() {
               const item = seen.get(norm);
               if (item) {
                 const lcExp = (lc as any).window_expires_at ?? null;
-                const lcOpen = (lc as any).window_open === true && checkWindowOpen(lcExp);
-                item.window_open = lcOpen;
-                if (lcExp) item.window_expires_at = lcExp;
+                // Usar o maior window_expires_at (mais recente) entre wa_conversations e lifecycle
+                const bestExp = lcExp && item.window_expires_at
+                  ? (new Date(lcExp) > new Date(item.window_expires_at) ? lcExp : item.window_expires_at)
+                  : lcExp || item.window_expires_at;
+                item.window_open = checkWindowOpen(bestExp);
+                item.window_expires_at = bestExp;
               }
             }
           }
@@ -341,6 +361,8 @@ export default function Conversas() {
   }, [loadConversations]);
 
   useEffect(() => {
+    // Reset dedup ao trocar de conversa
+    seenMsgIdsRef.current = new Set();
     if (!selectedConvId || !selectedPhone) { setMessages([]); return; }
     const load = async () => {
       setLoadingChat(true);
@@ -354,7 +376,9 @@ export default function Conversas() {
           .order("created_at", { ascending: true })
           .limit(500)
           .abortSignal(controller.signal);
-        setMessages((data || []) as ChatMessage[]);
+        const msgs = (data || []) as ChatMessage[];
+        msgs.forEach((m) => seenMsgIdsRef.current.add(m.id));
+        setMessages(msgs);
       } catch (err) {
         console.error("Erro ao buscar mensagens:", err);
         setMessages([]);
@@ -395,6 +419,7 @@ export default function Conversas() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "wa_messages" }, (payload: any) => {
         const msg = payload.new as ChatMessage;
         if (msg.conversation_id === selectedConvId) {
+<<<<<<< HEAD
           setMessages((prev) => {
             if (prev.some((m) => m.id === msg.id)) return prev;
             return [...prev, msg];
@@ -495,11 +520,7 @@ export default function Conversas() {
         .order("created_at", { ascending: true })
         .limit(50);
       if (data && data.length > 0) {
-        setMessages((prev) => {
-          const ids = new Set(prev.map((m) => m.id));
-          const newMsgs = (data as ChatMessage[]).filter((m) => !ids.has(m.id));
-          return newMsgs.length > 0 ? [...prev, ...newMsgs] : prev;
-        });
+        addMessagesDeduped(data as ChatMessage[]);
       }
     }, 3000);
     return () => clearInterval(interval);
@@ -527,7 +548,7 @@ export default function Conversas() {
     setSending(true);
     try {
       const res = await fetch(
-        "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/send-meta-message",
+        `${EDGE_BASE}/send-meta-message`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -535,14 +556,8 @@ export default function Conversas() {
         }
       );
       if (res.ok) {
-        const sentMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          conversation_id: selectedConvId || "",
-          role: "assistant",
-          content: messageText,
-          created_at: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, sentMsg]);
+        // wa_messages é preenchido pelo trigger sync_meta_to_wa via whatsapp_meta_messages
+        // Realtime vai pegar e mostrar no chat automaticamente
         setMessageText("");
       } else {
         const d = await res.json().catch(() => ({}));

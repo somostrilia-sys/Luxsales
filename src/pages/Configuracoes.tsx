@@ -412,7 +412,7 @@ export default function Configuracoes() {
       // Save full JSON blob
       const { error } = await supabase.from("system_configs").upsert(
         { key: `company_config_${cid}`, value: JSON.stringify(cfg), company_id: cid },
-        { onConflict: "key" }
+        { onConflict: "key,company_id" }
       );
       if (error) throw error;
       // Also save flat keys for edge functions
@@ -468,7 +468,9 @@ export default function Configuracoes() {
   const loadConfig = async () => {
     try {
       const keys = Object.values(DB_KEYS);
-      const { data, error } = await supabase.from("system_configs").select("key, value").in("key", keys);
+      let query = supabase.from("system_configs").select("key, value").in("key", keys);
+      if (companyId) query = query.eq("company_id", companyId);
+      const { data, error } = await query;
       if (error) throw error;
       const map: Record<string, string> = {};
       (data || []).forEach((row) => { map[row.key] = row.value; });
@@ -504,7 +506,7 @@ export default function Configuracoes() {
     try {
       const { error } = await supabase.from("system_configs").upsert(
         { key: `voip_config_${collaborator.id}`, value: JSON.stringify(voipConfig), company_id: companyId },
-        { onConflict: "key" }
+        { onConflict: "key,company_id" }
       );
       if (error) throw error;
       toast.success("Configuração VoIP salva!");
@@ -541,8 +543,8 @@ export default function Configuracoes() {
   const salvar = async () => {
     setSaving(true);
     try {
-      const upserts = (Object.keys(config) as (keyof Config)[]).map((k) => ({ key: DB_KEYS[k], value: String(config[k]) }));
-      const { error } = await supabase.from("system_configs").upsert(upserts, { onConflict: "key" });
+      const upserts = (Object.keys(config) as (keyof Config)[]).map((k) => ({ key: DB_KEYS[k], value: String(config[k]), company_id: companyId }));
+      const { error } = await supabase.from("system_configs").upsert(upserts, { onConflict: "key,company_id" });
       if (error) throw error;
       toast.success("Configurações salvas com sucesso!");
     } catch (e: any) {
@@ -563,11 +565,7 @@ export default function Configuracoes() {
         { key: "lead_distribution_interval", value: leadDistConfig.interval, company_id: companyId },
       ];
       const { error } = await supabase.from("system_configs").upsert(upserts, { onConflict: "key,company_id" });
-      if (error) {
-        const fallback = upserts.map(u => ({ key: u.key, value: u.value }));
-        const { error: e2 } = await supabase.from("system_configs").upsert(fallback, { onConflict: "key" });
-        if (e2) throw e2;
-      }
+      if (error) throw error;
       toast.success("Configurações de distribuição salvas!");
     } catch (e: any) {
       toast.error("Erro ao salvar distribuição: " + e.message);

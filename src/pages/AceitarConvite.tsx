@@ -38,7 +38,7 @@ export default function AceitarConvite() {
 
     supabase
       .from("invite_links")
-      .select("active, expires_at, invited_name, invited_email, company:companies(name), role:roles(name)")
+      .select("active, expires_at, max_uses, used_count, invited_name, invited_email, company:companies(name), role:roles(name)")
       .eq("token", token)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -48,6 +48,8 @@ export default function AceitarConvite() {
           setInviteError("Este convite foi revogado.");
         } else if (data.expires_at && new Date(data.expires_at) < new Date()) {
           setInviteError("Este convite expirou.");
+        } else if (data.max_uses !== null && data.used_count >= data.max_uses) {
+          setInviteError("Este convite atingiu o limite de usos.");
         } else {
           setInvite(data as unknown as InviteInfo);
           if (data.invited_name) setName(data.invited_name);

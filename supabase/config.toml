@@ -1,1 +1,108 @@
 project_id = "ecaduzwautlpzpvjognr"
+
+[api]
+enabled = true
+
+# Edge functions que não requerem JWT (webhooks, etc.)
+[functions.whatsapp-meta-webhook]
+verify_jwt = false
+
+[functions.voip-webhook]
+verify_jwt = false
+
+[functions.accept-invite]
+verify_jwt = false
+
+[functions.lead-distributor]
+verify_jwt = false
+
+[functions.dashboard-geral]
+verify_jwt = false
+
+# ── Funções migradas do luxsales-backend ──
+[functions.whatsapp-meta-templates]
+verify_jwt = false
+
+[functions.whatsapp-meta-send]
+verify_jwt = false
+
+[functions.whatsapp-meta-onboarding]
+verify_jwt = false
+
+[functions.send-meta-message]
+verify_jwt = false
+
+[functions.opt-in-manager]
+verify_jwt = false
+
+[functions.dispatch-permissions]
+verify_jwt = false
+
+[functions.smart-dispatcher]
+verify_jwt = false
+
+[functions.quality-monitor]
+verify_jwt = false
+
+[functions.conversation-engine]
+verify_jwt = false
+
+[functions.template-intelligence]
+verify_jwt = false
+
+[functions.company-config]
+verify_jwt = false
+
+[functions.call-complete]
+verify_jwt = false
+
+[functions.ai-simulator]
+verify_jwt = false
+
+[functions.simulate-call]
+verify_jwt = false
+
+[functions.generate-voice]
+verify_jwt = false
+
+[functions.make-call]
+verify_jwt = false
+
+[functions.vapi-tts-webhook]
+verify_jwt = false
+
+[functions.dashboard-calls]
+verify_jwt = false
+
+[functions.queue-processor]
+verify_jwt = false
+
+[functions.generate-template]
+verify_jwt = false
+
+[functions.telegram-bot-webhook]
+verify_jwt = false
+
+[functions.meta-rules]
+verify_jwt = false
+
+[functions.voice-closer]
+verify_jwt = false
+
+[functions.blast-messages]
+verify_jwt = false
+
+[functions.manage-disposable-chip]
+verify_jwt = false
+
+[functions.orchestrator-proxy]
+verify_jwt = false
+
+[functions.upload-contacts]
+verify_jwt = false
+
+[functions.trilho-financeiro]
+verify_jwt = false
+
+[functions.trilho-prestadores]
+verify_jwt = false

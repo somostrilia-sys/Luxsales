@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { toast } from "sonner";
 import { CheckCircle, XCircle, Loader2, Copy, Phone, Key, Webhook, Building2 } from "lucide-react";
+import { EDGE_BASE } from "@/lib/constants";
 
 interface WAConfig {
   id: string;
@@ -24,7 +25,7 @@ interface WAConfig {
   is_active: boolean;
 }
 
-const WEBHOOK_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/whatsapp-meta-webhook";
+const WEBHOOK_BASE = `${EDGE_BASE}/whatsapp-meta-webhook`;
 
 export default function ConfigWhatsApp() {
   const { isCEO } = useCollaborator();

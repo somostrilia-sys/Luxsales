@@ -369,7 +369,7 @@ export default function Templates() {
     setGenerating(true);
     setGenerated([]);
     try {
-      const res = await fetch("https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/generate-template", {
+      const res = await fetch(`${EDGE_BASE}/generate-template`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

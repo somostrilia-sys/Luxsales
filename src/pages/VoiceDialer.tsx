@@ -10,8 +10,9 @@ import { Phone, Users, Play, Pause, Zap, Loader2 } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { EDGE_BASE } from "@/lib/constants";
 
-const PROXY = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/orchestrator-proxy";
+const PROXY = `${EDGE_BASE}/orchestrator-proxy`;
 const AUTH_HEADER = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4";
 const proxyUrl = (path: string) => `${PROXY}?path=${encodeURIComponent(path)}`;
 

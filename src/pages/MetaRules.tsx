@@ -13,14 +13,25 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Search, Plus, Trash2, CheckCircle2, AlertTriangle, XCircle, Lightbulb, Sparkles, Shield, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
 
-const EDGE_BASE = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1";
-const COMPANY_ID = "70967469-9a9b-4e29-a744-410e41eb47a5"; // Objetivo
+function useCompanyId() {
+  const { selectedCompanyId } = useCompanyFilter();
+  const { collaborator } = useCollaborator();
+  return selectedCompanyId && selectedCompanyId !== "all"
+    ? selectedCompanyId
+    : collaborator?.company_id ?? null;
+}
 
 async function callMetaRules(body: Record<string, unknown>) {
   const res = await fetch(`${EDGE_BASE}/meta-rules`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -56,7 +67,7 @@ function CircularScore({ score, size = 100 }: { score: number; size?: number }) 
 }
 
 // ═══════════════════ TAB 1: REGRAS ═══════════════════
-function TabRegras() {
+function TabRegras({ companyId }: { companyId: string | null }) {
   const [compliance, setCompliance] = useState<any>(null);
   const [grouped, setGrouped] = useState<Record<string, any[]>>({});
   const [searchQuery, setSearchQuery] = useState("");
@@ -64,15 +75,16 @@ function TabRegras() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!companyId) { setLoading(false); return; }
     Promise.all([
-      callMetaRules({ action: "check-compliance", company_id: COMPANY_ID }).catch(() => null),
+      callMetaRules({ action: "check-compliance", company_id: companyId }).catch(() => null),
       callMetaRules({ action: "list" }).catch(() => null),
     ]).then(([comp, list]) => {
       if (comp) setCompliance(comp);
       if (list?.grouped) setGrouped(list.grouped);
       setLoading(false);
     });
-  }, []);
+  }, [companyId]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) { setSearchResults(null); return; }
@@ -182,7 +194,7 @@ function TabRegras() {
 }
 
 // ═══════════════════ TAB 2: VALIDAR ═══════════════════
-function TabValidar() {
+function TabValidar({ companyId }: { companyId: string | null }) {
   const [templateName, setTemplateName] = useState("");
   const [category, setCategory] = useState("MARKETING");
   const [body, setBody] = useState("");
@@ -204,7 +216,7 @@ function TabValidar() {
     try {
       const res = await callMetaRules({
         action: "validate", template_body: body, template_category: category,
-        template_buttons: buttons, company_id: COMPANY_ID,
+        template_buttons: buttons, company_id: companyId,
       });
       setResult(res);
     } catch { toast.error("Erro ao validar"); }
@@ -216,7 +228,7 @@ function TabValidar() {
     setSuggesting(true); setSuggestions(null);
     try {
       const res = await callMetaRules({
-        action: "suggest", template_body: body, template_category: category, company_id: COMPANY_ID,
+        action: "suggest", template_body: body, template_category: category, company_id: companyId,
       });
       setSuggestions(res);
     } catch { toast.error("Erro ao buscar sugestões"); }
@@ -377,7 +389,7 @@ function TabValidar() {
 }
 
 // ═══════════════════ TAB 3: LGPD ═══════════════════
-function TabLGPD() {
+function TabLGPD({ companyId }: { companyId: string | null }) {
   const [lgpdRules, setLgpdRules] = useState<any[]>([]);
   const [optIns, setOptIns] = useState<any[]>([]);
   const [optOuts, setOptOuts] = useState<any[]>([]);
@@ -388,9 +400,9 @@ function TabLGPD() {
       const [rulesRes, optInRes, optOutRes] = await Promise.all([
         callMetaRules({ action: "list", category: "lgpd" }).catch(() => ({ rules: [] })),
         supabase.from("whatsapp_meta_opt_ins").select("phone_number, contact_name, opt_in_source, opt_in_proof_type, opt_in_at")
-          .eq("company_id", COMPANY_ID).order("opt_in_at", { ascending: false }).limit(20),
+          .eq("company_id", companyId!).order("opt_in_at", { ascending: false }).limit(20),
         supabase.from("whatsapp_meta_opt_ins").select("phone_number, opt_out_at, opt_out_reason")
-          .eq("company_id", COMPANY_ID).eq("status", "opted_out").order("opt_out_at", { ascending: false }).limit(10),
+          .eq("company_id", companyId!).eq("status", "opted_out").order("opt_out_at", { ascending: false }).limit(10),
       ]);
       setLgpdRules(rulesRes?.rules || rulesRes?.grouped?.lgpd || []);
       setOptIns(optInRes.data || []);
@@ -507,6 +519,8 @@ function TabLGPD() {
 
 // ═══════════════════ MAIN ═══════════════════
 export default function MetaRules() {
+  const companyId = useCompanyId();
+
   return (
     <DashboardLayout>
       <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
@@ -517,9 +531,9 @@ export default function MetaRules() {
             <TabsTrigger value="validar">✅ Validar Template</TabsTrigger>
             <TabsTrigger value="lgpd">🔒 LGPD</TabsTrigger>
           </TabsList>
-          <TabsContent value="regras"><TabRegras /></TabsContent>
-          <TabsContent value="validar"><TabValidar /></TabsContent>
-          <TabsContent value="lgpd"><TabLGPD /></TabsContent>
+          <TabsContent value="regras"><TabRegras companyId={companyId} /></TabsContent>
+          <TabsContent value="validar"><TabValidar companyId={companyId} /></TabsContent>
+          <TabsContent value="lgpd"><TabLGPD companyId={companyId} /></TabsContent>
         </Tabs>
       </div>
     </DashboardLayout>

@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Loader2, Users2, Plus, Copy, Ban, Pencil, Link,
+  Loader2, Users2, Plus, Copy, Ban, Pencil, Link, CheckCircle2,
 } from "lucide-react";
 import { SUPABASE_URL } from "@/lib/constants";
 
@@ -301,9 +301,16 @@ export default function GestaoUsuarios() {
   };
 
   const deactivateCollab = async (id: string) => {
-    const { error } = await supabase.from("collaborators").update({ active: false }).eq("id", id);
+    const { error } = await supabase.from("collaborators").update({ active: false, deactivated_at: new Date().toISOString() }).eq("id", id);
     if (error) { toast.error("Erro ao desativar colaborador"); return; }
     toast.success("Colaborador desativado");
+    fetchCollabs();
+  };
+
+  const reactivateCollab = async (id: string) => {
+    const { error } = await supabase.from("collaborators").update({ active: true, deactivated_at: null }).eq("id", id);
+    if (error) { toast.error("Erro ao reativar colaborador"); return; }
+    toast.success("Colaborador reativado");
     fetchCollabs();
   };
 
@@ -473,9 +480,13 @@ export default function GestaoUsuarios() {
                               <Button variant="ghost" size="sm" onClick={() => openEdit(c)} title="Editar Permissões">
                                 <Pencil className="h-4 w-4" />
                               </Button>
-                              {c.active && (
+                              {c.active ? (
                                 <Button variant="ghost" size="sm" onClick={() => deactivateCollab(c.id)} title="Desativar">
                                   <Ban className="h-4 w-4 text-destructive" />
+                                </Button>
+                              ) : (
+                                <Button variant="ghost" size="sm" onClick={() => reactivateCollab(c.id)} title="Reativar">
+                                  <CheckCircle2 className="h-4 w-4 text-green-500" />
                                 </Button>
                               )}
                             </div>
