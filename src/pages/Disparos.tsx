@@ -203,12 +203,14 @@ export default function Disparos() {
     if (!collaborator?.id) return;
     setLoadingHistory(true);
     try {
-      const { data } = await supabase
+      let histQ = supabase
         .from("smart_dispatches")
-        .select("id, phone_number, lead_name, template_name, status, created_at, sent_at")
+        .select("id, phone_number, lead_name, template_name, status, created_at, sent_at, replied, converted, wa_status")
         .eq("collaborator_id", collaborator.id)
         .order("created_at", { ascending: false })
         .limit(100);
+      if (companyId && companyId !== "all") histQ = histQ.eq("company_id", companyId);
+      const { data } = await histQ;
       setHistory((data || []) as DispatchHistory[]);
     } catch (e) {
       console.error(e);
@@ -222,18 +224,22 @@ export default function Disparos() {
     if (!companyId || !collaborator?.id) return;
     setLoadingLimit(true);
     try {
-      // Buscar tier: primeiro por empresa, fallback pro global (atualizado pela Meta API)
-      const { data: companyTier } = await supabase
+      // Buscar tier: system_configs por empresa (sincronizado pelo quality-monitor)
+      const { data: tierByCompany } = await supabase
         .from("system_configs")
-        .select("key, value")
-        .eq("key", `meta_tier_daily_${companyId}`);
+        .select("value")
+        .eq("key", "meta_tier_limit")
+        .eq("company_id", companyId)
+        .maybeSingle();
 
-      let tierValue = companyTier?.[0]?.value;
+      let tierValue = tierByCompany?.value;
       if (!tierValue) {
+        // Fallback: tier global
         const { data: globalTier } = await supabase
           .from("system_configs")
           .select("value")
           .eq("key", "meta_tier_limit")
+          .is("company_id", null)
           .maybeSingle();
         tierValue = globalTier?.value;
       }
