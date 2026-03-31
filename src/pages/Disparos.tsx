@@ -238,11 +238,16 @@ export default function Disparos() {
         .from("roles")
         .select("id, name")
         .eq("company_id", companyId)
-        .in("level", [2, 3]);
+        .in("level", [0, 2, 3]);
       
-      // Só Consultor Comercial recebe leads e dispara — Gestores/Diretores só gerenciam
+      // CEO + Gestor Comercial + Consultor Comercial = elegíveis pra leads e disparos
       const eligibleRoleIds = (commercialRoles || [])
-        .filter(r => r.name.toLowerCase().includes("consultor") && r.name.toLowerCase().includes("comercial"))
+        .filter(r => {
+          const name = r.name.toLowerCase();
+          return r.level === 0 ||
+            (name.includes("consultor") && name.includes("comercial")) ||
+            (name.includes("gestor") && name.includes("comercial"));
+        })
         .map(r => r.id);
 
       let activeCount = 0;
