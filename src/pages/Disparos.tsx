@@ -232,12 +232,32 @@ export default function Disparos() {
       const tierValue = configs?.[0]?.value;
       const metaTierLimit = parseInt(tierValue || "250", 10);
 
-      // Contar consultores ativos
-      const { count: activeCount } = await supabase
-        .from("collaborators")
-        .select("id", { count: "exact", head: true })
+      // Contar consultores + gestores COMERCIAIS ativos (quem dispara)
+      // Buscar role IDs de "Consultor Comercial" e "Gestor(a) Comercial"
+      const { data: commercialRoles } = await supabase
+        .from("roles")
+        .select("id, name")
         .eq("company_id", companyId)
-        .eq("active", true);
+        .in("level", [2, 3]);
+      
+      const eligibleRoleIds = (commercialRoles || [])
+        .filter(r => {
+          const name = r.name.toLowerCase();
+          return (name.includes("consultor") && name.includes("comercial")) ||
+                 (name.includes("gestor") && name.includes("comercial"));
+        })
+        .map(r => r.id);
+
+      let activeCount = 0;
+      if (eligibleRoleIds.length > 0) {
+        const { count } = await supabase
+          .from("collaborators")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .eq("active", true)
+          .in("role_id", eligibleRoleIds);
+        activeCount = count || 0;
+      }
 
       const activeConsultants = Math.max(activeCount || 1, 1);
       const limitPerConsultant = Math.floor(metaTierLimit / activeConsultants);
