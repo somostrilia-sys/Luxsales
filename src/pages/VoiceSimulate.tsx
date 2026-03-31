@@ -168,16 +168,15 @@ export default function VoiceSimulate() {
       .replace(/\*([^*]+)\*/g, "$1")          // *italic* → italic
       .replace(/#{1,6}\s/g, "")               // # headers
       .replace(/[-•]\s/g, "")                 // bullets
-      .replace(/\n{2,}/g, ". ")               // double newlines → period
-      .replace(/\n/g, ", ")                   // single newline → comma
+      .replace(/\n{2,}/g, " ")               // double newlines → espaço (NÃO ponto — evita pausa)
+      .replace(/\n/g, " ")                   // single newline → espaço (NÃO vírgula)
       .replace(/[`_~]/g, "")                 // backticks, underscores
+      .replace(/,\s*,/g, ",")               // vírgulas duplas → uma
+      .replace(/\.\s*\./g, ".")             // pontos duplos → um
+      .replace(/,\s*\./g, ".")             // vírgula antes de ponto → só ponto
+      .replace(/:\s/g, ", ")               // dois pontos → vírgula (flui melhor no TTS)
+      .replace(/;\s/g, ", ")               // ponto-vírgula → vírgula
       .replace(/\s{2,}/g, " ")               // multiple spaces
-      .replace(/\bponto\b/gi, "")            // remove "ponto" solto
-      .replace(/\bvírgula\b/gi, "")          // remove "vírgula" solto
-      .replace(/\bdois pontos\b/gi, "")      // remove "dois pontos"
-      .replace(/\bexclamação\b/gi, "")       // remove "exclamação"
-      .replace(/\binterrogação\b/gi, "")     // remove "interrogação"
-      .replace(/\s{2,}/g, " ")               // cleanup espaços novamente
       .trim();
   };
 
@@ -378,8 +377,7 @@ GUARDRAILS TÉCNICOS (obedecer SEMPRE, sem exceção):
           system_prompt: systemPrompt,
           context: { phone_number: phoneNumber },
           llm_provider: "claude",
-          model: "claude-haiku",
-          max_tokens: 80,
+          max_tokens: 120,
         }),
       });
 
