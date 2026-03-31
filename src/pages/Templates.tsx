@@ -920,7 +920,8 @@ export default function Templates() {
                         )}
                         <Button size="sm" variant="destructive" onClick={async () => {
                           if (!confirm(`Excluir rascunho "${d.name}"?`)) return;
-                          await supabase.from("wa_templates").delete().eq("name", d.name).eq("company_id", effectiveCompanyId);
+                          // Deletar por nome (todas as empresas — pode ter duplicatas)
+                          await supabase.from("wa_templates").delete().eq("name", d.name).eq("status", "draft");
                           setDrafts(prev => prev.filter(x => x.name !== d.name));
                           toast.success("Rascunho excluído");
                         }}>
