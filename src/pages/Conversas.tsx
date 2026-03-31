@@ -419,7 +419,6 @@ export default function Conversas() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "wa_messages" }, (payload: any) => {
         const msg = payload.new as ChatMessage;
         if (msg.conversation_id === selectedConvId) {
-<<<<<<< HEAD
           setMessages((prev) => {
             if (prev.some((m) => m.id === msg.id)) return prev;
             return [...prev, msg];
