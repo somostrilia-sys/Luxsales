@@ -137,7 +137,7 @@ function CompanyMetaStatus({ companyId, phoneNumberId, token }: { companyId: str
       const res = await fetch(`${EDGE_BASE}/quality-monitor`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ action: "check", company_id: companyId }),
+        body: JSON.stringify({ action: "check", company_id: companyId, company_only: true }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -254,22 +254,59 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastCheck, setLastCheck] = useState<string | null>(null);
+  const [hasCredentials, setHasCredentials] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!companyId) return;
     loadData();
   }, [companyId]);
 
+  const checkCredentials = async (): Promise<boolean> => {
+    if (!companyId) return false;
+    // Verificar se a empresa tem credenciais próprias com phone_number_id preenchido
+    const { data } = await supabase
+      .from("whatsapp_meta_credentials")
+      .select("meta_phone_number_id")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .maybeSingle();
+    const has = !!(data?.meta_phone_number_id);
+    if (!has) {
+      // Verificar também na config da empresa (company_config_xxx)
+      const { data: cfgRow } = await supabase
+        .from("system_configs")
+        .select("value")
+        .eq("key", `company_config_${companyId}`)
+        .maybeSingle();
+      if (cfgRow?.value) {
+        try {
+          const parsed = JSON.parse(cfgRow.value);
+          if (parsed?.whatsapp?.phoneNumberId && parsed?.whatsapp?.token) {
+            setHasCredentials(true);
+            return true;
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    setHasCredentials(has);
+    return has;
+  };
+
   const fetchMetaTier = async () => {
     if (!companyId) return;
+
+    const hasCreds = await checkCredentials();
+    if (!hasCreds) return 0;
+
     try {
       const res = await fetch(`${EDGE_BASE}/quality-monitor`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ action: "check", company_id: companyId }),
+        body: JSON.stringify({ action: "check", company_id: companyId, company_only: true }),
       });
       if (res.ok) {
         const data = await res.json();
+        if (data.error) return 0;
         const tierLimit = data.tier_limit || 0;
         setTier(tierLimit);
         setTierLabel(data.tier || "UNKNOWN");
@@ -280,7 +317,6 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
         setVerifiedName(data.verified_name || "");
         setLastCheck(new Date().toLocaleTimeString("pt-BR"));
 
-        // Sincronizar tier no system_configs para que Disparos use o valor real
         await supabase.from("system_configs").upsert(
           { key: "meta_tier_limit", value: String(tierLimit), company_id: companyId },
           { onConflict: "key,company_id" }
@@ -288,38 +324,7 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
         return tierLimit;
       }
     } catch { /* silencioso */ }
-
-    // Fallback: buscar do último check salvo
-    const { data: latest } = await supabase
-      .from("meta_quality_tracking")
-      .select("quality_rating, messaging_limit_tier, tier_limit, usage_pct, conversations_24h, blocks_24h, checked_at")
-      .eq("company_id", companyId)
-      .order("checked_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (latest) {
-      setTier(latest.tier_limit || 0);
-      setTierLabel(latest.messaging_limit_tier || "UNKNOWN");
-      setQuality(latest.quality_rating || "UNKNOWN");
-      setUsagePct(latest.usage_pct || 0);
-      setConversations24h(latest.conversations_24h || 0);
-      setBlocks24h(latest.blocks_24h || 0);
-      setLastCheck(latest.checked_at ? new Date(latest.checked_at).toLocaleTimeString("pt-BR") : null);
-      return latest.tier_limit || 0;
-    }
-
-    // Último fallback: system_configs
-    const { data: cfgData } = await supabase
-      .from("system_configs")
-      .select("value")
-      .eq("key", "meta_tier_limit")
-      .eq("company_id", companyId)
-      .maybeSingle();
-    const tierVal = cfgData?.value ? Number(cfgData.value) : 1000;
-    setTier(tierVal);
-    setTierLabel(tierVal >= 100000 ? "TIER_100K" : tierVal >= 10000 ? "TIER_10K" : "TIER_1K");
-    return tierVal;
+    return 0;
   };
 
   const loadData = async () => {
@@ -412,37 +417,57 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
         <p className="text-sm text-muted-foreground">Dados em tempo real da API Meta — atualiza automaticamente</p>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Status Meta */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className={`rounded-lg border px-3 py-2 text-center ${qualityBg}`}>
-            <p className={`text-lg font-bold ${qualityColor}`}>{quality}</p>
-            <p className="text-[10px] text-muted-foreground">Qualidade</p>
+        {hasCredentials === false ? (
+          <div className="rounded-lg border border-dashed border-yellow-500/40 bg-yellow-500/5 p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <XCircle className="h-4 w-4 text-yellow-500 shrink-0" />
+              <p className="text-sm font-medium text-yellow-600">WhatsApp Meta não configurado para esta empresa</p>
+            </div>
+            <p className="text-xs text-muted-foreground">Configure o WhatsApp na seção <strong>Empresas</strong> abaixo (aba WhatsApp) com Phone Number ID e Token de Acesso para ver o tier e qualidade.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+              {["Qualidade", "Tier/dia", "Uso 24h", "Bloqueios"].map(label => (
+                <div key={label} className="rounded-lg border border-dashed border-border px-3 py-2 text-center opacity-40">
+                  <p className="text-lg font-bold">—</p>
+                  <p className="text-[10px] text-muted-foreground">{label}</p>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-center">
-            <p className="text-lg font-bold text-primary">{tier > 0 ? tier.toLocaleString("pt-BR") : "—"}</p>
-            <p className="text-[10px] text-muted-foreground">{tierLabel === "STANDARD" ? "Standard (1K/dia)" : tierLabel.replace("TIER_", "TIER ").replace("K", "K/dia")}</p>
-          </div>
-          <div className="rounded-lg border border-border px-3 py-2 text-center">
-            <p className="text-lg font-bold">{usagePct}%</p>
-            <p className="text-[10px] text-muted-foreground">Uso 24h ({conversations24h.toLocaleString("pt-BR")})</p>
-          </div>
-          <div className="rounded-lg border border-border px-3 py-2 text-center">
-            <p className="text-lg font-bold">{blocks24h}</p>
-            <p className="text-[10px] text-muted-foreground">Bloqueios 24h</p>
-          </div>
-        </div>
+        ) : (
+          <>
+            {/* Status Meta */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className={`rounded-lg border px-3 py-2 text-center ${qualityBg}`}>
+                <p className={`text-lg font-bold ${qualityColor}`}>{quality}</p>
+                <p className="text-[10px] text-muted-foreground">Qualidade</p>
+              </div>
+              <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-center">
+                <p className="text-lg font-bold text-primary">{tier > 0 ? tier.toLocaleString("pt-BR") : "—"}</p>
+                <p className="text-[10px] text-muted-foreground">{tierLabel === "STANDARD" ? "Standard (1K/dia)" : tierLabel.replace("TIER_", "TIER ").replace("K", "K/dia")}</p>
+              </div>
+              <div className="rounded-lg border border-border px-3 py-2 text-center">
+                <p className="text-lg font-bold">{usagePct}%</p>
+                <p className="text-[10px] text-muted-foreground">Uso 24h ({conversations24h.toLocaleString("pt-BR")})</p>
+              </div>
+              <div className="rounded-lg border border-border px-3 py-2 text-center">
+                <p className="text-lg font-bold">{blocks24h}</p>
+                <p className="text-[10px] text-muted-foreground">Bloqueios 24h</p>
+              </div>
+            </div>
 
-        {/* Refresh + info */}
-        <div className="flex items-center justify-between">
-          <div className="text-xs text-muted-foreground">
-            {verifiedName && <span className="font-medium">{verifiedName}</span>}
-            {lastCheck && <span className="ml-2">Atualizado: {lastCheck}</span>}
-          </div>
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
-            <RefreshCw className={`h-3.5 w-3.5 mr-1 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Atualizando..." : "Atualizar da Meta"}
-          </Button>
-        </div>
+            {/* Refresh + info */}
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                {verifiedName && <span className="font-medium">{verifiedName}</span>}
+                {lastCheck && <span className="ml-2">Atualizado: {lastCheck}</span>}
+              </div>
+              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
+                <RefreshCw className={`h-3.5 w-3.5 mr-1 ${refreshing ? "animate-spin" : ""}`} />
+                {refreshing ? "Atualizando..." : "Atualizar da Meta"}
+              </Button>
+            </div>
+          </>
+        )}
 
         {/* Distribuição por consultor */}
         {totalConsultoresAtivos > 0 && (

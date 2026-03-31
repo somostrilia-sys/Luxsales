@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
  * Check qualidade via Meta API e salvar
  */
 async function checkQuality(body: any) {
-  const { company_id } = body;
+  const { company_id, company_only } = body;
 
   // 1. Buscar credenciais da empresa primeiro
   const cfg: Record<string, string> = {};
@@ -83,8 +83,8 @@ async function checkQuality(body: any) {
     }
   }
 
-  // 2. Fallback: credenciais globais em system_configs
-  if (!cfg.meta_whatsapp_token || !cfg.meta_phone_number_id) {
+  // 2. Fallback: credenciais globais (só se não for company_only)
+  if (!company_only && (!cfg.meta_whatsapp_token || !cfg.meta_phone_number_id)) {
     const { data: globalConfig } = await supabase
       .from("system_configs")
       .select("key, value")
