@@ -163,9 +163,9 @@ export default function DashboardGeral() {
   const company_id = selectedCompanyId !== "all" ? selectedCompanyId : baseCompanyId;
   const navigate = useNavigate();
 
-  // Redirecionar consultor (level 3) para /my-leads
+  // Redirecionar consultor (level 3) para /meus-numeros
   useEffect(() => {
-    if (isColaborador) navigate("/my-leads", { replace: true });
+    if (isColaborador) navigate("/meus-numeros", { replace: true });
   }, [isColaborador, navigate]);
 
   // Edge-function data (existing sections)
