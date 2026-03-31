@@ -476,8 +476,18 @@ export default function Templates() {
           ),
         });
       }
-      // Adicionar examples pras variáveis (obrigatório pela Meta)
+      // Sanitizar body: Meta rejeita variáveis no início ou fim
       const bodyComp = components.find((c: any) => c.type === "BODY");
+      if (bodyComp) {
+        // Fix: variável no início
+        if (/^\s*\{\{/.test(bodyComp.text)) {
+          bodyComp.text = "Olá " + bodyComp.text;
+        }
+        // Fix: variável no fim
+        if (/\{\{\d+\}\}\s*$/.test(bodyComp.text)) {
+          bodyComp.text = bodyComp.text.replace(/(\{\{\d+\}\})\s*$/, "$1.");
+        }
+      }
       if (bodyComp) {
         const varMatches = bodyComp.text.match(/\{\{\d+\}\}/g) || [];
         if (varMatches.length > 0) {
