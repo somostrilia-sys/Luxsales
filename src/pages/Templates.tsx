@@ -584,15 +584,33 @@ export default function Templates() {
   const openAssignModal = async (tmpl: Template) => {
     setAssignTemplate(tmpl);
     setSelectedSellers([]);
-    const { data } = await supabase
-      .from("dispatch_permissions")
-      .select("id, collaborator_id, role")
-      .eq("active", true);
-    setSellers((data || []).map((d: any) => ({
-      id: d.collaborator_id,
-      name: d.collaborator_id.slice(0, 8) + "...",
-      role: d.role,
-    })));
+    // Buscar consultores + gestores comerciais da empresa (quem dispara)
+    const { data: roles } = await supabase
+      .from("roles")
+      .select("id, name, level")
+      .in("level", [2, 3]); // Gestor + Consultor Comercial
+    const eligibleRoleIds = (roles || []).map((r: any) => r.id);
+    if (eligibleRoleIds.length === 0) return;
+    
+    let query = supabase
+      .from("collaborators")
+      .select("id, name, role_id")
+      .eq("active", true)
+      .in("role_id", eligibleRoleIds);
+    if (companyFilter) query = query.eq("company_id", companyFilter);
+    
+    const { data } = await query.order("name");
+    const roleMap: Record<string, string> = {};
+    (roles || []).forEach((r: any) => { roleMap[r.id] = r.name; });
+    
+    const list = (data || []).map((d: any) => ({
+      id: d.id,
+      name: d.name || d.id.slice(0, 8),
+      role: roleMap[d.role_id] || "Comercial",
+    }));
+    setSellers(list);
+    // Auto-selecionar todos
+    setSelectedSellers(list.map((s: any) => s.id));
   };
 
   const saveAssignment = async () => {
@@ -1167,6 +1185,18 @@ export default function Templates() {
               Selecione os vendedores que podem usar "{assignTemplate?.name}"
             </DialogDescription>
           </DialogHeader>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-muted-foreground">{selectedSellers.length} de {sellers.length} selecionados</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedSellers(
+                selectedSellers.length === sellers.length ? [] : sellers.map(s => s.id)
+              )}
+            >
+              {selectedSellers.length === sellers.length ? "Desmarcar Todos" : "Selecionar Todos"}
+            </Button>
+          </div>
           <div className="max-h-[300px] overflow-y-auto space-y-2">
             {sellers.map((s) => (
               <label key={s.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/30 cursor-pointer">
