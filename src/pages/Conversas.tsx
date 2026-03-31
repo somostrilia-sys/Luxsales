@@ -55,6 +55,7 @@ interface ConversationItem {
   is_typing: boolean;
   typing_updated_at: string | null;
   lucas_summary: string | null;
+  company_id: string | null;
 }
 
 interface ChatMessage {
@@ -212,7 +213,7 @@ export default function Conversas() {
         let query = supabase
           .from("wa_conversations")
           .select(
-            "id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, ia_mode, window_expires_at, lucas_summary, is_typing, typing_updated_at, collaborator_id, assigned_to"
+            "id, phone, status, turn_count, created_at, last_message, last_message_at, lead_name, human_mode, ia_mode, window_expires_at, lucas_summary, is_typing, typing_updated_at, collaborator_id, assigned_to, company_id"
           )
           .order("last_message_at", { ascending: false, nullsFirst: false })
           .order("created_at", { ascending: false })
@@ -307,6 +308,7 @@ export default function Conversas() {
               is_typing: (row as any).is_typing ?? false,
               typing_updated_at: (row as any).typing_updated_at ?? null,
               lucas_summary: (row as any).lucas_summary ?? null,
+              company_id: (row as any).company_id ?? null,
             });
           }
         }
@@ -589,11 +591,17 @@ export default function Conversas() {
 
   const openTemplateModal = async (targetPhone?: string) => {
     setTemplateTargetPhone(targetPhone ?? selectedPhone);
-    const { data } = await supabase
+    // Resolver company_id: usar da conversa selecionada, do filtro, ou buscar todos
+    const convCompanyId = selectedConvId
+      ? conversations.find((c) => c.id === selectedConvId)?.company_id
+      : null;
+    const resolvedCompanyId = convCompanyId || (companyId && companyId !== "all" ? companyId : null);
+    let query = supabase
       .from("whatsapp_meta_templates")
       .select("name, status, language")
-      .eq("company_id", companyId)
       .eq("status", "APPROVED");
+    if (resolvedCompanyId) query = query.eq("company_id", resolvedCompanyId);
+    const { data } = await query;
     setTemplates((data || []) as TemplateItem[]);
     setTemplateOpen(true);
   };
