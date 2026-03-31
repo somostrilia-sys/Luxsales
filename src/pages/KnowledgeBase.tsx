@@ -17,7 +17,7 @@ import {
   Mic, BookOpen, Plus, X, Sparkles,
 } from "lucide-react";
 
-const FALLBACK_COMPANY_ID = "70967469-9a9b-4e29-a744-410e41eb47a5"; // Objetivo
+import { resolveCompanyFilter, resolveCompanyRequired } from "@/lib/companyFilter";
 
 interface Objection {
   trigger: string;
@@ -27,7 +27,7 @@ interface Objection {
 export default function KnowledgeBase() {
   const { collaborator } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
-  const companyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : (collaborator?.company_id || FALLBACK_COMPANY_ID);
+  const companyId = resolveCompanyRequired(selectedCompanyId, collaborator?.company_id);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

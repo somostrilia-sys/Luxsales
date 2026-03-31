@@ -39,7 +39,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-const FALLBACK_COMPANY_ID = "70967469-9a9b-4e29-a744-410e41eb47a5"; // Objetivo
+import { resolveCompanyFilter, resolveCompanyRequired, WALK_HOLDING_ID } from "@/lib/companyFilter";
 
 interface ConversationItem {
   id: string;
@@ -110,10 +110,8 @@ export default function Conversas() {
   const { collaborator, isCEO, isGestor } = useCollaborator();
   const isMobile = useIsMobile();
   const { selectedCompanyId } = useCompanyFilter();
-  const companyId =
-    selectedCompanyId && selectedCompanyId !== "all"
-      ? selectedCompanyId
-      : collaborator?.company_id || FALLBACK_COMPANY_ID;
+  const companyFilter = resolveCompanyFilter(selectedCompanyId, collaborator?.company_id);
+  const companyId = companyFilter; // null = all companies
 
   const [activeTab, setActiveTab] = useState<"ativas" | "historico">("ativas");
   const [conversations, setConversations] = useState<ConversationItem[]>([]);

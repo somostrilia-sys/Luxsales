@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { resolveCompanyFilter, resolveCompanyRequired } from "@/lib/companyFilter";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -128,10 +129,12 @@ const SOURCE_OPTIONS = [
 export default function Templates() {
   const { collaborator, isCEO } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
-  const FALLBACK_COMPANY_ID = "70967469-9a9b-4e29-a744-410e41eb47a5"; // Objetivo
-  const WALK_HOLDING_ID = "d33b6a84-8f72-4441-b2eb-dd151a31ac12";
-  const rawEffective = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : collaborator?.company_id;
-  const effectiveCompanyId = rawEffective === WALK_HOLDING_ID ? FALLBACK_COMPANY_ID : (rawEffective || FALLBACK_COMPANY_ID);
+  // null = show all companies; string = filter by company
+  const companyFilter = resolveCompanyFilter(selectedCompanyId, collaborator?.company_id);
+  // For inserts that require a company_id
+  const effectiveCompanyId = resolveCompanyRequired(selectedCompanyId, collaborator?.company_id);
+  // Helper: apply company filter to query (skip filter when null = all companies)
+  const withCompanyFilter = (query: any) => companyFilter ? query.eq("company_id", companyFilter) : query;
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -187,10 +190,9 @@ export default function Templates() {
     (async () => {
       try {
         setVarMappingsLoading(true);
-        const { data, error } = await supabase
+        const { data, error } = await withCompanyFilter(supabase
           .from("template_variable_mappings")
-          .select("variable_index, label, source, source_field, default_value")
-          .eq("company_id", effectiveCompanyId)
+          .select("variable_index, label, source, source_field, default_value"))
           .order("variable_index");
         if (!error && data && data.length > 0) {
           setVarMappings(prev => prev.map(v => {
@@ -327,10 +329,9 @@ export default function Templates() {
     if (!collaborator) return;
     setDraftsLoading(true);
     try {
-      const { data } = await supabase
+      const { data } = await withCompanyFilter(supabase
         .from("wa_templates")
-        .select("name, category, language, body, header, footer, buttons, strategy_notes, confidence_score, status")
-        .eq("company_id", effectiveCompanyId)
+        .select("name, category, language, body, header, footer, buttons, strategy_notes, confidence_score, status"))
         .eq("status", "draft")
         .order("created_at", { ascending: false });
       setDrafts((data || []).map((d: any) => ({

@@ -17,7 +17,7 @@ import {
   AlertTriangle, CheckCircle, XCircle, Save,
 } from "lucide-react";
 
-const FALLBACK_COMPANY_ID = "70967469-9a9b-4e29-a744-410e41eb47a5"; // Objetivo
+import { resolveCompanyFilter, resolveCompanyRequired } from "@/lib/companyFilter";
 
 interface TranscriptEntry {
   type: "lead" | "ai" | "system";
@@ -36,7 +36,7 @@ interface SpeechRecognitionEvent {
 export default function VoiceSimulate() {
   const { collaborator } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
-  const companyId = (selectedCompanyId && selectedCompanyId !== "all") ? selectedCompanyId : (collaborator?.company_id || FALLBACK_COMPANY_ID);
+  const companyId = resolveCompanyRequired(selectedCompanyId, collaborator?.company_id);
 
   const [mode, setMode] = useState<"browser" | "voip">("browser");
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
