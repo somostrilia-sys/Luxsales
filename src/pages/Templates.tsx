@@ -592,23 +592,21 @@ export default function Templates() {
     if (!collaborator || !isCEO) return;
     if (!confirm(`Deletar template "${t.name}"?`)) return;
     try {
-      const headers = await getHeaders();
-      const res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ action: "delete", company_id: effectiveCompanyId, name: t.name }),
-      });
-      if (res.ok) {
-        toast.success("Template deletado");
-        fetchTemplates();
-      } else {
-        // Fallback: mark as deleted in wa_templates
-        await supabase.from("wa_templates").delete().eq("name", t.name).eq("company_id", effectiveCompanyId);
-        toast.success("Template removido");
-        fetchTemplates();
-      }
+      // 1. Deletar do banco local
+      await supabase.from("wa_templates").delete().eq("name", t.name).eq("company_id", effectiveCompanyId);
+      // 2. Tentar deletar da Meta (silencioso — pode falhar se não existe lá)
+      try {
+        const headers = await getHeaders();
+        await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ action: "delete", name: t.name }),
+        });
+      } catch { /* Meta delete is best-effort */ }
+      toast.success("Template excluído");
+      fetchTemplates();
     } catch {
-      toast.error("Erro ao deletar template");
+      toast.error("Erro ao excluir template");
     }
   };
 
