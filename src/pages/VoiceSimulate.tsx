@@ -399,7 +399,7 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
           system_prompt: systemPrompt,
           context: { phone_number: phoneNumber },
           llm_provider: "claude",
-          max_tokens: 40,
+          max_tokens: 100,
         }),
       });
 
@@ -407,7 +407,7 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
       if (data.error) { console.error("ai-simulator error:", data.error); }
       const rawText = data.text || data.response || data.message || "...";
       // Limpar e truncar para TTS rápido
-      const aiText = smartTruncate(cleanForTTS(rawText), 150);
+      const aiText = smartTruncate(cleanForTTS(rawText), 300);
       conversationRef.current.push({ role: "assistant", content: aiText });
       addEntry("ai", aiText);
 
