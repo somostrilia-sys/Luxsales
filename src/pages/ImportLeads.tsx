@@ -323,11 +323,16 @@ export default function ImportLeads() {
     URL.revokeObjectURL(url);
   };
 
-  // ── validação: planilha precisa ter coluna que pareça telefone ──
+  // ── validação: planilha PRECISA ter coluna de telefone ──
   const phonePatterns = ["telefone", "phone", "celular", "fone", "whatsapp", "tel", "mobile"];
   const hasPhoneColumn = headers.some(h => phonePatterns.some(p => h.toLowerCase().trim().includes(p)));
-  const hasPhoneData = rawRows.length > 0 && rawRows.slice(0, 5).some(row =>
-    Object.values(row).some(v => typeof v === "string" && /\d{10,13}/.test(v.replace(/\D/g, "")))
+  // Checar se alguma coluna tem dados que parecem telefone BR (começa com +55, 55, ou DDD 2 dígitos + 9)
+  const hasPhoneData = rawRows.length > 0 && headers.some(col =>
+    rawRows.slice(0, 10).filter(row => {
+      const v = String(row[col] || "").replace(/\D/g, "");
+      // Telefone BR: 10-13 dígitos, e o padrão: 55+DDD+9XXXX ou DDD+9XXXX
+      return v.length >= 10 && v.length <= 13 && /^(55)?[1-9]\d9/.test(v);
+    }).length >= 3 // pelo menos 3 das 10 primeiras linhas tem telefone
   );
   const phoneColumnDetected = hasPhoneColumn || hasPhoneData;
 
