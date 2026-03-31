@@ -398,7 +398,7 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
           system_prompt: systemPrompt,
           context: { phone_number: phoneNumber },
           llm_provider: "claude",
-          max_tokens: 60,
+          max_tokens: 40,
         }),
       });
 
