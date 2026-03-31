@@ -214,9 +214,14 @@ export default function Templates() {
       default_value: v.default_value,
       updated_at: new Date().toISOString(),
     }));
+    // Delete + insert (evita problema de constraint)
+    await supabase
+      .from("template_variable_mappings")
+      .delete()
+      .eq("company_id", effectiveCompanyId);
     const { error } = await supabase
       .from("template_variable_mappings")
-      .upsert(rows, { onConflict: "company_id,variable_index" });
+      .insert(rows);
     if (error) {
       toast.error("Erro ao salvar: " + error.message);
     } else {
@@ -380,11 +385,11 @@ export default function Templates() {
         setGenerated(templates);
 
         // Auto-salvar cada template como rascunho — NÃO submeter à Meta
-        const savePromises = templates.map((tmpl) =>
-          supabase.from("wa_templates").upsert({
+        const savePromises = templates.map(async (tmpl) => {
+          const row = {
             company_id: effectiveCompanyId,
             name: tmpl.name,
-            category: (tmpl.category || "MARKETING").toUpperCase(),
+            category: (tmpl.category || "UTILITY").toUpperCase(),
             language: "pt_BR",
             body: tmpl.body,
             header: tmpl.header || null,
@@ -393,8 +398,16 @@ export default function Templates() {
             strategy_notes: tmpl.strategy_notes || null,
             confidence_score: tmpl.confidence_score || null,
             status: "draft",
-          }, { onConflict: "name,company_id" })
-        );
+          };
+          const { error } = await supabase.from("wa_templates").insert(row);
+          if (error?.code === "23505") {
+            // Duplicata — atualizar existente
+            await supabase.from("wa_templates")
+              .update({ ...row, updated_at: new Date().toISOString() })
+              .eq("name", tmpl.name)
+              .eq("company_id", effectiveCompanyId);
+          }
+        });
         await Promise.all(savePromises);
         toast.success(`${templates.length} variações geradas e salvas como rascunho`);
         // Manter na aba Criar Novo — templates gerados ficam visíveis
@@ -413,10 +426,10 @@ export default function Templates() {
     if (!collaborator) return;
     setSubmitting(tmpl.name);
     try {
-      const { error } = await supabase.from("wa_templates").upsert({
+      const row = {
         company_id: effectiveCompanyId,
         name: tmpl.name,
-        category: (tmpl.category || "MARKETING").toUpperCase(),
+        category: (tmpl.category || "UTILITY").toUpperCase(),
         language: "pt_BR",
         body: tmpl.body,
         header: tmpl.header || null,
@@ -425,8 +438,15 @@ export default function Templates() {
         strategy_notes: tmpl.strategy_notes || null,
         confidence_score: tmpl.confidence_score || null,
         status: "draft",
-      }, { onConflict: "name,company_id" });
-      if (error) throw error;
+      };
+      const { error } = await supabase.from("wa_templates").insert(row);
+      if (error?.code === "23505") {
+        const { error: updErr } = await supabase.from("wa_templates")
+          .update({ ...row, updated_at: new Date().toISOString() })
+          .eq("name", tmpl.name)
+          .eq("company_id", effectiveCompanyId);
+        if (updErr) throw updErr;
+      } else if (error) throw error;
       toast.success("Rascunho salvo — acesse a aba Rascunhos para submeter à Meta");
     } catch (e: any) {
       toast.error(e.message || "Erro ao salvar rascunho");
