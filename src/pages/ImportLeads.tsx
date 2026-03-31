@@ -323,8 +323,16 @@ export default function ImportLeads() {
     URL.revokeObjectURL(url);
   };
 
+  // ── validação: planilha precisa ter coluna que pareça telefone ──
+  const phonePatterns = ["telefone", "phone", "celular", "fone", "whatsapp", "tel", "mobile"];
+  const hasPhoneColumn = headers.some(h => phonePatterns.some(p => h.toLowerCase().trim().includes(p)));
+  const hasPhoneData = rawRows.length > 0 && rawRows.slice(0, 5).some(row =>
+    Object.values(row).some(v => typeof v === "string" && /\d{10,13}/.test(v.replace(/\D/g, "")))
+  );
+  const phoneColumnDetected = hasPhoneColumn || hasPhoneData;
+
   // ── render steps ──
-  const canNext = step === 1 ? rawRows.length > 0 : step === 2 ? !!mapping.phone_number : true;
+  const canNext = step === 1 ? (rawRows.length > 0 && phoneColumnDetected) : step === 2 ? !!mapping.phone_number : true;
 
   return (
     <DashboardLayout>
@@ -409,6 +417,15 @@ export default function ImportLeads() {
                   <p className="text-xs text-muted-foreground">
                     {rawRows.length.toLocaleString("pt-BR")} linhas detectadas · {headers.length} colunas
                   </p>
+                  {!phoneColumnDetected && rawRows.length > 0 && (
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400">
+                      <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Coluna de telefone não encontrada</p>
+                        <p className="text-xs text-red-400/80 mt-0.5">A planilha precisa ter uma coluna com telefones (ex: "telefone", "phone", "celular"). Verifique o arquivo e tente novamente.</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="overflow-x-auto rounded border border-border">
                     <table className="w-full text-xs">
                       <thead>
