@@ -162,14 +162,14 @@ function WhatsAppMetaSection({ companyId }: { companyId: string | null }) {
         .from("roles")
         .select("id, name, level")
         .eq("company_id", companyId)
-        .in("level", [0, 2, 3]);
+        .in("level", [2, 3]);
 
+      // Gestor Comercial + Consultor Comercial = operacionais (CEO/Diretor só analisa)
       const eligibleRoleIds = (eligibleRoles || [])
         .filter(r => {
           const name = r.name.toLowerCase();
-          return r.level === 0 ||
-            (name.includes("consultor") && name.includes("comercial")) ||
-            (name.includes("gestor") && name.includes("comercial"));
+          return (name.includes("consultor") && name.includes("comercial")) ||
+                 (name.includes("gestor") && name.includes("comercial"));
         })
         .map(r => r.id);
 
