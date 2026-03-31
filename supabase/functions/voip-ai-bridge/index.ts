@@ -259,6 +259,70 @@ serve(async (req) => {
               })
               .eq('call_id', taCallId)
 
+            // 3. Atualizar consultant_lead_pool baseado na análise
+            // Buscar o telefone da chamada para encontrar o lead no pool
+            const { data: callData } = await supabase
+              .from('calls')
+              .select('destination_number, company_id, lead_name')
+              .eq('id', taCallId)
+              .maybeSingle()
+
+            if (callData?.destination_number) {
+              const phone = callData.destination_number
+              const isInterested = analysis.lead_temperature === 'hot' || analysis.lead_temperature === 'warm'
+
+              // Buscar lead no pool pelo telefone
+              const { data: poolLead } = await supabase
+                .from('consultant_lead_pool')
+                .select('id, call_attempts, interest_status')
+                .or(`phone_normalized.eq.${phone},phone.eq.${phone}`)
+                .maybeSingle()
+
+              if (poolLead) {
+                const attempts = (poolLead.call_attempts || 0) + 1
+
+                if (isInterested) {
+                  // Lead interessado → disponível para disparo
+                  await supabase
+                    .from('consultant_lead_pool')
+                    .update({
+                      interest_status: 'interested',
+                      dispatch_available: true,
+                      call_attempts: attempts,
+                      last_call_at: new Date().toISOString(),
+                      lucas_summary: analysis.summary,
+                    })
+                    .eq('id', poolLead.id)
+                  console.log(`[transcribe_and_analyze] Lead ${phone} → INTERESTED, dispatch available`)
+                } else if (attempts >= 2) {
+                  // Sem interesse 2ª vez → descartado (sai da lista)
+                  await supabase
+                    .from('consultant_lead_pool')
+                    .update({
+                      interest_status: 'discarded',
+                      dispatch_available: false,
+                      call_attempts: attempts,
+                      last_call_at: new Date().toISOString(),
+                      lucas_summary: analysis.summary,
+                    })
+                    .eq('id', poolLead.id)
+                  console.log(`[transcribe_and_analyze] Lead ${phone} → DISCARDED (2nd no interest)`)
+                } else {
+                  // Sem interesse 1ª vez → volta pro final da fila
+                  await supabase
+                    .from('consultant_lead_pool')
+                    .update({
+                      interest_status: 'not_interested_1',
+                      call_attempts: attempts,
+                      last_call_at: new Date().toISOString(),
+                      lucas_summary: analysis.summary,
+                    })
+                    .eq('id', poolLead.id)
+                  console.log(`[transcribe_and_analyze] Lead ${phone} → NOT INTERESTED (1st, back to queue)`)
+                }
+              }
+            }
+
             console.log(`[transcribe_and_analyze] Call ${taCallId} analyzed: ${analysis.sentiment}, ${analysis.lead_temperature}`)
           } catch (err) {
             console.error('[transcribe_and_analyze] Claude analysis error:', err)
