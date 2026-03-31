@@ -316,10 +316,12 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
 
   const openTemplateDialog = async (phone: string) => {
     setTargetPhone(phone);
+    const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null);
+    if (!cid) { toast.error("Selecione uma empresa"); return; }
     const { data } = await supabase
       .from("whatsapp_meta_templates")
       .select("name, status, language")
-      .eq("company_id", companyId)
+      .eq("company_id", cid)
       .eq("status", "APPROVED");
     setTemplates((data as TemplateItem[]) || []);
     setTemplateOpen(true);
@@ -327,10 +329,11 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
 
   const sendTemplate = async (templateName: string) => {
     if (!targetPhone) return;
+    const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || FALLBACK_COMPANY;
     setSendingTemplate(true);
     try {
       const session = await supabase.auth.getSession();
-      const res = await fetch(`${EDGE_BASE}/send-meta-template`, {
+      const res = await fetch(`${EDGE_BASE}/send-meta-message`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -338,9 +341,10 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
         },
         body: JSON.stringify({
           action: "send-by-slot",
-          company_id: companyId,
+          company_id: cid,
           phone_number: targetPhone,
           template_name: templateName,
+          type: "template",
         }),
       });
       const d = await res.json();
@@ -377,16 +381,38 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
     setReactivateOpen(true);
   };
 
-  const confirmReactivate = async (_templateName: string) => {
+  const confirmReactivate = async (templateName: string) => {
     if (!reactivateTarget) return;
     setReactivating(true);
     try {
+      // Reativar lead no pool
       const { error } = await supabase
         .from("consultant_lead_pool")
         .update({ interest_status: "pending", call_attempts: 0 })
         .eq("id", reactivateTarget.poolId);
       if (error) throw error;
-      toast.success("Lead reativado com sucesso!");
+
+      // Enviar template de reativação
+      const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || FALLBACK_COMPANY;
+      try {
+        const session = await supabase.auth.getSession();
+        await fetch(`${EDGE_BASE}/send-meta-message`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.data.session?.access_token}`,
+          },
+          body: JSON.stringify({
+            action: "send-by-slot",
+            company_id: cid,
+            phone_number: reactivateTarget.phone,
+            template_name: templateName,
+            type: "template",
+          }),
+        });
+      } catch { /* envio é best-effort */ }
+
+      toast.success("Lead reativado e template enviado!");
       setReactivateOpen(false);
       setReactivatableMap(prev => {
         const m = new Map(prev);
@@ -685,13 +711,11 @@ function TabConversasEncerradas({
         .order("last_message_at", { ascending: false })
         .limit(100);
 
+      // wa_conversations não tem collaborator_id — filtrar apenas por company_id
       if (roleLevel === 0) {
-        // CEO vê tudo
-      } else if (roleLevel === 2) {
-        if (collaboratorCompanyId) query = query.eq("company_id", collaboratorCompanyId);
-      } else if (collaboratorId) {
-        query = query.eq("collaborator_id", collaboratorId);
-        if (collaboratorCompanyId) query = query.eq("company_id", collaboratorCompanyId);
+        if (companyId && companyId !== "all") query = query.eq("company_id", companyId);
+      } else if (collaboratorCompanyId) {
+        query = query.eq("company_id", collaboratorCompanyId);
       } else if (companyId && companyId !== "all") {
         query = query.eq("company_id", companyId);
       }
@@ -748,10 +772,12 @@ function TabConversasEncerradas({
 
   const openReactivate = async (conv: WaConversation) => {
     setTargetConv(conv);
+    const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null);
+    if (!cid) { toast.error("Selecione uma empresa"); return; }
     const { data } = await supabase
       .from("whatsapp_meta_templates")
       .select("name, status, language")
-      .eq("company_id", companyId)
+      .eq("company_id", cid)
       .eq("status", "APPROVED");
     setTemplates((data as TemplateItem[]) || []);
     setReactivateOpen(true);
@@ -759,10 +785,11 @@ function TabConversasEncerradas({
 
   const sendReactivation = async (templateName: string) => {
     if (!targetConv) return;
+    const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || FALLBACK_COMPANY;
     setSendingTemplate(true);
     try {
       const session = await supabase.auth.getSession();
-      const res = await fetch(`${EDGE_BASE}/send-meta-template`, {
+      const res = await fetch(`${EDGE_BASE}/send-meta-message`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -770,9 +797,10 @@ function TabConversasEncerradas({
         },
         body: JSON.stringify({
           action: "send-by-slot",
-          company_id: companyId,
+          company_id: cid,
           phone_number: targetConv.phone,
           template_name: templateName,
+          type: "template",
         }),
       });
       const d = await res.json();
@@ -975,6 +1003,8 @@ function TabLinhaDoTempo({ companyId }: { companyId: string }) {
         .order("created_at", { ascending: true })
         .limit(50);
 
+      if (companyId && companyId !== "all") callQuery = callQuery.eq("company_id", companyId);
+
       if (q.replace(/\D/g, "").length >= 8) {
         callQuery = callQuery.ilike("lead_phone", `%${q.replace(/\D/g, "")}%`);
       } else {
@@ -1005,6 +1035,8 @@ function TabLinhaDoTempo({ companyId }: { companyId: string }) {
         .select("id, phone, lead_name, status, last_message, last_message_at, turn_count, lucas_summary, window_expires_at, created_at")
         .order("created_at", { ascending: true })
         .limit(20);
+
+      if (companyId && companyId !== "all") convQuery = convQuery.eq("company_id", companyId);
 
       if (q.replace(/\D/g, "").length >= 8) {
         convQuery = convQuery.ilike("phone", `%${q.replace(/\D/g, "")}%`);
