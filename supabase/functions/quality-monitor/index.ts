@@ -69,17 +69,17 @@ async function checkQuality(body: any) {
   const cfg: Record<string, string> = {};
 
   if (company_id) {
-    const { data: cred } = await supabase
+    const { data: cred, error: credErr } = await supabase
       .from("whatsapp_meta_credentials")
-      .select("meta_access_token, meta_phone_number_id, meta_waba_id, access_token, phone_number_id, waba_id")
+      .select("meta_access_token, meta_phone_number_id, meta_waba_id")
       .eq("company_id", company_id)
       .eq("is_active", true)
       .maybeSingle();
 
-    if (cred) {
-      cfg.meta_whatsapp_token = cred.meta_access_token || cred.access_token || "";
-      cfg.meta_phone_number_id = cred.meta_phone_number_id || cred.phone_number_id || "";
-      cfg.meta_waba_id = cred.meta_waba_id || cred.waba_id || "";
+    if (cred && !credErr) {
+      cfg.meta_whatsapp_token = cred.meta_access_token || "";
+      cfg.meta_phone_number_id = cred.meta_phone_number_id || "";
+      cfg.meta_waba_id = cred.meta_waba_id || "";
     }
   }
 
