@@ -253,7 +253,7 @@ export default function VoiceSimulate() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(8000),
       });
       if (localRes.ok) {
         const blob = await localRes.blob();
@@ -378,6 +378,8 @@ GUARDRAILS TÉCNICOS (obedecer SEMPRE, sem exceção):
           system_prompt: systemPrompt,
           context: { phone_number: phoneNumber },
           llm_provider: "claude",
+          model: "claude-haiku",
+          max_tokens: 80,
         }),
       });
 
