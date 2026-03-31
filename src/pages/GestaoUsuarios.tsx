@@ -360,7 +360,7 @@ export default function GestaoUsuarios() {
       max_uses: maxUses,
       used_count: 0,
       active: true,
-      created_by: collaborator?.id,
+      created_by: collaborator?.auth_user_id,
     });
 
     if (error) {
