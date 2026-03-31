@@ -1,9 +1,50 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, Component, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
+
+// Retry lazy import automaticamente (resolve tela escura por chunk fail)
+function lazyRetry(importer: () => Promise<any>) {
+  return lazy(() =>
+    importer().catch(() =>
+      new Promise((resolve) => {
+        setTimeout(() => resolve(importer()), 1500);
+      })
+    )
+  );
+}
+
+// Error Boundary pra capturar chunk load failures
+class ChunkErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+          <p className="text-muted-foreground">Erro ao carregar página</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <RefreshCw className="h-4 w-4" /> Recarregar
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Lazy-loaded pages
 const Login = lazy(() => import("./pages/Login"));
@@ -71,6 +112,7 @@ const App = () => (
     <Toaster />
     <Sonner />
     <BrowserRouter>
+      <ChunkErrorBoundary>
       <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public */}
@@ -130,6 +172,7 @@ const App = () => (
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
+      </ChunkErrorBoundary>
     </BrowserRouter>
   </>
 );
