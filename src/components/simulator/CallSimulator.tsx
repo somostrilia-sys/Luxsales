@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Loader2, Mic, MicOff, PhoneCall, RotateCcw, Send, Volume2 } from "lucide-react";
+import { Loader2, Mic, MicOff, Phone, PhoneCall, RotateCcw, Send, Volume2 } from "lucide-react";
 
 // ── Types ──
 
@@ -88,6 +88,7 @@ const DEFAULT_PROVIDERS: LLMProvider[] = [
 
 const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4";
 const API_URL = "https://ecaduzwautlpzpvjognr.supabase.co/functions/v1/simulate-call";
+const VOIP_API_URL = "http://134.122.17.106/voip/call";
 
 // ── Component ──
 
@@ -104,6 +105,8 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
   const [providers, setProviders] = useState<LLMProvider[]>(DEFAULT_PROVIDERS);
   const [liveTranscript, setLiveTranscript] = useState<string>("");
   const [micActive, setMicActive] = useState(false);
+  const [realCallPhone, setRealCallPhone] = useState<string>("");
+  const [realCallLoading, setRealCallLoading] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -504,6 +507,34 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
     }
   }
 
+  // ── Real call via VoIP trunk ──
+
+  async function startRealCall() {
+    const phone = realCallPhone.replace(/\D/g, "");
+    if (phone.length < 10) {
+      toast.error("Digite um número válido com DDD (ex: 31997441277)");
+      return;
+    }
+    setRealCallLoading(true);
+    try {
+      const res = await fetch(VOIP_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: phone }),
+      });
+      const result = await res.json();
+      if (result.ok) {
+        toast.success("Ligação iniciada para " + phone + "! A IA vai falar quando atenderem.");
+      } else {
+        toast.error("Erro: " + (result.error || "Falha ao originar chamada"));
+      }
+    } catch (err) {
+      toast.error("Erro de conexão com o servidor VoIP");
+    } finally {
+      setRealCallLoading(false);
+    }
+  }
+
   // ── Start call ──
 
   async function startCall() {
@@ -643,6 +674,35 @@ export default function CallSimulator({ voiceProfiles, selectedVoice, training }
             <PhoneCall className="mr-2 h-5 w-5" />
             Iniciar Ligação Simulada
           </Button>
+
+          {/* Ligação Real via VoIP */}
+          <div className="border-t pt-4 mt-2 space-y-3">
+            <Label className="text-sm font-semibold flex items-center gap-2">
+              <Phone className="h-4 w-4" />
+              Ligação Real (VoIP + IA)
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                type="tel"
+                placeholder="DDD + Número (ex: 31997441277)"
+                value={realCallPhone}
+                onChange={(e) => setRealCallPhone(e.target.value)}
+                className="flex-1"
+              />
+              <Button
+                onClick={startRealCall}
+                disabled={realCallLoading || !realCallPhone.trim()}
+                variant="default"
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                {realCallLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Phone className="h-4 w-4" />}
+                <span className="ml-2">Ligar</span>
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Faz uma ligação real via trunk SIP. A IA atende e conversa com o lead.
+            </p>
+          </div>
         </CardContent>
       </Card>
     );
