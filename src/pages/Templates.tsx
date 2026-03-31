@@ -350,6 +350,17 @@ export default function Templates() {
 
   useEffect(() => {
     fetchTemplates();
+    // Sync silencioso ao carregar — atualiza banco local com status da Meta
+    (async () => {
+      try {
+        const headers = await getHeaders();
+        await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ action: "sync", company_id: effectiveCompanyId }),
+        });
+      } catch {}
+    })();
   }, [fetchTemplates]);
 
   useEffect(() => {
