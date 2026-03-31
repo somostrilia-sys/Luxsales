@@ -90,11 +90,14 @@ export default function DashboardConsultor() {
 
   const collaboratorId = collaborator?.id;
 
+  // Period toggle
+  const [period, setPeriod] = useState<"today" | "week" | "month">("today");
+
   // Leads pessoais
   const [leadsAtivos, setLeadsAtivos] = useState(0);
   const [leadsLoading, setLeadsLoading] = useState(true);
 
-  // Ligações hoje
+  // Ligações no período
   const [ligacoesHoje, setLigacoesHoje] = useState(0);
   const [ligacoesAtendidas, setLigacoesAtendidas] = useState(0);
   const [callsLoading, setCallsLoading] = useState(true);
@@ -127,9 +130,11 @@ export default function DashboardConsultor() {
 
   const [allLoading, setAllLoading] = useState(true);
 
-  const todayStart = () => {
+  const getPeriodStart = (p: typeof period) => {
     const d = new Date();
-    d.setHours(0, 0, 0, 0);
+    if (p === "today") { d.setHours(0, 0, 0, 0); }
+    else if (p === "week") { d.setDate(d.getDate() - 7); d.setHours(0, 0, 0, 0); }
+    else { d.setDate(d.getDate() - 30); d.setHours(0, 0, 0, 0); }
     return d.toISOString();
   };
 
@@ -144,7 +149,7 @@ export default function DashboardConsultor() {
     if (!collaboratorId || !company_id) return;
     setAllLoading(true);
 
-    const today = todayStart();
+    const periodStart = getPeriodStart(period);
     const month = monthStart();
 
     await Promise.all([
@@ -163,32 +168,27 @@ export default function DashboardConsultor() {
         setLeadsLoading(false);
       })(),
 
-      // Ligações hoje + atendidas + interesse
+      // Ligações no período + interesses — via consultant_lead_pool
       (async () => {
         setCallsLoading(true);
         try {
-          const [ligRes, atendRes, interRes] = await Promise.all([
+          const [ligRes, interRes] = await Promise.all([
+            // Leads com ligações feitas no período (call_attempts > 0 e last_contact_at no período)
             supabase
-              .from("calls")
+              .from("consultant_lead_pool")
               .select("id", { count: "exact", head: true })
-              .eq("company_id", company_id)
               .eq("collaborator_id", collaboratorId)
-              .gte("created_at", today),
+              .gt("call_attempts", 0)
+              .gte("last_contact_at", periodStart),
+            // Leads com interesse (total, sem filtro de período)
             supabase
-              .from("calls")
+              .from("consultant_lead_pool")
               .select("id", { count: "exact", head: true })
-              .eq("company_id", company_id)
               .eq("collaborator_id", collaboratorId)
-              .gte("created_at", today)
-              .in("status", ["completed", "answered"]),
-            supabase
-              .from("leads_master")
-              .select("id", { count: "exact", head: true })
-              .eq("company_id", company_id)
-              .eq("status", "interested"),
+              .eq("interest_status", "interested"),
           ]);
           setLigacoesHoje(ligRes.count ?? 0);
-          setLigacoesAtendidas(atendRes.count ?? 0);
+          setLigacoesAtendidas(0); // não mais usado
           setLeadsInteresse(interRes.count ?? 0);
         } catch {
           setLigacoesHoje(0);
@@ -325,13 +325,13 @@ export default function DashboardConsultor() {
     ]);
 
     setAllLoading(false);
-  }, [collaboratorId, company_id]);
+  }, [collaboratorId, company_id, period]);
 
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
 
-  const taxaAtendimento = pct(ligacoesAtendidas, ligacoesHoje);
+  const taxaAtendimento = pct(leadsInteresse, Math.max(ligacoesHoje, 1));
   const metaPct = metaMes && metaMes > 0 ? pct(conversoesMes, metaMes) : null;
 
   return (
@@ -347,6 +347,23 @@ export default function DashboardConsultor() {
             <RefreshCw className={`h-4 w-4 mr-1.5 ${allLoading ? "animate-spin" : ""}`} />
             Atualizar
           </Button>
+        </div>
+
+        {/* Period toggle */}
+        <div className="flex gap-1 bg-muted/50 rounded-lg p-1 w-fit">
+          {(["today", "week", "month"] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`text-xs px-3 py-1 rounded-md transition-colors ${
+                period === p
+                  ? "bg-background text-foreground shadow-sm font-medium"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {p === "today" ? "Hoje" : p === "week" ? "7 dias" : "30 dias"}
+            </button>
+          ))}
         </div>
 
         {/* ── LINHA 1 — Meus Leads & Ligações ──────────────────────────── */}
@@ -367,7 +384,7 @@ export default function DashboardConsultor() {
                 onClick={() => navigate("/my-leads")}
               />
               <KpiCard
-                label="Ligações Hoje"
+                label={period === "today" ? "Ligações Hoje" : period === "week" ? "Ligações (7 dias)" : "Ligações (30 dias)"}
                 value={ligacoesHoje}
                 icon={Phone}
                 color="text-green-400"
@@ -375,12 +392,12 @@ export default function DashboardConsultor() {
                 onClick={() => navigate("/ligacoes")}
               />
               <KpiCard
-                label="Taxa de Atendimento"
+                label="Taxa de Interesse"
                 value={`${taxaAtendimento}%`}
                 icon={Activity}
                 color="text-teal-400"
                 bg="bg-teal-500/10"
-                highlight={taxaAtendimento >= 50}
+                highlight={taxaAtendimento >= 20}
               />
               <KpiCard
                 label="Leads com Interesse"
@@ -483,7 +500,7 @@ export default function DashboardConsultor() {
           <CardContent className="space-y-4">
             <div>
               <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                <span>Taxa de Atendimento</span>
+                <span>Taxa de Interesse</span>
                 <span>{taxaAtendimento}%</span>
               </div>
               <Progress value={taxaAtendimento} className="h-2" />
