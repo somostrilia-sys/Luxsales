@@ -232,7 +232,7 @@ export default function VoiceSimulate() {
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.volume = 1.0;
-      audio.playbackRate = 1.25;
+      audio.playbackRate = 1.15;
       ttsAudioRef.current = audio;
       audio.onended = () => { URL.revokeObjectURL(url); ttsAudioRef.current = null; resolve(); };
       audio.onerror = () => { ttsAudioRef.current = null; resolve(); };
