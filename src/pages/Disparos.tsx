@@ -109,10 +109,13 @@ export default function Disparos() {
   const { selectedCompanyId } = useCompanyFilter();
 
   const FALLBACK_COMPANY_ID = "70967469-9a9b-4e29-a744-410e41eb47a5"; // Objetivo
-  const companyId =
+  const WALK_HOLDING_ID = "d33b6a84-8f72-4441-b2eb-dd151a31ac12";
+  const rawCompanyId =
     selectedCompanyId && selectedCompanyId !== "all"
       ? selectedCompanyId
       : collaborator?.company_id || FALLBACK_COMPANY_ID;
+  // CEO pertence à Walk Holding (nível grupo) — usar Objetivo como empresa operacional
+  const companyId = rawCompanyId === WALK_HOLDING_ID ? FALLBACK_COMPANY_ID : rawCompanyId;
 
   const [activeTab, setActiveTab] = useState("disparar");
 
