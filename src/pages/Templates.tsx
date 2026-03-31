@@ -17,7 +17,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
   Loader2, CheckCircle, Clock, XCircle, Search, Sparkles,
-  AlertTriangle, Users, Send, History, Pencil, ChevronDown, ChevronUp, Info,
+  AlertTriangle, Users, Send, History, Pencil, ChevronDown, ChevronUp, Info, Trash2,
 } from "lucide-react";
 
 interface Template {
@@ -852,14 +852,25 @@ export default function Templates() {
                       {d.strategy_notes && (
                         <p className="text-xs italic text-muted-foreground border-l-2 border-primary/30 pl-2">{d.strategy_notes}</p>
                       )}
-                      {isCEO ? (
-                        <Button size="sm" disabled={submittingDraft === d.name} onClick={() => handleSubmitDraft(d)}>
-                          {submittingDraft === d.name ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
-                          Submeter à Meta
+                      <div className="flex gap-2">
+                        {isCEO ? (
+                          <Button size="sm" disabled={submittingDraft === d.name} onClick={() => handleSubmitDraft(d)}>
+                            {submittingDraft === d.name ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
+                            Submeter à Meta
+                          </Button>
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic">Aguardando aprovação do administrador</p>
+                        )}
+                        <Button size="sm" variant="destructive" onClick={async () => {
+                          if (!confirm(`Excluir rascunho "${d.name}"?`)) return;
+                          await supabase.from("wa_templates").delete().eq("name", d.name).eq("company_id", effectiveCompanyId);
+                          setDrafts(prev => prev.filter(x => x.name !== d.name));
+                          toast.success("Rascunho excluído");
+                        }}>
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Excluir
                         </Button>
-                      ) : (
-                        <p className="text-xs text-muted-foreground italic">Aguardando aprovação do administrador</p>
-                      )}
+                      </div>
                     </CardContent>
                   </Card>
                 );
