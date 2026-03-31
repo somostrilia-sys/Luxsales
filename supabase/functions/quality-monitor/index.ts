@@ -65,28 +65,33 @@ Deno.serve(async (req) => {
 async function checkQuality(body: any) {
   const { company_id } = body;
 
-  // Buscar credenciais
-  const { data: config } = await supabase
-    .from("system_configs")
-    .select("key, value")
-    .in("key", ["meta_whatsapp_token", "meta_phone_number_id", "meta_waba_id"]);
-
+  // 1. Buscar credenciais da empresa primeiro
   const cfg: Record<string, string> = {};
-  for (const c of config || []) cfg[c.key] = c.value;
 
-  // Fallback
-  if (!cfg.meta_whatsapp_token || !cfg.meta_phone_number_id) {
+  if (company_id) {
     const { data: cred } = await supabase
       .from("whatsapp_meta_credentials")
-      .select("access_token, phone_number_id, waba_id")
+      .select("meta_access_token, meta_phone_number_id, meta_waba_id, access_token, phone_number_id, waba_id")
       .eq("company_id", company_id)
       .eq("is_active", true)
       .maybeSingle();
 
     if (cred) {
-      cfg.meta_whatsapp_token = cfg.meta_whatsapp_token || cred.access_token;
-      cfg.meta_phone_number_id = cfg.meta_phone_number_id || cred.phone_number_id;
-      cfg.meta_waba_id = cfg.meta_waba_id || cred.waba_id;
+      cfg.meta_whatsapp_token = cred.meta_access_token || cred.access_token || "";
+      cfg.meta_phone_number_id = cred.meta_phone_number_id || cred.phone_number_id || "";
+      cfg.meta_waba_id = cred.meta_waba_id || cred.waba_id || "";
+    }
+  }
+
+  // 2. Fallback: credenciais globais em system_configs
+  if (!cfg.meta_whatsapp_token || !cfg.meta_phone_number_id) {
+    const { data: globalConfig } = await supabase
+      .from("system_configs")
+      .select("key, value")
+      .in("key", ["meta_whatsapp_token", "meta_phone_number_id", "meta_waba_id"]);
+
+    for (const c of globalConfig || []) {
+      if (!cfg[c.key]) cfg[c.key] = c.value;
     }
   }
 

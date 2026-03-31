@@ -121,7 +121,82 @@ interface Company {
   logo_url?: string;
 }
 
-// ── WhatsApp Meta Section ──────────────────────────────────────────────────────
+// ── Meta Status por Empresa (inline no módulo 8) ─────────────────────────────
+
+function CompanyMetaStatus({ companyId, phoneNumberId, token }: { companyId: string; phoneNumberId: string; token: string }) {
+  const [status, setStatus] = useState<{ quality: string; tier: string; tier_limit: number; usage_pct: number; blocks_24h: number; verified_name: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchStatus = async () => {
+    if (!phoneNumberId || !token) { setError("Configure Phone Number ID e Token"); return; }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${EDGE_BASE}/quality-monitor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ action: "check", company_id: companyId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.error) { setError(data.error); }
+        else { setStatus(data); }
+      } else {
+        setError("Erro ao consultar Meta API");
+      }
+    } catch { setError("Erro de rede"); }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (phoneNumberId && token) fetchStatus();
+  }, [companyId, phoneNumberId]);
+
+  if (!phoneNumberId || !token) return null;
+
+  const qColor = status?.quality === "GREEN" ? "text-green-500" : status?.quality === "YELLOW" ? "text-yellow-500" : status?.quality === "RED" ? "text-red-500" : "text-muted-foreground";
+  const qBg = status?.quality === "GREEN" ? "bg-green-500/10 border-green-500/30" : status?.quality === "YELLOW" ? "bg-yellow-500/10 border-yellow-500/30" : status?.quality === "RED" ? "bg-red-500/10 border-red-500/30" : "bg-muted/50 border-border";
+
+  return (
+    <div className="space-y-2 pt-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Status Meta (tempo real)</p>
+        <Button variant="ghost" size="sm" onClick={fetchStatus} disabled={loading} className="h-6 px-2 text-[10px]">
+          <RefreshCw className={`h-3 w-3 mr-1 ${loading ? "animate-spin" : ""}`} />
+          {loading ? "..." : "Atualizar"}
+        </Button>
+      </div>
+      {error ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : status ? (
+        <div className="grid grid-cols-4 gap-2">
+          <div className={`rounded border px-2 py-1.5 text-center ${qBg}`}>
+            <p className={`text-sm font-bold ${qColor}`}>{status.quality}</p>
+            <p className="text-[9px] text-muted-foreground">Qualidade</p>
+          </div>
+          <div className="rounded border border-primary/20 bg-primary/5 px-2 py-1.5 text-center">
+            <p className="text-sm font-bold text-primary">{status.tier_limit > 0 ? status.tier_limit.toLocaleString("pt-BR") : "—"}</p>
+            <p className="text-[9px] text-muted-foreground">{status.tier === "STANDARD" ? "Standard/dia" : (status.tier || "").replace("TIER_", "").replace("K", "K/dia")}</p>
+          </div>
+          <div className="rounded border px-2 py-1.5 text-center">
+            <p className="text-sm font-bold">{status.usage_pct}%</p>
+            <p className="text-[9px] text-muted-foreground">Uso 24h</p>
+          </div>
+          <div className="rounded border px-2 py-1.5 text-center">
+            <p className="text-sm font-bold">{status.blocks_24h}</p>
+            <p className="text-[9px] text-muted-foreground">Bloqueios</p>
+          </div>
+        </div>
+      ) : loading ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />Consultando Meta API...</div>
+      ) : null}
+      {status?.verified_name && <p className="text-[10px] text-muted-foreground">Verified: {status.verified_name}</p>}
+    </div>
+  );
+}
+
+// ── WhatsApp Meta Section (CEO - visão geral) ────────────────────────────────
 
 interface ConsultorTier {
   id: string;
@@ -490,8 +565,20 @@ export default function Configuracoes() {
       await supabase.from("system_configs").upsert([
         { key: `distribution_batch_size_${cid}`, value: String(cfg.distribution.batchSize), company_id: cid },
         { key: `distribution_threshold_${cid}`, value: String(cfg.distribution.threshold), company_id: cid },
-        { key: `meta_tier_daily_${cid}`, value: String(cfg.distribution.metaTierDaily ?? 250), company_id: cid },
-      ], { onConflict: "key" });
+      ], { onConflict: "key,company_id" });
+
+      // Sincronizar credenciais WhatsApp Meta para quality-monitor
+      if (cfg.whatsapp.phoneNumberId && cfg.whatsapp.token) {
+        await supabase.from("whatsapp_meta_credentials").upsert({
+          company_id: cid,
+          meta_phone_number_id: cfg.whatsapp.phoneNumberId,
+          meta_access_token: cfg.whatsapp.token,
+          meta_waba_id: cfg.whatsapp.businessAccountId || null,
+          meta_display_phone: cfg.whatsapp.numero || null,
+          is_active: true,
+        }, { onConflict: "company_id" });
+      }
+
       toast.success("Configurações da empresa salvas!");
     } catch (e: any) {
       toast.error("Erro ao salvar: " + e.message);
@@ -905,6 +992,7 @@ export default function Configuracoes() {
                             >
                               {testingConnection[`meta_${company.id}`] ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Testando...</> : "Testar Conexão Meta"}
                             </Button>
+                            <CompanyMetaStatus companyId={company.id} phoneNumberId={cfg.whatsapp.phoneNumberId} token={cfg.whatsapp.token} />
                           </TabsContent>
 
                           {/* Distribuição */}
