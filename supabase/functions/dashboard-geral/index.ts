@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
 async function getOverview(body: any) {
   const { company_id, requester_role } = body;
 
-  if (!["ceo", "director"].includes(requester_role)) {
+  if (!["ceo", "director", "manager"].includes(requester_role)) {
     return json({ error: "Sem acesso ao dashboard geral" }, 403);
   }
 
@@ -214,7 +214,7 @@ async function getOverview(body: any) {
 async function getKPIs(body: any) {
   const { company_id, requester_role } = body;
 
-  if (!["ceo", "director"].includes(requester_role)) {
+  if (!["ceo", "director", "manager"].includes(requester_role)) {
     return json({ error: "Sem acesso" }, 403);
   }
 

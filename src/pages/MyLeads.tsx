@@ -16,22 +16,25 @@ import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { toast } from "sonner";
 import {
   Search, Loader2, ChevronLeft, ChevronRight, Users,
-  Phone, MessageSquare, FileText, CheckCircle, XCircle,
+  Phone, MessageSquare, FileText,
 } from "lucide-react";
 
 const PAGE_SIZE = 50;
 
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
-  assigned:    { label: "Atribuído",  cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
-  in_progress: { label: "Em contato", cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30" },
-  contacted:   { label: "Contatado",  cls: "bg-purple-500/15 text-purple-400 border-purple-500/30" },
-  follow_up:   { label: "Follow-up",  cls: "bg-orange-500/15 text-orange-400 border-orange-500/30" },
-  converted:   { label: "Convertido", cls: "bg-green-500/15 text-green-400 border-green-500/30" },
-  lost:        { label: "Perdido",    cls: "bg-red-500/15 text-red-400 border-red-500/30" },
-  returned:    { label: "Retornado",  cls: "bg-gray-500/15 text-gray-400 border-gray-500/30" },
+  pending:     { label: "Pendente",     cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+  new:         { label: "Novo",         cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+  no_answer:   { label: "Sem resposta", cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30" },
+  scheduled:   { label: "Agendado",     cls: "bg-purple-500/15 text-purple-400 border-purple-500/30" },
+  interested:  { label: "Interessado",  cls: "bg-green-500/15 text-green-400 border-green-500/30" },
 };
 
-const TEMP_MAP: Record<string, string> = { hot: "🔥 Hot", warm: "☀️ Warm", cold: "❄️ Cold" };
+const INTEREST_MAP: Record<string, { label: string; cls: string }> = {
+  hot:     { label: "Quente",   cls: "text-red-400" },
+  warm:    { label: "Morno",    cls: "text-yellow-400" },
+  cold:    { label: "Frio",     cls: "text-blue-400" },
+  unknown: { label: "Novo",     cls: "text-muted-foreground" },
+};
 
 interface LeadRow {
   poolId: string | null;
@@ -39,8 +42,9 @@ interface LeadRow {
   name: string | null;
   phone: string | null;
   phoneNormalized: string | null;
-  score: number | null;
-  temperature: string | null;
+  ddd: string | null;
+  city: string | null;
+  category: string | null;
   status: string | null;
   interestStatus: string | null;
   callAttempts: number;
@@ -61,7 +65,7 @@ export default function MyLeads() {
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
 
-  const [counters, setCounters] = useState({ total: 0, pending: 0, interested: 0, processed: 0 });
+  const [counters, setCounters] = useState({ total: 0, pending: 0, hot: 0, noAnswer: 0 });
 
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesTarget, setNotesTarget] = useState<{ poolId: string; current: string } | null>(null);
@@ -80,18 +84,19 @@ export default function MyLeads() {
     const make = () =>
       supabase.from("consultant_lead_pool")
         .select("*", { count: "exact", head: true })
-        .eq("collaborator_id", collaborator.id);
-    const [all, pending, interested, processed] = await Promise.all([
+        .eq("collaborator_id", collaborator.id)
+        .not("interest_status", "in", "(discarded,not_interested_2)");
+    const [all, pending, hot, noAnswer] = await Promise.all([
       make(),
-      make().or("interest_status.is.null,interest_status.eq.pending"),
-      make().eq("interest_status", "interested"),
-      make().in("interest_status", ["not_interested_2", "discarded"]),
+      make().in("status", ["pending", "new"]),
+      make().in("interest_status", ["hot", "warm"]),
+      make().eq("status", "no_answer"),
     ]);
     setCounters({
-      total: (all.count ?? 0),
+      total: all.count ?? 0,
       pending: pending.count ?? 0,
-      interested: interested.count ?? 0,
-      processed: processed.count ?? 0,
+      hot: hot.count ?? 0,
+      noAnswer: noAnswer.count ?? 0,
     });
   }, [collaborator]);
 
@@ -107,18 +112,24 @@ export default function MyLeads() {
           .from("consultant_lead_pool")
           .select("*", { count: "exact", head: true })
           .eq("collaborator_id", collaborator.id)
-          .or("interest_status.is.null,interest_status.not.in.(not_interested_2,discarded)");
-        if (statusFilter !== "all") cq = cq.eq("status", statusFilter);
+          .not("interest_status", "in", "(discarded,not_interested_2)");
+        if (statusFilter !== "all") {
+          if (statusFilter === "hot") cq = cq.in("interest_status", ["hot", "warm"]);
+          else cq = cq.eq("status", statusFilter);
+        }
         const { count } = await cq;
         setTotal(count ?? 0);
 
         // Data
         let dq = supabase
           .from("consultant_lead_pool")
-          .select("id, status, notes, last_contact_at, priority, call_attempts, interest_status, phone_normalized, lead:leads_master(id, lead_name, phone_number, lead_score, lead_temperature)")
+          .select("id, status, notes, last_contact_at, priority, call_attempts, interest_status, phone_normalized, phone, lead_name, lead_city, lead_category, lead_ddd, lead_id, lead:leads_master(id, lead_name, phone_number, lead_score, lead_temperature)")
           .eq("collaborator_id", collaborator.id)
-          .or("interest_status.is.null,interest_status.not.in.(not_interested_2,discarded)");
-        if (statusFilter !== "all") dq = dq.eq("status", statusFilter);
+          .not("interest_status", "in", "(discarded,not_interested_2)");
+        if (statusFilter !== "all") {
+          if (statusFilter === "hot") dq = dq.in("interest_status", ["hot", "warm"]);
+          else dq = dq.eq("status", statusFilter);
+        }
         const { data, error } = await dq
           .order("priority", { ascending: false })
           .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
@@ -126,12 +137,13 @@ export default function MyLeads() {
 
         const rawItems: LeadRow[] = (data ?? []).map((r: any) => ({
           poolId: r.id,
-          leadId: r.lead?.id ?? r.id,
-          name: r.lead?.lead_name ?? null,
-          phone: r.lead?.phone_number ?? null,
+          leadId: r.lead?.id ?? r.lead_id ?? r.id,
+          name: r.lead?.lead_name ?? r.lead_name ?? null,
+          phone: r.lead?.phone_number ?? r.phone ?? null,
           phoneNormalized: r.phone_normalized ?? null,
-          score: r.lead?.lead_score ?? null,
-          temperature: r.lead?.lead_temperature ?? null,
+          ddd: r.lead_ddd ?? null,
+          city: r.lead_city ?? null,
+          category: r.lead_category ?? null,
           status: r.status,
           interestStatus: r.interest_status ?? null,
           callAttempts: r.call_attempts ?? 0,
@@ -210,10 +222,10 @@ export default function MyLeads() {
       {/* Counters */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         {[
-          { label: "Total leads", value: counters.total, cls: "text-foreground" },
-          { label: "Pendentes", value: counters.pending, cls: "text-blue-400" },
-          { label: "Com interesse", value: counters.interested, cls: "text-green-400" },
-          { label: "Processados", value: counters.processed, cls: "text-muted-foreground" },
+          { label: "Total na fila", value: counters.total, cls: "text-foreground" },
+          { label: "Aguardando contato", value: counters.pending, cls: "text-blue-400" },
+          { label: "Com interesse", value: counters.hot, cls: "text-green-400" },
+          { label: "Sem resposta", value: counters.noAnswer, cls: "text-yellow-400" },
         ].map(c => (
           <div key={c.label} className="rounded-lg border border-border bg-card/60 px-4 py-3 text-center">
             <p className={`text-xl font-bold ${c.cls}`}>{c.value.toLocaleString("pt-BR")}</p>
@@ -234,16 +246,14 @@ export default function MyLeads() {
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Status" />
+            <SelectValue placeholder="Filtrar" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="assigned">Atribuído</SelectItem>
-            <SelectItem value="in_progress">Em contato</SelectItem>
-            <SelectItem value="contacted">Contatado</SelectItem>
-            <SelectItem value="follow_up">Follow-up</SelectItem>
-            <SelectItem value="converted">Convertido</SelectItem>
-            <SelectItem value="lost">Perdido</SelectItem>
+            <SelectItem value="pending">Aguardando</SelectItem>
+            <SelectItem value="no_answer">Sem resposta</SelectItem>
+            <SelectItem value="hot">Com interesse</SelectItem>
+            <SelectItem value="scheduled">Agendados</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -268,10 +278,11 @@ export default function MyLeads() {
                   <TableRow>
                     <TableHead>Nome</TableHead>
                     <TableHead>Telefone</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead>Temperatura</TableHead>
+                    <TableHead>DDD</TableHead>
+                    <TableHead>Cidade</TableHead>
+                    <TableHead>Interesse</TableHead>
+                    <TableHead>Tentativas</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Último Contato</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -284,35 +295,28 @@ export default function MyLeads() {
                       <TableRow key={row.poolId ?? row.leadId}>
                         <TableCell className="font-medium">{row.name ?? "—"}</TableCell>
                         <TableCell className="font-mono text-xs">{row.phoneNormalized ?? row.phone ?? "—"}</TableCell>
+                        <TableCell className="text-xs text-center">{row.ddd ?? "—"}</TableCell>
+                        <TableCell className="text-xs">{row.city ?? "—"}</TableCell>
                         <TableCell>
-                          {row.score != null ? (
-                            <span className={`text-xs font-bold ${row.score >= 70 ? "text-green-400" : row.score >= 40 ? "text-yellow-400" : "text-red-400"}`}>
-                              {row.score}
+                          {row.interestStatus ? (
+                            <span className={`text-xs font-semibold ${INTEREST_MAP[row.interestStatus]?.cls ?? "text-muted-foreground"}`}>
+                              {INTEREST_MAP[row.interestStatus]?.label ?? row.interestStatus}
                             </span>
                           ) : "—"}
                         </TableCell>
-                        <TableCell className="text-xs">
-                          {row.temperature
-                            ? (TEMP_MAP[row.temperature] ?? row.temperature)
-                            : "—"}
+                        <TableCell className="text-xs text-center">{row.callAttempts}</TableCell>
+                        <TableCell>
+                          {st ? (
+                            <Badge variant="outline" className={`text-xs ${st.cls}`}>
+                              {st.label}
+                            </Badge>
+                          ) : "—"}
                         </TableCell>
-                          <TableCell>
-                            {st ? (
-                              <Badge variant="outline" className={`text-xs ${st.cls}`}>
-                                {st.label}
-                              </Badge>
-                            ) : "—"}
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">
-                            {row.lastContact
-                              ? new Date(row.lastContact).toLocaleDateString("pt-BR")
-                              : "—"}
-                          </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-0.5">
                             <Button
                               variant="ghost" size="icon" className="h-7 w-7" title="Ligar"
-                              onClick={() => navigate(`/voice/dialer?phone=${encodeURIComponent(row.phone ?? "")}`)}
+                              onClick={() => navigate(`/ligacoes?phone=${encodeURIComponent(row.phone ?? "")}`)}
                             >
                               <Phone className="h-3.5 w-3.5 text-green-400" />
                             </Button>
@@ -323,26 +327,12 @@ export default function MyLeads() {
                               <MessageSquare className="h-3.5 w-3.5 text-emerald-400" />
                             </Button>
                             {row.poolId && (
-                              <>
-                                <Button
-                                  variant="ghost" size="icon" className="h-7 w-7" title="Notas"
-                                  onClick={() => openNotes(row.poolId!, row.notes)}
-                                >
-                                  <FileText className="h-3.5 w-3.5 text-blue-400" />
-                                </Button>
-                                <Button
-                                  variant="ghost" size="icon" className="h-7 w-7" title="Marcar como convertido"
-                                  onClick={() => updatePoolStatus(row.poolId!, "converted")}
-                                >
-                                  <CheckCircle className="h-3.5 w-3.5 text-green-400" />
-                                </Button>
-                                <Button
-                                  variant="ghost" size="icon" className="h-7 w-7" title="Marcar como perdido"
-                                  onClick={() => updatePoolStatus(row.poolId!, "lost")}
-                                >
-                                  <XCircle className="h-3.5 w-3.5 text-red-400" />
-                                </Button>
-                              </>
+                              <Button
+                                variant="ghost" size="icon" className="h-7 w-7" title="Notas"
+                                onClick={() => openNotes(row.poolId!, row.notes)}
+                              >
+                                <FileText className="h-3.5 w-3.5 text-blue-400" />
+                              </Button>
                             )}
                           </div>
                         </TableCell>

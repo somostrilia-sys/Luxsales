@@ -53,7 +53,9 @@ function PipelineTestTab({
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [pipelineHealth, setPipelineHealth] = useState<any>(null);
 
-  // Buscar health detalhado do pipeline
+  const [isOnline, setIsOnline] = useState(false);
+
+  // Buscar health detalhado do pipeline via make-call (mais confiável que orchestrator-proxy)
   const fetchPipelineHealth = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -66,8 +68,16 @@ function PipelineTestTab({
         },
         body: JSON.stringify({ action: "pipeline-status" }),
       });
-      if (res.ok) setPipelineHealth(await res.json());
-    } catch { /* ignore */ }
+      if (res.ok) {
+        const data = await res.json();
+        setPipelineHealth(data);
+        setIsOnline(data.pipeline === "online" || data.ok === true);
+      } else {
+        setIsOnline(false);
+      }
+    } catch {
+      setIsOnline(false);
+    }
   }, []);
 
   // Buscar últimas chamadas de teste
@@ -88,6 +98,8 @@ function PipelineTestTab({
   useEffect(() => {
     fetchPipelineHealth();
     fetchHistory();
+    const iv = setInterval(fetchPipelineHealth, 10000);
+    return () => clearInterval(iv);
   }, [fetchPipelineHealth, fetchHistory]);
 
   // Disparar chamada real via pipeline
@@ -150,15 +162,15 @@ function PipelineTestTab({
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <span className={`h-2.5 w-2.5 rounded-full ${pipelineOnline ? "bg-green-500" : "bg-red-500"}`} />
+              <span className={`h-2.5 w-2.5 rounded-full ${isOnline ? "bg-green-500" : "bg-red-500"}`} />
               Pipeline de Voz
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div className="text-muted-foreground">Status:</div>
-              <div className={pipelineOnline ? "text-green-400 font-medium" : "text-red-400 font-medium"}>
-                {pipelineOnline ? "Online" : "Offline"}
+              <div className={isOnline ? "text-green-400 font-medium" : "text-red-400 font-medium"}>
+                {isOnline ? "Online" : "Offline"}
               </div>
               {pipelineHealth?.running !== undefined && (
                 <>
@@ -219,7 +231,7 @@ function PipelineTestTab({
             <Button
               className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
               onClick={dispatchCall}
-              disabled={calling || !pipelineOnline || !testPhone}
+              disabled={calling || !testPhone}
             >
               {calling ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -229,7 +241,7 @@ function PipelineTestTab({
               {calling ? "Disparando..." : "Disparar Ligacao Real"}
             </Button>
 
-            {!pipelineOnline && (
+            {!isOnline && (
               <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 <span>Pipeline offline. Verifique se os servicos no PC Gamer estao rodando.</span>

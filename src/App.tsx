@@ -97,6 +97,10 @@ const Ligacoes = lazy(() => import("./pages/Ligacoes"));
 const Disparos = lazy(() => import("./pages/Disparos"));
 const Historico = lazy(() => import("./pages/Historico"));
 
+const Organizations = lazy(() => import("./pages/Organizations"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+
+const TrocarSenha = lazy(() => import("./pages/TrocarSenha"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function PageLoader() {
@@ -123,6 +127,7 @@ const App = () => (
           <Route path="/criar-conta" element={<CriarConta />} />
           <Route path="/venda" element={<Venda />} />
           <Route path="/convite/:token" element={<AceitarConvite />} />
+          <Route path="/trocar-senha" element={<ProtectedRoute><TrocarSenha /></ProtectedRoute>} />
 
           {/* WB Core — CEO */}
           <Route path="/" element={<ProtectedRoute><DashboardGeral /></ProtectedRoute>} />
@@ -133,7 +138,7 @@ const App = () => (
           <Route path="/team" element={<ProtectedRoute minLevel={0}><TeamManagement /></ProtectedRoute>} />
           <Route path="/lead-distribution" element={<ProtectedRoute minLevel={0}><LeadDistribution /></ProtectedRoute>} />
           <Route path="/leads" element={<ProtectedRoute minLevel={0}><LeadsMaster /></ProtectedRoute>} />
-          <Route path="/import" element={<ProtectedRoute minLevel={0}><ImportLeads /></ProtectedRoute>} />
+          <Route path="/import" element={<ProtectedRoute><ImportLeads /></ProtectedRoute>} />
           {/* Ligacoes unificadas (Fase 2) */}
           <Route path="/ligacoes" element={<ProtectedRoute><Ligacoes /></ProtectedRoute>} />
           {/* Redirects para rotas antigas */}
@@ -168,6 +173,10 @@ const App = () => (
           <Route path="/voice/dialer" element={<Navigate to="/ligacoes" replace />} />
           <Route path="/voice/simulate" element={<ProtectedRoute minLevel={0}><VoiceSimulate /></ProtectedRoute>} />
           <Route path="/voice/calls" element={<ProtectedRoute minLevel={0}><VoiceCalls /></ProtectedRoute>} />
+
+          {/* Plataforma — CEO grupo only */}
+          <Route path="/organizations" element={<ProtectedRoute minLevel={0}><Organizations /></ProtectedRoute>} />
+          <Route path="/onboarding" element={<ProtectedRoute minLevel={0}><Onboarding /></ProtectedRoute>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

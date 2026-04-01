@@ -150,6 +150,7 @@ export default function DashboardConsultor() {
     setAllLoading(true);
 
     const periodStart = getPeriodStart(period);
+    const today = getPeriodStart("today");
     const month = monthStart();
 
     await Promise.all([
@@ -162,7 +163,7 @@ export default function DashboardConsultor() {
             .select("id", { count: "exact", head: true })
             .eq("company_id", company_id)
             .eq("collaborator_id", collaboratorId)
-            .neq("status", "done");
+            .not("status", "in", "(converted,lost)");
           setLeadsAtivos(count ?? 0);
         } catch { setLeadsAtivos(0); }
         setLeadsLoading(false);
@@ -179,13 +180,13 @@ export default function DashboardConsultor() {
               .select("id", { count: "exact", head: true })
               .eq("collaborator_id", collaboratorId)
               .gt("call_attempts", 0)
-              .gte("last_contact_at", periodStart),
+              .gte("last_call_at", periodStart),
             // Leads com interesse (total, sem filtro de período)
             supabase
               .from("consultant_lead_pool")
               .select("id", { count: "exact", head: true })
               .eq("collaborator_id", collaboratorId)
-              .eq("interest_status", "interested"),
+              .in("interest_status", ["hot", "warm"]),
           ]);
           setLigacoesHoje(ligRes.count ?? 0);
           setLigacoesAtendidas(0); // não mais usado
@@ -271,6 +272,7 @@ export default function DashboardConsultor() {
             .from("leads_master")
             .select("id", { count: "exact", head: true })
             .eq("company_id", company_id)
+            .eq("assigned_to", collaboratorId)
             .eq("status", "converted")
             .gte("updated_at", month);
 

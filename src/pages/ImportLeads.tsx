@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useCompany } from "@/contexts/CompanyContext";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
@@ -112,6 +113,7 @@ interface ImportHistory {
 
 export default function ImportLeads() {
   const { company_id, user_role } = useCompany();
+  const { collaborator } = useCollaborator();
   const navigate = useNavigate();
 
   // wizard
@@ -143,7 +145,7 @@ export default function ImportLeads() {
   const [history, setHistory] = useState<ImportHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const base = { company_id, requester_role: user_role || "ceo" };
+  const base = { company_id, requester_role: user_role || "ceo", collaborator_id: collaborator?.id };
 
   // ── parse file ──
   const parseCSV = (text: string) => {

@@ -137,7 +137,7 @@ const callStatusConfig: Record<string, { label: string; cls: string }> = {
   simulated: { label: "Simulado", cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
 };
 
-const FALLBACK_COMPANY = "70967469-9a9b-4e29-a744-410e41eb47a5"; // Objetivo
+// Sem fallback hardcoded — usar empresa do colaborador ou null
 
 // ─── Template Picker Dialog ───────────────────────────────────────────────────
 
@@ -329,7 +329,7 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
 
   const sendTemplate = async (templateName: string) => {
     if (!targetPhone) return;
-    const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || FALLBACK_COMPANY;
+    const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || collaborator?.company_id;
     setSendingTemplate(true);
     try {
       const session = await supabase.auth.getSession();
@@ -393,7 +393,7 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
       if (error) throw error;
 
       // Enviar template de reativação
-      const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || FALLBACK_COMPANY;
+      const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || collaborator?.company_id;
       try {
         const session = await supabase.auth.getSession();
         await fetch(`${EDGE_BASE}/send-meta-message`, {
@@ -785,7 +785,7 @@ function TabConversasEncerradas({
 
   const sendReactivation = async (templateName: string) => {
     if (!targetConv) return;
-    const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || FALLBACK_COMPANY;
+    const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || collaborator?.company_id;
     setSendingTemplate(true);
     try {
       const session = await supabase.auth.getSession();
@@ -1190,7 +1190,7 @@ export default function Historico() {
   const companyId =
     selectedCompanyId && selectedCompanyId !== "all"
       ? selectedCompanyId
-      : collaborator?.company_id || FALLBACK_COMPANY;
+      : collaborator?.company_id;
 
   return (
     <DashboardLayout>

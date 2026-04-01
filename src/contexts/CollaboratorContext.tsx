@@ -14,6 +14,7 @@ export interface Collaborator {
   role_id: string;
   sector_id: string | null;
   unit_id: string | null;
+  must_change_password: boolean;
   company: { id: string; name: string; slug: string; logo_url: string | null };
   role: { id: string; name: string; level: number };
   sector: { id: string; name: string } | null;
@@ -54,7 +55,7 @@ export function CollaboratorProvider({ children }: { children: ReactNode }) {
     const { data, error: fetchError } = await supabase
       .from("collaborators")
       .select(`
-        id, auth_user_id, name, email, phone, whatsapp, active,
+        id, auth_user_id, name, email, phone, whatsapp, active, must_change_password,
         company_id, role_id, sector_id, unit_id,
         company:companies!collaborators_company_id_fkey(id, name, slug, logo_url),
         role:roles!collaborators_role_id_fkey(id, name, level),

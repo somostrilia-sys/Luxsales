@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CollaboratorProvider } from "@/contexts/CollaboratorContext";
+import { OrganizationProvider } from "@/contexts/OrganizationContext";
 import { CompanyFilterProvider } from "@/contexts/CompanyFilterContext";
 import { DispatchProvider } from "@/contexts/DispatchContext";
 import { CompanyProvider } from "@/contexts/CompanyContext";
@@ -19,13 +20,15 @@ createRoot(document.getElementById("root")!).render(
     <TooltipProvider>
       <AuthProvider>
         <CollaboratorProvider>
-          <CompanyFilterProvider>
-            <CompanyProvider>
-              <DispatchProvider>
-                <App />
-              </DispatchProvider>
-            </CompanyProvider>
-          </CompanyFilterProvider>
+          <OrganizationProvider>
+            <CompanyFilterProvider>
+              <CompanyProvider>
+                <DispatchProvider>
+                  <App />
+                </DispatchProvider>
+              </CompanyProvider>
+            </CompanyFilterProvider>
+          </OrganizationProvider>
         </CollaboratorProvider>
       </AuthProvider>
     </TooltipProvider>

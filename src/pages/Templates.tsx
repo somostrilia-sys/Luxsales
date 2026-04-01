@@ -168,9 +168,7 @@ export default function Templates() {
   // Meta rules accordion
   const [metaRulesOpen, setMetaRulesOpen] = useState(false);
 
-  // Rejection history
-  const [rejections, setRejections] = useState<Rejection[]>([]);
-  const [rejectionsLoading, setRejectionsLoading] = useState(false);
+  // Rejection history (derivado dos templates carregados)
 
   // Variable mappings
   const [varMappings, setVarMappings] = useState<VarMapping[]>([
@@ -272,7 +270,7 @@ export default function Templates() {
       });
       const data = await res.json();
       if (res.ok) {
-        const mapped = (data.templates || []).map((t: any) => {
+        const all = (data.templates || []).map((t: any) => {
           const bodyComp = (t.components || []).find((c: any) => c.type === "BODY");
           const headerComp = (t.components || []).find((c: any) => c.type === "HEADER");
           const footerComp = (t.components || []).find((c: any) => c.type === "FOOTER");
@@ -290,40 +288,19 @@ export default function Templates() {
             rejection_reason: t.rejection_reason,
           } as Template;
         });
-        setTemplates(mapped);
+        // Deduplicar por name+language (manter o mais recente)
+        const seen = new Map<string, Template>();
+        for (const t of all) {
+          const key = `${t.name}__${t.language}`;
+          if (!seen.has(key)) seen.set(key, t);
+        }
+        setTemplates(Array.from(seen.values()));
       }
     } catch {
       toast.error("Erro ao buscar templates");
     }
     setLoading(false);
-  }, [collaborator, getHeaders]);
-
-  const fetchRejections = useCallback(async () => {
-    if (!collaborator) return;
-    setRejectionsLoading(true);
-    try {
-      // Fetch rejected templates from same endpoint
-      const headers = await getHeaders();
-      const res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ action: "list", company_id: effectiveCompanyId }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        const rejected = (data.templates || [])
-          .filter((t: any) => t.status === "REJECTED")
-          .map((t: any) => ({
-            name: t.name,
-            reason: t.rejection_reason || "Não especificado",
-            date: t.updated_at ? new Date(t.updated_at).toLocaleDateString("pt-BR") : "—",
-            analysis: "",
-          }));
-        setRejections(rejected);
-      }
-    } catch {}
-    setRejectionsLoading(false);
-  }, [collaborator, getHeaders]);
+  }, [collaborator, getHeaders, effectiveCompanyId]);
 
   const fetchDrafts = useCallback(async () => {
     if (!collaborator) return;
@@ -349,8 +326,7 @@ export default function Templates() {
   }, [collaborator, effectiveCompanyId]);
 
   useEffect(() => {
-    fetchTemplates();
-    // Sync silencioso ao carregar — atualiza banco local com status da Meta
+    // Sync com Meta primeiro, depois fetch local (garante dados reais)
     (async () => {
       try {
         const headers = await getHeaders();
@@ -360,13 +336,14 @@ export default function Templates() {
           body: JSON.stringify({ action: "sync", company_id: effectiveCompanyId }),
         });
       } catch {}
+      // Após sync, buscar templates atualizados
+      fetchTemplates();
     })();
   }, [fetchTemplates]);
 
   useEffect(() => {
-    if (tab === "pending") fetchRejections();
     if (tab === "drafts") fetchDrafts();
-  }, [tab, fetchRejections, fetchDrafts]);
+  }, [tab, fetchDrafts]);
 
   const approved = templates.filter((t) =>
     t.status === "APPROVED" &&
@@ -375,17 +352,25 @@ export default function Templates() {
   );
   const pending = templates.filter((t) => (t.status === "PENDING" || t.status === "REJECTED") && (!search || t.name.toLowerCase().includes(search.toLowerCase())));
 
+  // Derivar rejeições dos templates já carregados (sem fetch extra)
+  const rejections: Rejection[] = templates
+    .filter(t => t.status === "REJECTED")
+    .map(t => ({
+      name: t.name,
+      reason: t.rejection_reason || "Não especificado",
+      date: "—",
+      analysis: "",
+    }));
+
   const handleGenerate = async () => {
     if (!objective.trim() || !collaborator) return;
     setGenerating(true);
     setGenerated([]);
     try {
+      const headers = await getHeaders();
       const res = await fetch(`${EDGE_BASE}/generate-template`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjYWR1endhdXRscHpwdmpvZ25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDQ1MTcsImV4cCI6MjA4ODU4MDUxN30.LinR7PIoK7n79hWjbSJ3EgDwA_y6uN-HfQnOk7GgYi4",
-        },
+        headers,
         body: JSON.stringify({
           action: "generate",
           objective,
@@ -398,36 +383,7 @@ export default function Templates() {
       if (res.ok) {
         const templates: GeneratedTemplate[] = data.templates || [];
         setGenerated(templates);
-
-        // Auto-salvar cada template como rascunho — NÃO submeter à Meta
-        const savePromises = templates.map(async (tmpl) => {
-          const row = {
-            company_id: effectiveCompanyId,
-            name: tmpl.name,
-            category: (tmpl.category || "UTILITY").toUpperCase(),
-            language: "pt_BR",
-            body: tmpl.body,
-            header: tmpl.header || null,
-            footer: tmpl.footer || null,
-            buttons: tmpl.buttons || [],
-            strategy_notes: tmpl.strategy_notes || null,
-            confidence_score: tmpl.confidence_score || null,
-            status: "draft",
-          };
-          const { error } = await supabase.from("wa_templates").insert(row);
-          if (error?.code === "23505") {
-            // Duplicata — atualizar existente
-            await supabase.from("wa_templates")
-              .update({ ...row, updated_at: new Date().toISOString() })
-              .eq("name", tmpl.name)
-              .eq("company_id", effectiveCompanyId);
-          }
-        });
-        await Promise.all(savePromises);
-        toast.success(`${templates.length} variações geradas e salvas como rascunho`);
-        // Manter na aba Criar Novo — templates gerados ficam visíveis
-        // Atualizar rascunhos em background pra quando o usuário navegar
-        setTimeout(() => fetchDrafts(), 500);
+        toast.success(`${templates.length} sugestões geradas — revise e salve como rascunho`);
       } else {
         toast.error(data.error || "Erro ao gerar");
       }
@@ -556,50 +512,6 @@ export default function Templates() {
     setSubmittingDraft(null);
   };
 
-  const handleSubmitTemplate = async (tmpl: GeneratedTemplate) => {
-    if (!collaborator) return;
-    setSubmitting(tmpl.name);
-    try {
-      const headers = await getHeaders();
-      const components: any[] = [];
-      if (tmpl.body) components.push({ type: "BODY", text: tmpl.body });
-      if (tmpl.header) components.push({ type: "HEADER", format: "TEXT", text: tmpl.header });
-      if (tmpl.footer) components.push({ type: "FOOTER", text: tmpl.footer });
-      if (tmpl.buttons && tmpl.buttons.length > 0) {
-        components.push({
-          type: "BUTTONS",
-          buttons: tmpl.buttons.map(b => typeof b === "string"
-            ? { type: "QUICK_REPLY", text: b }
-            : { type: b.type || "QUICK_REPLY", text: b.text, ...(b.url ? { url: b.url } : {}), ...(b.phone_number ? { phone_number: b.phone_number } : {}) }
-          ),
-        });
-      }
-
-      const res = await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          action: "create",
-          company_id: effectiveCompanyId,
-          name: tmpl.name,
-          category: (tmpl.category || "UTILITY").toUpperCase(),
-          language: "pt_BR",
-          components,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success("Template submetido — aguardando aprovação da Meta");
-        fetchTemplates();
-      } else {
-        toast.error(data.error || "Erro ao submeter");
-      }
-    } catch {
-      toast.error("Erro de conexão");
-    }
-    setSubmitting(null);
-  };
-
   const openAssignModal = async (tmpl: Template) => {
     setAssignTemplate(tmpl);
     setSelectedSellers([]);
@@ -668,7 +580,7 @@ export default function Templates() {
         await fetch(`${EDGE_BASE}/whatsapp-meta-templates`, {
           method: "POST",
           headers,
-          body: JSON.stringify({ action: "delete", name: t.name }),
+          body: JSON.stringify({ action: "delete", name: t.name, company_id: effectiveCompanyId }),
         });
       } catch { /* Meta delete is best-effort */ }
       toast.success("Template excluído");
@@ -857,9 +769,7 @@ export default function Templates() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {rejectionsLoading ? (
-                <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
-              ) : rejections.length === 0 ? (
+              {rejections.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">Sem rejeições registradas</p>
               ) : (
                 <div className="space-y-3">
@@ -881,10 +791,14 @@ export default function Templates() {
 
         {/* DRAFTS TAB */}
         <TabsContent value="drafts" className="space-y-4">
+          <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/20 rounded p-3 text-xs text-blue-300">
+            <Info className="h-4 w-4 mt-0.5 shrink-0" />
+            <p><strong>Fluxo:</strong> IA gera sugestões → Você revisa e salva como rascunho → Submete manualmente à Meta → Meta analisa → Aprovado ou Rejeitado. Nenhum template é enviado automaticamente.</p>
+          </div>
           {draftsLoading ? (
             <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
           ) : drafts.length === 0 ? (
-            <Card><CardContent className="py-12 text-center text-muted-foreground">Nenhum rascunho. Gere templates na aba "Criar Novo" e salve como rascunho.</CardContent></Card>
+            <Card><CardContent className="py-12 text-center text-muted-foreground">Nenhum rascunho. Gere templates na aba "Criar Novo", revise e salve como rascunho.</CardContent></Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {drafts.map((d) => {
@@ -929,8 +843,9 @@ export default function Templates() {
                         )}
                         <Button size="sm" variant="destructive" onClick={async () => {
                           if (!confirm(`Excluir rascunho "${d.name}"?`)) return;
-                          // Deletar por nome (todas as empresas — pode ter duplicatas)
-                          await supabase.from("wa_templates").delete().eq("name", d.name).eq("status", "draft");
+                          let delQ = supabase.from("wa_templates").delete().eq("name", d.name).eq("status", "draft");
+                          if (effectiveCompanyId) delQ = delQ.eq("company_id", effectiveCompanyId);
+                          await delQ;
                           setDrafts(prev => prev.filter(x => x.name !== d.name));
                           toast.success("Rascunho excluído");
                         }}>
