@@ -35,12 +35,280 @@ interface SpeechRecognitionEvent {
   results: { [key: number]: { [key: number]: { transcript: string }; isFinal: boolean }; length: number };
 }
 
+// ── Pipeline Test Tab ────────────────────────────────────────────────────────
+function PipelineTestTab({
+  companyId,
+  pipelineOnline,
+  checkHealth,
+}: {
+  companyId: string;
+  pipelineOnline: boolean | null;
+  checkHealth: () => void;
+}) {
+  const [testPhone, setTestPhone] = useState("");
+  const [testCompanyId, setTestCompanyId] = useState(companyId || "");
+  const [calling, setCalling] = useState(false);
+  const [callResult, setCallResult] = useState<any>(null);
+  const [callHistory, setCallHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [pipelineHealth, setPipelineHealth] = useState<any>(null);
+
+  // Buscar health detalhado do pipeline
+  const fetchPipelineHealth = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${EDGE_BASE}/make-call`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+        },
+        body: JSON.stringify({ action: "pipeline-status" }),
+      });
+      if (res.ok) setPipelineHealth(await res.json());
+    } catch { /* ignore */ }
+  }, []);
+
+  // Buscar últimas chamadas de teste
+  const fetchHistory = useCallback(async () => {
+    setLoadingHistory(true);
+    try {
+      const { data } = await supabase
+        .from("calls")
+        .select("id, destination_number, status, duration_seconds, call_summary, sentiment, interest_detected, created_at, ai_analysis")
+        .eq("company_id", testCompanyId || companyId)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      setCallHistory(data || []);
+    } catch { /* ignore */ }
+    setLoadingHistory(false);
+  }, [testCompanyId, companyId]);
+
+  useEffect(() => {
+    fetchPipelineHealth();
+    fetchHistory();
+  }, [fetchPipelineHealth, fetchHistory]);
+
+  // Disparar chamada real via pipeline
+  const dispatchCall = async () => {
+    if (!testPhone) {
+      toast.error("Preencha o número de telefone");
+      return;
+    }
+    setCalling(true);
+    setCallResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${EDGE_BASE}/make-call`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+        },
+        body: JSON.stringify({
+          action: "dial",
+          to: testPhone,
+          company_id: testCompanyId || companyId,
+        }),
+      });
+      const data = await res.json();
+      setCallResult(data);
+      if (data.success) {
+        toast.success(`Chamada disparada para ${testPhone}`);
+        // Atualizar histórico após 5s
+        setTimeout(fetchHistory, 5000);
+      } else {
+        toast.error(data.error || "Falha ao disparar chamada");
+      }
+    } catch (err: any) {
+      toast.error("Erro: " + err.message);
+      setCallResult({ error: err.message });
+    }
+    setCalling(false);
+  };
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+  const statusBadge = (status: string) => {
+    const map: Record<string, string> = {
+      completed: "bg-green-500/15 text-green-500",
+      calling: "bg-yellow-500/15 text-yellow-400 animate-pulse",
+      simulated: "bg-blue-500/15 text-blue-400",
+      failed: "bg-red-500/15 text-red-400",
+      initiated: "bg-yellow-500/15 text-yellow-400",
+    };
+    return map[status] || "bg-gray-500/15 text-gray-400";
+  };
+
+  return (
+    <div className="flex gap-4" style={{ minHeight: 550 }}>
+      <div className="w-[400px] shrink-0 space-y-4">
+        {/* Pipeline Status */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <span className={`h-2.5 w-2.5 rounded-full ${pipelineOnline ? "bg-green-500" : "bg-red-500"}`} />
+              Pipeline de Voz
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="text-muted-foreground">Status:</div>
+              <div className={pipelineOnline ? "text-green-400 font-medium" : "text-red-400 font-medium"}>
+                {pipelineOnline ? "Online" : "Offline"}
+              </div>
+              {pipelineHealth?.running !== undefined && (
+                <>
+                  <div className="text-muted-foreground">Discador:</div>
+                  <div className={pipelineHealth.running ? "text-green-400" : "text-yellow-400"}>
+                    {pipelineHealth.running ? "Rodando" : "Parado"}
+                  </div>
+                </>
+              )}
+              {pipelineHealth?.active_calls !== undefined && (
+                <>
+                  <div className="text-muted-foreground">Chamadas ativas:</div>
+                  <div>{pipelineHealth.active_calls}</div>
+                </>
+              )}
+              {pipelineHealth?.simulation_mode !== undefined && (
+                <>
+                  <div className="text-muted-foreground">Modo:</div>
+                  <div className={pipelineHealth.simulation_mode ? "text-blue-400" : "text-orange-400 font-medium"}>
+                    {pipelineHealth.simulation_mode ? "Simulacao" : "REAL"}
+                  </div>
+                </>
+              )}
+            </div>
+            <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => { checkHealth(); fetchPipelineHealth(); }}>
+              Atualizar Status
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Disparar Teste */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Phone className="h-4 w-4" /> Disparar Ligacao Teste
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <Label className="text-xs">Telefone</Label>
+              <Input
+                value={testPhone}
+                onChange={(e) => setTestPhone(e.target.value)}
+                placeholder="31999999999"
+                disabled={calling}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Company ID</Label>
+              <Input
+                value={testCompanyId}
+                onChange={(e) => setTestCompanyId(e.target.value)}
+                placeholder="objetivo"
+                disabled={calling}
+              />
+            </div>
+
+            <Button
+              className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
+              onClick={dispatchCall}
+              disabled={calling || !pipelineOnline || !testPhone}
+            >
+              {calling ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Phone className="h-4 w-4" />
+              )}
+              {calling ? "Disparando..." : "Disparar Ligacao Real"}
+            </Button>
+
+            {!pipelineOnline && (
+              <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                <span>Pipeline offline. Verifique se os servicos no PC Gamer estao rodando.</span>
+              </div>
+            )}
+
+            {/* Resultado */}
+            {callResult && (
+              <div className={`rounded-lg border px-3 py-2 text-xs ${
+                callResult.success ? "border-green-500/30 bg-green-500/10 text-green-300" : "border-red-500/30 bg-red-500/10 text-red-300"
+              }`}>
+                {callResult.success ? (
+                  <div className="space-y-1">
+                    <p className="font-medium">Chamada disparada com sucesso</p>
+                    {callResult.uuid && <p>UUID: <span className="font-mono">{callResult.uuid}</span></p>}
+                    {callResult.call_id && <p>Call ID: <span className="font-mono">{callResult.call_id}</span></p>}
+                    {callResult.simulated && <p className="text-blue-400">Modo simulacao (nao discou de verdade)</p>}
+                  </div>
+                ) : (
+                  <p>{callResult.error || callResult.detail || "Erro desconhecido"}</p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Historico de chamadas recentes */}
+      <Card className="flex-1 flex flex-col overflow-hidden">
+        <CardHeader className="pb-2 shrink-0 flex flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Volume2 className="h-4 w-4" /> Ultimas Chamadas
+          </CardTitle>
+          <Button size="sm" variant="ghost" onClick={fetchHistory} disabled={loadingHistory}>
+            {loadingHistory ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Atualizar"}
+          </Button>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-y-auto p-0">
+          <div className="divide-y divide-border/40">
+            {callHistory.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-10">Nenhuma chamada registrada</p>
+            ) : (
+              callHistory.map((call) => (
+                <div key={call.id} className="px-4 py-3 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm">{call.destination_number}</span>
+                      <Badge className={`text-[10px] border-0 ${statusBadge(call.status)}`}>
+                        {call.status}
+                      </Badge>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{formatDate(call.created_at)}</span>
+                  </div>
+                  {call.duration_seconds != null && (
+                    <p className="text-xs text-muted-foreground">
+                      Duracao: {Math.floor(call.duration_seconds / 60)}:{(call.duration_seconds % 60).toString().padStart(2, "0")}
+                      {call.sentiment && ` | Sentimento: ${call.sentiment}`}
+                      {call.interest_detected && " | Interesse detectado"}
+                    </p>
+                  )}
+                  {call.call_summary && (
+                    <p className="text-xs text-muted-foreground/80 line-clamp-2">{call.call_summary}</p>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function VoiceSimulate() {
   const { collaborator } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
   const companyId = resolveCompanyRequired(selectedCompanyId, collaborator?.company_id);
 
-  const [mode, setMode] = useState<"browser" | "voip">("browser");
+  const [mode, setMode] = useState<"browser" | "pipeline">("browser");
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [inCall, setInCall] = useState(false);
   const [callTimer, setCallTimer] = useState(0);
@@ -813,14 +1081,14 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
   return (
     <DashboardLayout>
       <div className="space-y-4">
-        <Tabs value={mode} onValueChange={(v) => setMode(v as "browser" | "voip")}>
+        <Tabs value={mode} onValueChange={(v) => setMode(v as "browser" | "pipeline")}>
           <div className="flex items-center justify-between gap-4">
             <TabsList>
               <TabsTrigger value="browser" className="gap-1.5">
                 <Mic className="h-3.5 w-3.5" /> Teste no Browser
               </TabsTrigger>
-              <TabsTrigger value="voip" className="gap-1.5">
-                <Phone className="h-3.5 w-3.5" /> VoIP / SIP
+              <TabsTrigger value="pipeline" className="gap-1.5">
+                <Phone className="h-3.5 w-3.5" /> Teste Pipeline
               </TabsTrigger>
             </TabsList>
 
@@ -972,170 +1240,13 @@ REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
             </div>
           </TabsContent>
 
-          {/* ── VOIP MODE ── */}
-          <TabsContent value="voip" className="mt-4">
-            <div className="flex gap-4" style={{ minHeight: 550 }}>
-              <div className="w-[400px] shrink-0 space-y-4">
-                {/* SIP Config */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Settings className="h-4 w-4" /> Configuração VoIP / SIP Trunk
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {loadingSip ? (
-                      <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label className="text-xs">Host / IP</Label>
-                            <Input
-                              value={sipHost}
-                              onChange={(e) => setSipHost(e.target.value)}
-                              placeholder="sip.allgar.com.br"
-                              disabled={sipConnected}
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-xs">Porta</Label>
-                            <Input
-                              value={sipPort}
-                              onChange={(e) => setSipPort(e.target.value)}
-                              placeholder="5060"
-                              disabled={sipConnected}
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label className="text-xs">Usuário</Label>
-                            <Input
-                              value={sipUser}
-                              onChange={(e) => setSipUser(e.target.value)}
-                              placeholder="usuario"
-                              disabled={sipConnected}
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-xs">Senha</Label>
-                            <Input
-                              type="password"
-                              value={sipPass}
-                              onChange={(e) => setSipPass(e.target.value)}
-                              placeholder="••••••"
-                              disabled={sipConnected}
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <Label className="text-xs">Transporte</Label>
-                          <Select value={sipTransport} onValueChange={setSipTransport} disabled={sipConnected}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="WSS">WSS (WebSocket Seguro)</SelectItem>
-                              <SelectItem value="WS">WS (WebSocket)</SelectItem>
-                              <SelectItem value="UDP">UDP</SelectItem>
-                              <SelectItem value="TCP">TCP</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline" onClick={saveSipConfig} disabled={savingSip || sipConnected}>
-                            {savingSip ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
-                            Salvar Config
-                          </Button>
-                          {!sipConnected ? (
-                            <Button size="sm" onClick={connectSip} disabled={!sipHost || !sipUser}>
-                              Conectar SIP
-                            </Button>
-                          ) : (
-                            <Button size="sm" variant="destructive" onClick={() => {
-                              uaRef.current?.stop();
-                              uaRef.current = null;
-                              setSipConnected(false);
-                              addSystem("🔌 Desconectado do SIP");
-                            }}>
-                              Desconectar
-                            </Button>
-                          )}
-                        </div>
-
-                        {!sipHost && (
-                          <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-200">
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                            <span>Aguardando dados do provedor VoIP (Allgar). Preencha quando receber as credenciais SIP.</span>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* SIP Status */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <span className={`h-2.5 w-2.5 rounded-full ${sipConnected ? "bg-green-500" : "bg-gray-500"}`} />
-                      Conexão SIP
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                      {sipConnected ? "Registrado e pronto para chamadas" : sipHost ? "Desconectado — clique 'Conectar SIP'" : "Configure as credenciais acima"}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                {/* Call */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Chamada VoIP</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Input
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="Número de telefone"
-                      disabled={inCall || !sipConnected}
-                    />
-                    {!inCall ? (
-                      <Button
-                        className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
-                        disabled={!sipConnected}
-                        onClick={startSipCall}
-                      >
-                        <Phone className="h-4 w-4" /> Iniciar Chamada
-                      </Button>
-                    ) : (
-                      <>
-                        <div className="text-center text-2xl font-mono font-bold">{formatTimer(callTimer)}</div>
-                        <Button
-                          className="w-full gap-2 bg-red-600 hover:bg-red-700 text-white"
-                          onClick={() => endSipCall("Chamada encerrada pelo operador")}
-                        >
-                          <PhoneOff className="h-4 w-4" /> Encerrar
-                        </Button>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Transcript */}
-              <Card className="flex-1 flex flex-col overflow-hidden">
-                <CardHeader className="pb-2 shrink-0">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Volume2 className="h-4 w-4" /> Transcrição em Tempo Real
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 p-0">
-                  {renderTranscript()}
-                </CardContent>
-              </Card>
-            </div>
+          {/* ── PIPELINE MODE — Teste real via FreeSWITCH + FoneTalk ── */}
+          <TabsContent value="pipeline" className="mt-4">
+            <PipelineTestTab
+              companyId={companyId}
+              pipelineOnline={pipelineOnline}
+              checkHealth={checkHealth}
+            />
           </TabsContent>
         </Tabs>
 

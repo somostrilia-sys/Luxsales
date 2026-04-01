@@ -297,17 +297,19 @@ function TabLigacoes({
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
 
-      const res = await fetch(`${EDGE_BASE}/orchestrator-proxy?path=/api/calls`, {
+      const res = await fetch(`${EDGE_BASE}/make-call`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
         },
         body: JSON.stringify({
-          phone: phoneToCall,
+          action: "dial",
+          to: phoneToCall,
           company_id: companyId,
           lead_name: lead.lead_name ?? null,
-          pool_id: lead.id,
+          lead_id: lead.id,
         }),
       });
 
