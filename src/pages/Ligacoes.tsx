@@ -981,6 +981,7 @@ function TabLigacoes({
                   {dialerState === "paused" ? "Retomar Ligações" : "▶ Iniciar Ligações"}
                 </Button>
               ) : (
+                <>
                 <Button
                   className="flex-1 h-10"
                   variant="outline"
@@ -996,6 +997,7 @@ function TabLigacoes({
                   <PhoneOff className="h-4 w-4 mr-2" />
                   Parar
                 </Button>
+                </>
               )}
             </div>
           )}
