@@ -188,6 +188,7 @@ function TabLigacoes({
   const [activeCallCount, setActiveCallCount] = useState(0);
   const [massCallLog, setMassCallLog] = useState<Array<{phone: string; name: string; status: string; duration: string; time: string}>>([]);
   const [dialingLeadIds, setDialingLeadIds] = useState<Set<string>>(new Set());
+  const [liveCallStatuses, setLiveCallStatuses] = useState<Record<string, { leadId: string; status: string; name: string; phone: string; startedAt: number }>>({});
   const [stats, setStats] = useState({ total: 0, answered: 0, noAnswer: 0, interested: 0, avgTalkSec: 0 });
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Refs for stable access inside timeouts
@@ -385,7 +386,8 @@ function TabLigacoes({
     const statusLabel = result === "interested" ? "✅ Interesse" : result === "no_interest" ? "📞 Sem interesse" : "❌ Não atendeu";
     setMassCallLog(prev => [{phone: lead.phone_normalized || lead.phone || "?", name: lead.lead_name || "—", status: statusLabel, duration: dur, time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 100));
     fetchStats();
-    // Remove from dialing indicators
+    // Remove from live panel and dialing indicators
+    setLiveCallStatuses(prev => { const n = { ...prev }; delete n[uuid]; return n; });
     setDialingLeadIds(prev => { const n = new Set(prev); n.delete(lead.id); return n; });
 
     // Check if queue finished
@@ -453,6 +455,7 @@ function TabLigacoes({
           if (row.status === "answered") {
             const entry = activeCallsRef.current.get(callUuid);
             if (entry) entry.status = "answered";
+            setLiveCallStatuses(prev => prev[callUuid] ? { ...prev, [callUuid]: { ...prev[callUuid], status: "answered" } } : prev);
           }
           if (row.status === "completed" || row.status === "no_answer") {
             const talkTime = row.talk_time_seconds || 0;
@@ -471,7 +474,7 @@ function TabLigacoes({
         channel,
       });
       setActiveCallCount(activeCallsRef.current.size);
-      setMassCallLog(prev => [{phone: phoneToCall, name: lead.lead_name || "—", status: "📲 Discando...", duration: "—", time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 100));
+      setLiveCallStatuses(prev => ({ ...prev, [callUuid]: { leadId: lead.id, status: "dialing", name: lead.lead_name || "—", phone: phoneToCall, startedAt: Date.now() } }));
 
       // Fallback: 45s max — if no status update, clean up
       setTimeout(() => {
@@ -485,6 +488,7 @@ function TabLigacoes({
       activeCallsRef.current.delete(tempUuid);
       setProcessedCount(p => p + 1);
       setActiveCallCount(activeCallsRef.current.size);
+      setLiveCallStatuses(prev => { const n = { ...prev }; Object.entries(n).forEach(([k, v]) => { if (v.leadId === lead.id) delete n[k]; }); return n; });
       setMassCallLog(prev => [{phone: phoneToCall || "?", name: lead.lead_name || "—", status: "⚠️ Erro", duration: "—", time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 100));
       if (dialerStateRef.current === "running") {
         setTimeout(() => fillCallSlotsRef.current(), 500);
@@ -678,6 +682,7 @@ function TabLigacoes({
     activeCallsRef.current.clear();
     setActiveCallCount(0);
     setDialingLeadIds(new Set());
+    setLiveCallStatuses({});
     setCurrentLead(null);
     setCallStatus("idle");
     toast.info("Discador parado");
@@ -1100,18 +1105,38 @@ function TabLigacoes({
               Próximos na Fila ({queue.length})
             </CardTitle>
           </CardHeader>
-          {/* Active calls indicator */}
-          {dialerState === "running" && activeCallCount > 0 && (
-            <div className="mx-4 mb-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-sm font-medium text-emerald-400">
-                  {activeCallCount} chamada{activeCallCount !== 1 ? "s" : ""} em andamento
+          {/* Live calls panel */}
+          {Object.keys(liveCallStatuses).length > 0 && (
+            <div className="mx-4 mb-3 space-y-2">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-xs font-medium text-emerald-400">
+                  {Object.keys(liveCallStatuses).length} chamada{Object.keys(liveCallStatuses).length !== 1 ? "s" : ""} ao vivo
                 </span>
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {processedCount}/{totalInQueue} processados
-                </span>
+                <span className="text-xs text-muted-foreground ml-auto">{processedCount}/{totalInQueue}</span>
               </div>
+              {Object.entries(liveCallStatuses).map(([uuid, call]) => (
+                <div key={uuid} className={`flex items-center justify-between p-2.5 rounded-lg border text-sm ${
+                  call.status === "answered" ? "bg-blue-500/10 border-blue-500/30" : "bg-yellow-500/10 border-yellow-500/30"
+                }`}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`text-base ${call.status === "answered" ? "" : "animate-pulse"}`}>
+                      {call.status === "answered" ? "🗣️" : "📞"}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-medium truncate text-sm">{call.name}</p>
+                      <p className="text-xs font-mono text-muted-foreground">{call.phone}</p>
+                    </div>
+                  </div>
+                  <Badge className={`text-[10px] px-2 py-0.5 border-0 shrink-0 ${
+                    call.status === "answered"
+                      ? "bg-blue-500/20 text-blue-400"
+                      : "bg-yellow-500/20 text-yellow-400 animate-pulse"
+                  }`}>
+                    {call.status === "answered" ? "🗣️ Em conversa" : "📞 Discando..."}
+                  </Badge>
+                </div>
+              ))}
             </div>
           )}
           <div className="divide-y divide-border/40 max-h-72 overflow-y-auto">
@@ -1149,8 +1174,12 @@ function TabLigacoes({
                       {attemptLabel(attempts)}
                     </Badge>
                     {dialingLeadIds.has(lead.id) ? (
-                      <Badge className="bg-emerald-500/20 text-emerald-400 border-0 text-[10px] px-2 py-0.5 animate-pulse">
-                        📞 Discando...
+                      <Badge className={`border-0 text-[10px] px-2 py-0.5 ${
+                        Object.values(liveCallStatuses).some(c => c.leadId === lead.id && c.status === "answered")
+                          ? "bg-blue-500/20 text-blue-400"
+                          : "bg-emerald-500/20 text-emerald-400 animate-pulse"
+                      }`}>
+                        {Object.values(liveCallStatuses).some(c => c.leadId === lead.id && c.status === "answered") ? "🗣️ Em conversa" : "📞 Discando..."}
                       </Badge>
                     ) : (
                       <Badge
