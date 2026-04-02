@@ -839,7 +839,7 @@ function TabLigacoes({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Batch selector + load button */}
+          {/* Batch selector + concurrency + load button */}
           <div className="flex items-end gap-3">
             <div className="flex-1">
               <p className="text-xs text-muted-foreground mb-1.5">Quantidade de leads</p>
@@ -855,6 +855,24 @@ function TabLigacoes({
                   <SelectItem value="100">100 leads</SelectItem>
                   <SelectItem value="500">500 leads</SelectItem>
                   <SelectItem value="1000">1.000 leads</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1.5">Linhas simultâneas</p>
+              <Select
+                value={String(concurrency)}
+                onValueChange={(v) => setConcurrency(parseInt(v))}
+                disabled={dialerState === "running"}
+              >
+                <SelectTrigger className="w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 linha</SelectItem>
+                  <SelectItem value="3">3 linhas</SelectItem>
+                  <SelectItem value="5">5 linhas</SelectItem>
+                  <SelectItem value="10">10 linhas</SelectItem>
                 </SelectContent>
               </Select>
             </div>
