@@ -187,6 +187,7 @@ function TabLigacoes({
   const [processedCount, setProcessedCount] = useState(0);
   const [activeCallCount, setActiveCallCount] = useState(0);
   const [massCallLog, setMassCallLog] = useState<Array<{phone: string; name: string; status: string; duration: string; time: string}>>([]);
+  const [dialingLeadIds, setDialingLeadIds] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState({ total: 0, answered: 0, noAnswer: 0, interested: 0, avgTalkSec: 0 });
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Refs for stable access inside timeouts
@@ -240,6 +241,8 @@ function TabLigacoes({
 
   useEffect(() => {
     fetchStats();
+    // Remove from dialing indicators
+    setDialingLeadIds(prev => { const n = new Set(prev); n.delete(lead.id); return n; });
     (async () => {
       const { data } = await supabase
         .from("system_configs")
@@ -407,6 +410,7 @@ function TabLigacoes({
     const tempUuid = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     activeCallsRef.current.set(tempUuid, { lead, status: "dialing", channel: null });
     setActiveCallCount(activeCallsRef.current.size);
+    setDialingLeadIds(prev => new Set([...prev, lead.id]));
 
     try {
       await supabase
@@ -673,6 +677,7 @@ function TabLigacoes({
     });
     activeCallsRef.current.clear();
     setActiveCallCount(0);
+    setDialingLeadIds(new Set());
     setCurrentLead(null);
     setCallStatus("idle");
     toast.info("Discador parado");
@@ -1095,12 +1100,26 @@ function TabLigacoes({
               Próximos na Fila ({queue.length})
             </CardTitle>
           </CardHeader>
+          {/* Active calls indicator */}
+          {dialerState === "running" && activeCallCount > 0 && (
+            <div className="mx-4 mb-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-sm font-medium text-emerald-400">
+                  {activeCallCount} chamada{activeCallCount !== 1 ? "s" : ""} em andamento
+                </span>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {processedCount}/{totalInQueue} processados
+                </span>
+              </div>
+            </div>
+          )}
           <div className="divide-y divide-border/40 max-h-72 overflow-y-auto">
             {queue.slice(0, 25).map((lead, idx) => {
               const sc = calcScore(lead);
               const attempts = lead.call_attempts || 0;
               return (
-                <div key={lead.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                <div key={lead.id} className={`flex items-center justify-between px-4 py-2.5 gap-3 transition-colors ${dialingLeadIds.has(lead.id) ? "bg-emerald-500/10 border-l-2 border-emerald-500" : ""}`}>
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="text-xs text-muted-foreground w-5 shrink-0 text-right">
                       {idx + 1}
@@ -1129,14 +1148,20 @@ function TabLigacoes({
                     >
                       {attemptLabel(attempts)}
                     </Badge>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] px-1.5 py-0 border-0 ${
-                        INTEREST_COLORS[lead.interest_status ?? "pending"] ?? "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {INTEREST_LABELS[lead.interest_status ?? "pending"] ?? lead.interest_status}
-                    </Badge>
+                    {dialingLeadIds.has(lead.id) ? (
+                      <Badge className="bg-emerald-500/20 text-emerald-400 border-0 text-[10px] px-2 py-0.5 animate-pulse">
+                        📞 Discando...
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] px-1.5 py-0 border-0 ${
+                          INTEREST_COLORS[lead.interest_status ?? "pending"] ?? "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {INTEREST_LABELS[lead.interest_status ?? "pending"] ?? lead.interest_status}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               );
