@@ -118,7 +118,7 @@ async function handleCallComplete(body: any) {
     voice_model,
     campaign_id,
     call_context,
-    call_uuid,
+    freeswitch_uuid,
     transcript,
     interest_detected,
   } = body;
@@ -193,7 +193,7 @@ async function handleCallComplete(body: any) {
       llm_provider: llm_provider || null,
       voice_model: voice_model || null,
       campaign_id: campaign_id || null,
-      call_uuid: call_uuid || null,
+      freeswitch_uuid: body.freeswitch_uuid || body.call_uuid || null,
       ended_at: new Date().toISOString(),
       transcript: transcript || null,
       interest_detected: interestFlag,
