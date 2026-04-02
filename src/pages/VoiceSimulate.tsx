@@ -210,20 +210,8 @@ export default function VoiceSimulate() {
         // Subscribe to real-time transcript updates
         subscribeToCall(data.uuid);
 
-        voipPollRef.current = setInterval(async () => {
-          try {
-            const pollRes = await fetch(`${EDGE_BASE}/orchestrator-proxy?path=${encodeURIComponent("/calls")}`, {
-              headers: proxyHeaders,
-              signal: AbortSignal.timeout(5000),
-            });
-            const calls = await pollRes.json();
-            const myCall = Array.isArray(calls) ? calls.find((c: any) => c.uuid === voipCallUuidRef.current) : null;
-
-            if (!myCall && voipCallUuidRef.current) {
-              endVoipCall("Chamada encerrada pelo servidor");
-            }
-          } catch {}
-        }, 3000);
+        // Status tracking via Supabase Realtime (no polling needed)
+        voipPollRef.current = null;
       } else {
         addSystem(`❌ Erro: ${data.error || "Falha ao originar"}`);
         endVoipCall("Falha ao originar chamada");
