@@ -199,12 +199,14 @@ function TabLigacoes({
   useEffect(() => { voipOnlineRef.current = voipOnline; }, [voipOnline]);
 
   const fetchStats = useCallback(async () => {
+    if (!companyId) return;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const { data } = await supabase
       .from("calls")
       .select("status,interest_detected")
       .eq("direction", "outbound")
+      .eq("company_id", companyId)
       .gte("started_at", today.toISOString());
     if (!data) return;
     setStats({
@@ -212,7 +214,7 @@ function TabLigacoes({
       answered: data.filter(d => d.status === "completed").length,
       interested: data.filter(d => d.interest_detected === true).length,
     });
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     fetchStats();
