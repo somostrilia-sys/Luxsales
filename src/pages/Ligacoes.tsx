@@ -202,12 +202,29 @@ function TabLigacoes({
     if (!companyId) return;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const { data } = await supabase
+    let q = supabase
       .from("calls")
-      .select("status,interest_detected,talk_time_seconds,hangup_cause")
+      .select("status,interest_detected,talk_time_seconds,hangup_cause,collaborator_id")
       .eq("direction", "outbound")
-      .eq("company_id", companyId)
       .gte("started_at", today.toISOString());
+    // CEO sees all company calls; consultants see only their own
+    q = q.eq("company_id", companyId);
+    if (!isCEO && collaboratorId) {
+      // Filter by collaborator — if column doesn't exist yet, catch error and show company-wide
+      q = q.eq("collaborator_id", collaboratorId);
+    }
+    let { data, error } = await q;
+    // Fallback: if collaborator_id column doesn't exist, query without it
+    if (error && !isCEO) {
+      const fallback = supabase
+        .from("calls")
+        .select("status,interest_detected,talk_time_seconds,hangup_cause")
+        .eq("direction", "outbound")
+        .eq("company_id", companyId)
+        .gte("started_at", today.toISOString());
+      const fb = await fallback;
+      data = fb.data;
+    }
     if (!data) return;
     const answered = data.filter(d => d.status === "completed" && (d.talk_time_seconds || 0) > 5);
     const noAnswer = data.filter(d => d.status !== "completed" || (d.talk_time_seconds || 0) <= 5);
@@ -219,7 +236,7 @@ function TabLigacoes({
       interested: data.filter(d => d.interest_detected === true).length,
       avgTalkSec: answered.length > 0 ? Math.round(totalTalk / answered.length) : 0,
     });
-  }, [companyId]);
+  }, [companyId, collaboratorId, isCEO]);
 
   useEffect(() => {
     fetchStats();
@@ -392,6 +409,7 @@ function TabLigacoes({
           _path: "/call",
           to: phoneToCall,
           company_id: companyId,
+          collaborator_id: collaboratorId,
           lead_name: lead.lead_name ?? null,
           pool_id: lead.id,
         }),
@@ -535,6 +553,7 @@ function TabLigacoes({
           _path: "/call",
           to: phoneToCall,
           company_id: companyId,
+          collaborator_id: collaboratorId,
           lead_name: lead.lead_name ?? null,
           pool_id: lead.id,
         }),
