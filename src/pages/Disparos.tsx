@@ -179,9 +179,10 @@ export default function Disparos() {
     if (!companyId) return;
     const { data } = await supabase
       .from("wa_templates")
-      .select("id, name, status, language")
+      .select("id, name, status, language, category")
       .eq("company_id", companyId)
       .eq("status", "approved")
+      .neq("category", "MARKETING")
       .order("name");
 
     if (data && data.length > 0) {
@@ -190,9 +191,10 @@ export default function Disparos() {
       // Fallback: whatsapp_meta_templates
       const { data: fallback } = await supabase
         .from("whatsapp_meta_templates")
-        .select("id, name, status, language")
+        .select("id, name, status, language, category")
         .eq("company_id", companyId)
         .eq("status", "APPROVED")
+        .neq("category", "MARKETING")
         .order("name");
       setTemplates((fallback || []) as WaTemplate[]);
     }
