@@ -617,6 +617,19 @@ function TabLigacoes({
     setTimeout(() => fillCallSlotsRef.current(), 100);
   };
 
+  const stopDialer = () => {
+    setDialerState("idle");
+    // Clean up all active realtime subscriptions
+    activeCallsRef.current.forEach((call, uuid) => {
+      if (call.channel) supabase.removeChannel(call.channel);
+    });
+    activeCallsRef.current.clear();
+    setActiveCallCount(0);
+    setCurrentLead(null);
+    setCallStatus("idle");
+    toast.info("Discador parado");
+  };
+
   const pauseDialer = () => {
     setDialerState("paused");
     if (!currentLead) return;
@@ -769,7 +782,12 @@ function TabLigacoes({
                   {activeCallCount} ativa{activeCallCount !== 1 ? "s" : ""} · {processedCount}/{queue.length + processedCount} processados
                 </span>
               </div>
-              <span className="text-xs text-muted-foreground">{concurrency} linha{concurrency > 1 ? "s" : ""}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{concurrency} linha{concurrency > 1 ? "s" : ""}</span>
+                <Button size="sm" variant="destructive" className="h-6 text-xs px-2" onClick={stopDialer}>
+                  Parar tudo
+                </Button>
+              </div>
             </div>
             {massCallLog.length > 0 && (
               <div className="max-h-[200px] overflow-y-auto space-y-1">
@@ -895,10 +913,16 @@ function TabLigacoes({
                   className="flex-1 h-10"
                   variant="outline"
                   onClick={pauseDialer}
-                  disabled={!!currentLead && callStatus !== "idle"}
                 >
                   <Pause className="h-4 w-4 mr-2" />
                   ⏸ Pausar
+                </Button>
+                <Button
+                  className="h-10 bg-red-600 hover:bg-red-700 text-white px-6"
+                  onClick={stopDialer}
+                >
+                  <PhoneOff className="h-4 w-4 mr-2" />
+                  Parar
                 </Button>
               )}
             </div>
