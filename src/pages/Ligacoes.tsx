@@ -241,8 +241,6 @@ function TabLigacoes({
 
   useEffect(() => {
     fetchStats();
-    // Remove from dialing indicators
-    setDialingLeadIds(prev => { const n = new Set(prev); n.delete(lead.id); return n; });
     (async () => {
       const { data } = await supabase
         .from("system_configs")
@@ -387,6 +385,8 @@ function TabLigacoes({
     const statusLabel = result === "interested" ? "✅ Interesse" : result === "no_interest" ? "📞 Sem interesse" : "❌ Não atendeu";
     setMassCallLog(prev => [{phone: lead.phone_normalized || lead.phone || "?", name: lead.lead_name || "—", status: statusLabel, duration: dur, time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 100));
     fetchStats();
+    // Remove from dialing indicators
+    setDialingLeadIds(prev => { const n = new Set(prev); n.delete(lead.id); return n; });
 
     // Check if queue finished
     if (activeCallsRef.current.size === 0 && queueIndexRef.current >= queueRef.current.length) {
