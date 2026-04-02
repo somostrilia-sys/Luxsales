@@ -187,7 +187,7 @@ function TabLigacoes({
   const [processedCount, setProcessedCount] = useState(0);
   const [activeCallCount, setActiveCallCount] = useState(0);
   const [massCallLog, setMassCallLog] = useState<Array<{phone: string; name: string; status: string; duration: string; time: string}>>([]);
-  const [stats, setStats] = useState({ total: 0, answered: 0, interested: 0 });
+  const [stats, setStats] = useState({ total: 0, answered: 0, noAnswer: 0, interested: 0, avgTalkSec: 0 });
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Refs for stable access inside timeouts
   const queueRef = useRef<PoolLead[]>([]);
@@ -204,15 +204,20 @@ function TabLigacoes({
     today.setHours(0, 0, 0, 0);
     const { data } = await supabase
       .from("calls")
-      .select("status,interest_detected")
+      .select("status,interest_detected,talk_time_seconds,hangup_cause")
       .eq("direction", "outbound")
       .eq("company_id", companyId)
       .gte("started_at", today.toISOString());
     if (!data) return;
+    const answered = data.filter(d => d.status === "completed" && (d.talk_time_seconds || 0) > 5);
+    const noAnswer = data.filter(d => d.status !== "completed" || (d.talk_time_seconds || 0) <= 5);
+    const totalTalk = answered.reduce((sum, d) => sum + (d.talk_time_seconds || 0), 0);
     setStats({
       total: data.length,
-      answered: data.filter(d => d.status === "completed").length,
+      answered: answered.length,
+      noAnswer: noAnswer.length,
       interested: data.filter(d => d.interest_detected === true).length,
+      avgTalkSec: answered.length > 0 ? Math.round(totalTalk / answered.length) : 0,
     });
   }, [companyId]);
 
@@ -832,20 +837,30 @@ function TabLigacoes({
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-5 gap-2">
         {[
-          { label: "Ligações hoje", value: stats.total, color: "text-primary" },
-          { label: "Atendidas", value: stats.answered, color: "text-blue-400" },
-          { label: "Com interesse", value: stats.interested, color: "text-emerald-400" },
+          { label: "Total hoje", value: String(stats.total), color: "text-primary" },
+          { label: "Atendidas", value: String(stats.answered), color: "text-emerald-400" },
+          { label: "Não atendeu", value: String(stats.noAnswer), color: "text-red-400" },
+          { label: "Com interesse", value: String(stats.interested), color: "text-yellow-400" },
+          { label: "Tempo médio", value: stats.avgTalkSec > 0 ? `${Math.floor(stats.avgTalkSec / 60)}:${String(stats.avgTalkSec % 60).padStart(2, "0")}` : "—", color: "text-blue-400" },
         ].map(({ label, value, color }) => (
           <Card key={label} className="border-border/60">
-            <CardContent className="py-4 text-center">
-              <p className={`text-2xl font-bold ${color}`}>{value}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+            <CardContent className="py-3 text-center">
+              <p className={`text-xl font-bold ${color}`}>{value}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
             </CardContent>
           </Card>
         ))}
       </div>
+      {stats.total > 0 && (
+        <div className="flex items-center gap-4 px-1">
+          <div className="flex-1 h-2 bg-muted/30 rounded-full overflow-hidden">
+            <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${Math.round((stats.answered / stats.total) * 100)}%` }} />
+          </div>
+          <span className="text-xs font-medium text-muted-foreground">{Math.round((stats.answered / stats.total) * 100)}% atendimento</span>
+        </div>
+      )}
 
       {/* Queue loader + controls */}
       <Card className="border-border/60">
