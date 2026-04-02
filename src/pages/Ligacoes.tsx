@@ -730,33 +730,19 @@ function TabLigacoes({
                 Servidor VoIP:{" "}
                 {voipOnline === null ? "verificando..." : voipOnline ? "Online" : "Offline"}
               </span>
-              {voipOnline === false && (
-                <Badge variant="outline" className="text-[10px] ml-1 border-yellow-500/30 text-yellow-400">
-                  modo simulação
-                </Badge>
-              )}
+
             </div>
-            <span className="text-xs text-muted-foreground">192.168.0.206:8500</span>
+            
           </div>
-          {voipConfig && voipConfig.ramal ? (
-            <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-2 text-sm">
               <Phone className="h-4 w-4 text-primary/70" />
               <span className="text-muted-foreground">
-                Canal VoIP:{" "}
-                <span className="text-foreground font-mono">{voipConfig.ramal}</span>
-                {" — "}
-                <span className={voipConfig.ativo && voipOnline ? "text-emerald-400" : "text-muted-foreground"}>
-                  {voipConfig.ativo && voipOnline ? "Online" : "Offline"}
+                Pipeline IA:{" "}
+                <span className={voipOnline ? "text-emerald-400 font-medium" : "text-red-400"}>
+                  {voipOnline ? "Pronto para ligar" : "Indisponível"}
                 </span>
               </span>
             </div>
-          ) : (
-            <div className="flex items-center gap-2 text-sm">
-              <Phone className="h-4 w-4 text-muted-foreground/50" />
-              <span className="text-muted-foreground/60">Canal VoIP: Não configurado</span>
-              <span className="text-xs text-yellow-400/80">— Peça ao gestor para configurar seu canal VoIP</span>
-            </div>
-          )}
         </CardContent>
       </Card>
 
