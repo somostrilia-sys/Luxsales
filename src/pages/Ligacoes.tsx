@@ -385,6 +385,13 @@ function TabLigacoes({
     setMassCallLog(prev => [{phone: lead.phone_normalized || lead.phone || "?", name: lead.lead_name || "—", status: statusLabel, duration: dur, time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 100));
     fetchStats();
 
+    // Check if queue finished
+    if (activeCallsRef.current.size === 0 && queueIndexRef.current >= queueRef.current.length) {
+      toast.success("Fila finalizada! Todos os leads foram processados.");
+      setDialerState("idle");
+      return;
+    }
+
     // Fill next slot
     if (dialerStateRef.current === "running") {
       setTimeout(() => fillCallSlotsRef.current(), 500);
@@ -395,6 +402,11 @@ function TabLigacoes({
   const originateCall = useCallback(async (lead: any) => {
     const phoneToCall = lead.phone_normalized ||
       (lead.phone?.startsWith("+") ? lead.phone : `+55${(lead.phone || "").replace(/\D/g, "")}`);
+
+    // Register as active BEFORE async call to prevent race condition
+    const tempUuid = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    activeCallsRef.current.set(tempUuid, { lead, status: "dialing", channel: null });
+    setActiveCallCount(activeCallsRef.current.size);
 
     try {
       await supabase
@@ -422,6 +434,8 @@ function TabLigacoes({
 
       const callUuid = data.uuid;
 
+      // Replace temp UUID with real one
+      activeCallsRef.current.delete(tempUuid);
       // Subscribe to realtime status
       const channel = supabase
         .channel(`mass-${callUuid}`)
@@ -464,6 +478,7 @@ function TabLigacoes({
 
     } catch (e: any) {
       // Failed to originate — skip and fill next
+      activeCallsRef.current.delete(tempUuid);
       setProcessedCount(p => p + 1);
       setActiveCallCount(activeCallsRef.current.size);
       setMassCallLog(prev => [{phone: phoneToCall || "?", name: lead.lead_name || "—", status: "⚠️ Erro", duration: "—", time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 100));
@@ -628,11 +643,7 @@ function TabLigacoes({
       originateCallRef.current(lead);
     }
     
-    // Check if queue exhausted and no active calls
-    if (active.size === 0 && queueIndexRef.current >= q.length) {
-      toast.info("Fila finalizada! Todos os leads foram processados.");
-      setDialerState("idle");
-    }
+    // Don't check completion here — handleMassCallResult does it after each call ends
   }, [concurrency]);
 
   // Keep refs in sync
