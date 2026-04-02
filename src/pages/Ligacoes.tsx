@@ -186,7 +186,7 @@ function TabLigacoes({
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
   const [processedCount, setProcessedCount] = useState(0);
   const [activeCallCount, setActiveCallCount] = useState(0);
-  const [massCallLog, setMassCallLog] = useState<Array<{phone: string; status: string; time: string}>>([]);
+  const [massCallLog, setMassCallLog] = useState<Array<{phone: string; name: string; status: string; duration: string; time: string}>>([]);
   const [stats, setStats] = useState({ total: 0, answered: 0, interested: 0 });
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Refs for stable access inside timeouts
@@ -349,7 +349,18 @@ function TabLigacoes({
     cleanupCallRealtime(uuid);
     setProcessedCount(p => p + 1);
     setActiveCallCount(activeCallsRef.current.size);
-    setMassCallLog(prev => [{phone: lead.phone_normalized || lead.phone || "?", status: result === "interested" ? "✅ Interesse" : result === "no_interest" ? "📞 Sem interesse" : "❌ Sem resposta", time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 50));
+    // Fetch call duration from Supabase
+    let dur = "0:00";
+    try {
+      const { data: callData } = await supabase.from("calls").select("talk_time_seconds,status").eq("freeswitch_uuid", uuid).single();
+      if (callData?.talk_time_seconds) {
+        const m = Math.floor(callData.talk_time_seconds / 60);
+        const s = callData.talk_time_seconds % 60;
+        dur = `${m}:${String(s).padStart(2, "0")}`;
+      }
+    } catch {}
+    const statusLabel = result === "interested" ? "✅ Interesse" : result === "no_interest" ? "📞 Sem interesse" : "❌ Não atendeu";
+    setMassCallLog(prev => [{phone: lead.phone_normalized || lead.phone || "?", name: lead.lead_name || "—", status: statusLabel, duration: dur, time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 100));
     fetchStats();
 
     // Fill next slot
@@ -419,7 +430,7 @@ function TabLigacoes({
         channel,
       });
       setActiveCallCount(activeCallsRef.current.size);
-      setMassCallLog(prev => [{phone: phoneToCall, status: "discando", time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 50));
+      setMassCallLog(prev => [{phone: phoneToCall, name: lead.lead_name || "—", status: "📲 Discando...", duration: "—", time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 100));
 
       // Fallback: 45s max — if no status update, clean up
       setTimeout(() => {
@@ -432,7 +443,7 @@ function TabLigacoes({
       // Failed to originate — skip and fill next
       setProcessedCount(p => p + 1);
       setActiveCallCount(activeCallsRef.current.size);
-      setMassCallLog(prev => [{phone: phoneToCall || "?", status: "⚠️ Erro", time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 50));
+      setMassCallLog(prev => [{phone: phoneToCall || "?", name: lead.lead_name || "—", status: "⚠️ Erro", duration: "—", time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 100));
       if (dialerStateRef.current === "running") {
         setTimeout(() => fillCallSlotsRef.current(), 500);
       }
@@ -792,12 +803,17 @@ function TabLigacoes({
               </div>
             </div>
             {massCallLog.length > 0 && (
-              <div className="max-h-[200px] overflow-y-auto space-y-1">
+              <div className="grid grid-cols-5 gap-2 text-[10px] uppercase tracking-wider text-muted-foreground px-2 pb-1 border-b border-border/40">
+                <span>Telefone</span><span>Nome</span><span>Status</span><span className="text-center">Duração</span><span className="text-right">Hora</span>
+              </div>
+              <div className="max-h-[300px] overflow-y-auto space-y-1">
                 {massCallLog.map((log, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs px-2 py-1 rounded bg-muted/30">
-                    <span className="font-mono text-muted-foreground">{log.phone}</span>
-                    <span>{log.status}</span>
-                    <span className="text-muted-foreground">{log.time}</span>
+                  <div key={i} className="grid grid-cols-5 gap-2 text-xs px-2 py-1.5 rounded bg-muted/30 items-center">
+                    <span className="font-mono text-muted-foreground truncate">{log.phone}</span>
+                    <span className="truncate">{log.name}</span>
+                    <span className="font-medium">{log.status}</span>
+                    <span className="text-center font-mono">{log.duration}</span>
+                    <span className="text-right text-muted-foreground">{log.time}</span>
                   </div>
                 ))}
               </div>
