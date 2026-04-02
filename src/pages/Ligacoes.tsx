@@ -167,6 +167,8 @@ function TabLigacoes({
   const [voipConfig, setVoipConfig] = useState<{ ramal: string; servidor: string; porta: string; ativo: boolean } | null>(null);
   const [invalidPhoneCount, setInvalidPhoneCount] = useState(0);
   const [dialerState, setDialerState] = useState<DialerState>("idle");
+  const activeCallUuidRef = useRef<string | null>(null);
+  const realtimeChannelRef = useRef<any>(null);
   const [batchSize, setBatchSize] = useState<string>("100");
   const [queue, setQueue] = useState<PoolLead[]>([]);
   const [loadingQueue, setLoadingQueue] = useState(false);
@@ -274,11 +276,67 @@ function TabLigacoes({
     }
   }, [collaboratorId, batchSize]);
 
+  // Cleanup realtime subscription
+  const cleanupRealtime = useCallback(() => {
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+      realtimeChannelRef.current = null;
+    }
+    activeCallUuidRef.current = null;
+  }, []);
+
+  // Subscribe to call status changes via Supabase Realtime
+  const subscribeCallStatus = useCallback((callUuid: string) => {
+    cleanupRealtime();
+    activeCallUuidRef.current = callUuid;
+
+    const channel = supabase
+      .channel(`dialer-${callUuid}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "calls",
+          filter: `freeswitch_uuid=eq.${callUuid}`,
+        },
+        (payload: any) => {
+          const row = payload.new;
+          if (row.status === "answered" && callStatusRef.current === "dialing") {
+            setCallStatus("in_call");
+            if (!callStartTimeRef.current) setCallStartTime(new Date());
+          }
+          if (row.status === "completed" || row.status === "no_answer") {
+            setCallStatus("ended");
+            // Auto-mark as no_answer if no one picked up (talk_time_seconds === 0)
+            if (row.status === "no_answer" || (row.talk_time_seconds || 0) === 0) {
+              // Small delay so UI shows "ended" before advancing
+              setTimeout(() => {
+                if (dialerStateRef.current === "running") {
+                  markCallResult("no_answer");
+                }
+              }, 2000);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    realtimeChannelRef.current = channel;
+  }, [cleanupRealtime]);
+
+  // Track callStatus in ref for realtime callback
+  const callStatusRef = useRef<CallStatus>("idle");
+  const callStartTimeRef = useRef<Date | null>(null);
+  useEffect(() => { callStatusRef.current = callStatus; }, [callStatus]);
+  useEffect(() => { callStartTimeRef.current = callStartTime; }, [callStartTime]);
+
   const startNextCall = useCallback(async () => {
     const q = queueRef.current;
     if (q.length === 0) {
       toast.info("Fila finalizada! Todos os leads foram processados.");
       setDialerState("idle");
+      cleanupRealtime();
       return;
     }
 
@@ -315,10 +373,26 @@ function TabLigacoes({
         throw new Error((err as any).error ?? `HTTP ${res.status}`);
       }
 
+      const data = await res.json();
       setCallStartTime(new Date());
-      setTimeout(() => setCallStatus("in_call"), 4000);
+
+      if (data.uuid) {
+        // Subscribe to real-time call status
+        subscribeCallStatus(data.uuid);
+        // Fallback: if no CHANNEL_ANSWER in 30s, mark as no_answer
+        setTimeout(() => {
+          if (callStatusRef.current === "dialing") {
+            setCallStatus("ended");
+            if (dialerStateRef.current === "running") {
+              setTimeout(() => markCallResult("no_answer"), 1500);
+            }
+          }
+        }, 30000);
+      } else {
+        // No UUID returned — fallback to timed simulation
+        setTimeout(() => setCallStatus("in_call"), 4000);
+      }
     } catch (e: any) {
-      // VoIP offline: allow simulation
       if (voipOnlineRef.current === false) {
         toast.info("VoIP offline — modo simulação");
         setCallStartTime(new Date());
@@ -327,9 +401,18 @@ function TabLigacoes({
         toast.error("Erro VoIP: " + e.message);
         setCallStatus("idle");
         setCurrentLead(null);
+        // In running mode, skip to next after error
+        if (dialerStateRef.current === "running") {
+          setTimeout(() => startNextCall(), 3000);
+        }
       }
     }
-  }, [companyId]);
+  }, [companyId, subscribeCallStatus, cleanupRealtime]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { cleanupRealtime(); };
+  }, [cleanupRealtime]);
 
   const startDialer = () => {
     if (queueRef.current.length === 0) {
