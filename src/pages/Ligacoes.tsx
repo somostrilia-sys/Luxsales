@@ -496,6 +496,7 @@ function TabLigacoes({
       activeCallsRef.current.delete(tempUuid);
       setProcessedCount(p => p + 1);
       setActiveCallCount(activeCallsRef.current.size);
+      setDialingLeadIds(prev => { const n = new Set(prev); n.delete(lead.id); return n; });
       setLiveCallStatuses(prev => { const n = { ...prev }; Object.entries(n).forEach(([k, v]) => { if (v.leadId === lead.id) delete n[k]; }); return n; });
       setMassCallLog(prev => [{phone: phoneToCall || "?", name: lead.lead_name || "—", status: "⚠️ Erro", duration: "—", time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 100));
       if (dialerStateRef.current === "running") {
