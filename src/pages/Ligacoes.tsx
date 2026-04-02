@@ -200,6 +200,14 @@ function TabLigacoes({
   useEffect(() => { dialerStateRef.current = dialerState; }, [dialerState]);
   useEffect(() => { voipOnlineRef.current = voipOnline; }, [voipOnline]);
 
+  // Tick every second to update live call timers
+  const [_tick, setTick] = useState(0);
+  useEffect(() => {
+    if (Object.keys(liveCallStatuses).length === 0) return;
+    const t = setInterval(() => setTick(v => v + 1), 1000);
+    return () => clearInterval(t);
+  }, [Object.keys(liveCallStatuses).length > 0]);
+
   const fetchStats = useCallback(async () => {
     if (!companyId) return;
     const today = new Date();
@@ -827,43 +835,95 @@ function TabLigacoes({
         </CardContent>
       </Card>
 
-      {/* Mass Dialer Status */}
-      {dialerState === "running" && (
-        <Card>
-          <CardContent className="py-3 space-y-2">
+      {/* Mass Dialer — Live Panel */}
+      {(dialerState !== "idle" || Object.keys(liveCallStatuses).length > 0 || massCallLog.length > 0) && (
+        <Card className="border-border/60">
+          <CardContent className="py-3 space-y-3">
+            {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 animate-pulse">
-                  ⚡ Discando em massa
-                </Badge>
-                <span className="text-sm font-mono">
-                  {activeCallCount} ativa{activeCallCount !== 1 ? "s" : ""} · {processedCount}/{queue.length + processedCount} processados
+                {dialerState === "running" && (
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 animate-pulse">
+                    ⚡ Discador ativo
+                  </Badge>
+                )}
+                {dialerState === "paused" && (
+                  <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+                    ⏸ Pausado
+                  </Badge>
+                )}
+                <span className="text-sm text-muted-foreground">
+                  {processedCount}/{totalInQueue} processados · {concurrency} linha{concurrency > 1 ? "s" : ""}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{concurrency} linha{concurrency > 1 ? "s" : ""}</span>
-                <Button size="sm" variant="destructive" className="h-6 text-xs px-2" onClick={stopDialer}>
-                  Parar tudo
+              {dialerState === "running" && (
+                <Button size="sm" variant="destructive" className="h-7 text-xs px-3" onClick={stopDialer}>
+                  ⏹ Parar
                 </Button>
-              </div>
+              )}
             </div>
+
+            {/* LIVE CALLS — real-time cards */}
+            {Object.keys(liveCallStatuses).length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                  Chamadas ao vivo ({Object.keys(liveCallStatuses).length})
+                </p>
+                {Object.entries(liveCallStatuses).map(([uuid, call]) => {
+                  const elapsed = Math.floor((Date.now() - call.startedAt) / 1000);
+                  const mm = Math.floor(elapsed / 60);
+                  const ss = elapsed % 60;
+                  const timerStr = `${mm}:${String(ss).padStart(2, "0")}`;
+                  const isAnswered = call.status === "answered";
+                  return (
+                    <div key={uuid} className={`flex items-center justify-between p-3 rounded-lg border ${
+                      isAnswered ? "bg-blue-500/10 border-blue-500/30" : "bg-yellow-500/10 border-yellow-500/30"
+                    }`}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className={`text-xl ${isAnswered ? "" : "animate-pulse"}`}>
+                          {isAnswered ? "🗣️" : "📞"}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{call.name}</p>
+                          <p className="text-xs font-mono text-muted-foreground">{call.phone}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="font-mono text-sm font-bold tabular-nums">{timerStr}</span>
+                        <Badge className={`text-[10px] px-2 py-0.5 border-0 ${
+                          isAnswered ? "bg-blue-500/20 text-blue-400" : "bg-yellow-500/20 text-yellow-400"
+                        }`}>
+                          {isAnswered ? "Em conversa" : "Chamando..."}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* RESULTS LOG — completed calls */}
             {massCallLog.length > 0 && (
-              <>
-              <div className="grid grid-cols-5 gap-2 text-[10px] uppercase tracking-wider text-muted-foreground px-2 pb-1 border-b border-border/40">
-                <span>Telefone</span><span>Nome</span><span>Status</span><span className="text-center">Duração</span><span className="text-right">Hora</span>
+              <div className="space-y-1.5">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Resultados ({massCallLog.length})
+                </p>
+                <div className="grid grid-cols-5 gap-2 text-[10px] uppercase tracking-wider text-muted-foreground/60 px-2 pb-1">
+                  <span>Telefone</span><span>Nome</span><span>Resultado</span><span className="text-center">Duração</span><span className="text-right">Hora</span>
+                </div>
+                <div className="max-h-[250px] overflow-y-auto space-y-0.5">
+                  {massCallLog.map((log, i) => (
+                    <div key={i} className="grid grid-cols-5 gap-2 text-xs px-2 py-1.5 rounded bg-muted/20 items-center">
+                      <span className="font-mono text-muted-foreground truncate text-[11px]">{log.phone}</span>
+                      <span className="truncate">{log.name}</span>
+                      <span className="font-medium">{log.status}</span>
+                      <span className="text-center font-mono">{log.duration}</span>
+                      <span className="text-right text-muted-foreground">{log.time}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="max-h-[300px] overflow-y-auto space-y-1">
-                {massCallLog.map((log, i) => (
-                  <div key={i} className="grid grid-cols-5 gap-2 text-xs px-2 py-1.5 rounded bg-muted/30 items-center">
-                    <span className="font-mono text-muted-foreground truncate">{log.phone}</span>
-                    <span className="truncate">{log.name}</span>
-                    <span className="font-medium">{log.status}</span>
-                    <span className="text-center font-mono">{log.duration}</span>
-                    <span className="text-right text-muted-foreground">{log.time}</span>
-                  </div>
-                ))}
-              </div>
-              </>
             )}
           </CardContent>
         </Card>
