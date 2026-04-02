@@ -1207,9 +1207,9 @@ function TabHistorico({ companyId }: { companyId: string | null | undefined }) {
       let query = supabase
         .from("calls")
         .select(
-          "id, lead_phone, lead_name, duration_seconds, status, created_at, transcript, ai_summary, ai_analysis, call_summary"
+          "id, destination_number, lead_name, duration_seconds, status, started_at, transcript, ai_summary, ai_analysis, sentiment, interest_detected, talk_time_seconds, hangup_cause"
         )
-        .order("created_at", { ascending: false })
+        .order("started_at", { ascending: false })
         .limit(100);
       if (companyId) query = query.eq("company_id", companyId);
       const { data, error } = await query;
@@ -1219,14 +1219,14 @@ function TabHistorico({ companyId }: { companyId: string | null | undefined }) {
       setCalls(
         (data ?? []).map((d: any) => ({
           id: d.id,
-          lead_phone: d.lead_phone ?? d.destination_number ?? null,
+          lead_phone: d.destination_number ?? null,
           lead_name: d.lead_name ?? null,
-          duration_sec: d.duration_seconds ?? d.duration_sec ?? null,
+          duration_sec: d.talk_time_seconds ?? d.duration_seconds ?? null,
           status: d.status ?? null,
-          started_at: d.created_at ?? null,
-          ai_qualification: d.ai_qualification ?? d.ai_analysis?.interest_level ?? null,
+          started_at: d.started_at ?? null,
+          ai_qualification: d.interest_detected ? "Interesse" : d.sentiment ?? null,
           transcript: d.transcript ?? null,
-          ai_summary: d.ai_summary ?? d.ai_analysis?.reason ?? d.call_summary ?? null,
+          ai_summary: d.ai_summary ?? null,
         }))
       );
     } catch (e: any) {
