@@ -198,19 +198,17 @@ function TabLigacoes({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const { data } = await supabase
-      .from("consultant_lead_pool")
-      .select("interest_status")
-      .eq("collaborator_id", collaboratorId)
-      .gte("last_call_at", today.toISOString());
+      .from("calls")
+      .select("status,interest_detected")
+      .eq("direction", "outbound")
+      .gte("started_at", today.toISOString());
     if (!data) return;
     setStats({
       total: data.length,
-      answered: data.filter(d =>
-        d.interest_status && ["interested", "not_interested_1", "not_interested_2"].includes(d.interest_status)
-      ).length,
-      interested: data.filter(d => d.interest_status === "interested").length,
+      answered: data.filter(d => d.status === "completed").length,
+      interested: data.filter(d => d.interest_detected === true).length,
     });
-  }, [collaboratorId]);
+  }, []);
 
   useEffect(() => {
     fetchStats();
