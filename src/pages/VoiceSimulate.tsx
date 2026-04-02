@@ -11,15 +11,16 @@ import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { toast } from "sonner";
 import {
   Loader2, Phone, PhoneOff, Volume2,
-  AlertTriangle, CheckCircle, XCircle,
+  AlertTriangle, CheckCircle, XCircle, ChevronDown, ChevronUp,
+  MessageSquare, ThumbsUp, ThumbsDown, Minus,
 } from "lucide-react";
 
 import { resolveCompanyRequired } from "@/lib/companyFilter";
 
-interface TranscriptEntry {
-  type: "lead" | "ai" | "system";
+interface TranscriptTurn {
+  role: "user" | "assistant";
   text: string;
-  ts: string;
+  timestamp: number;
 }
 
 interface RecentCall {
@@ -31,9 +32,14 @@ interface RecentCall {
   talk_time_seconds: number | null;
   created_at: string;
   hangup_cause: string | null;
+  transcript: string | null;
+  ai_summary: string | null;
+  sentiment: string | null;
+  interest_detected: boolean;
+  lead_name: string | null;
 }
 
-// Headers padrão para orchestrator-proxy (sempre anon key)
+// Headers padrão para orchestrator-proxy
 const proxyHeaders = {
   "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
   "apikey": SUPABASE_ANON_KEY,
@@ -44,7 +50,6 @@ export default function VoiceSimulate() {
   const { selectedCompanyId } = useCompanyFilter();
   const companyId = resolveCompanyRequired(selectedCompanyId, collaborator?.company_id);
 
-  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [inCall, setInCall] = useState(false);
   const [callTimer, setCallTimer] = useState(0);
   const [phoneNumber, setPhoneNumber] = useState("5531997441277");
@@ -52,18 +57,24 @@ export default function VoiceSimulate() {
   // Pipeline
   const [pipelineOnline, setPipelineOnline] = useState<boolean | null>(null);
 
+  // Live transcript (from Supabase Realtime)
+  const [liveTurns, setLiveTurns] = useState<TranscriptTurn[]>([]);
+  const [systemMessages, setSystemMessages] = useState<string[]>([]);
+
   // Recent calls
   const [recentCalls, setRecentCalls] = useState<RecentCall[]>([]);
+  const [expandedCall, setExpandedCall] = useState<string | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const realtimeRef = useRef<any>(null);
 
   // ── Recent calls fetch ──
   useEffect(() => {
     const fetchCalls = async () => {
       const { data } = await supabase
         .from("calls")
-        .select("id, freeswitch_uuid, destination_number, status, duration_seconds, talk_time_seconds, created_at, hangup_cause")
+        .select("id, freeswitch_uuid, destination_number, status, duration_seconds, talk_time_seconds, created_at, hangup_cause, transcript, ai_summary, sentiment, interest_detected, lead_name")
         .order("created_at", { ascending: false })
         .limit(20);
       if (data) setRecentCalls(data as RecentCall[]);
@@ -95,11 +106,52 @@ export default function VoiceSimulate() {
   // ── Auto-scroll transcript ──
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [transcript]);
+  }, [liveTurns, systemMessages]);
 
   const addSystem = useCallback((text: string) => {
-    setTranscript((prev) => [...prev, { type: "system", text, ts: new Date().toLocaleTimeString("pt-BR") }]);
+    setSystemMessages((prev) => [...prev, `${new Date().toLocaleTimeString("pt-BR")} — ${text}`]);
   }, []);
+
+  // ── Supabase Realtime subscription for live transcript ──
+  const subscribeToCall = useCallback((callUuid: string) => {
+    // Unsubscribe previous
+    if (realtimeRef.current) {
+      supabase.removeChannel(realtimeRef.current);
+    }
+
+    const channel = supabase
+      .channel(`call-${callUuid}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "calls",
+          filter: `freeswitch_uuid=eq.${callUuid}`,
+        },
+        (payload: any) => {
+          const row = payload.new;
+          // Parse transcript JSON
+          if (row.transcript) {
+            try {
+              const turns = typeof row.transcript === "string"
+                ? JSON.parse(row.transcript)
+                : row.transcript;
+              if (Array.isArray(turns)) {
+                setLiveTurns(turns as TranscriptTurn[]);
+              }
+            } catch {}
+          }
+          // Check if call ended
+          if (row.status === "completed" || row.status === "no_answer") {
+            addSystem(`📵 Chamada ${row.status === "completed" ? "concluída" : "sem resposta"}`);
+          }
+        }
+      )
+      .subscribe();
+
+    realtimeRef.current = channel;
+  }, [addSystem]);
 
   // ── VoIP call logic ──
   const voipCallUuidRef = useRef<string | null>(null);
@@ -120,6 +172,7 @@ export default function VoiceSimulate() {
     voipCallUuidRef.current = null;
     if (voipPollRef.current) { clearInterval(voipPollRef.current); voipPollRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (realtimeRef.current) { supabase.removeChannel(realtimeRef.current); realtimeRef.current = null; }
     setInCall(false);
     addSystem(`📵 ${reason || "Chamada encerrada"}`);
   }, [addSystem]);
@@ -132,7 +185,8 @@ export default function VoiceSimulate() {
 
     setInCall(true);
     setCallTimer(0);
-    setTranscript([]);
+    setLiveTurns([]);
+    setSystemMessages([]);
     timerRef.current = setInterval(() => setCallTimer((p) => p + 1), 1000);
     addSystem("📞 Originando chamada via pipeline VoIP...");
 
@@ -152,6 +206,9 @@ export default function VoiceSimulate() {
       if (data.success && data.uuid) {
         voipCallUuidRef.current = data.uuid;
         addSystem(`✅ Chamada originada: ${data.destination}`);
+
+        // Subscribe to real-time transcript updates
+        subscribeToCall(data.uuid);
 
         voipPollRef.current = setInterval(async () => {
           try {
@@ -175,12 +232,13 @@ export default function VoiceSimulate() {
       addSystem(`❌ Pipeline indisponível: ${err.message}`);
       endVoipCall("Pipeline offline");
     }
-  }, [phoneNumber, companyId, addSystem, endVoipCall]);
+  }, [phoneNumber, companyId, addSystem, endVoipCall, subscribeToCall]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (realtimeRef.current) supabase.removeChannel(realtimeRef.current);
     };
   }, []);
 
@@ -205,7 +263,7 @@ export default function VoiceSimulate() {
   const renderStatusBadge = (call: RecentCall) => {
     const { status, hangup_cause, talk_time_seconds, duration_seconds } = call;
     const dur = talk_time_seconds || duration_seconds;
-    if (status === "ringing") {
+    if (status === "ringing" || status === "calling") {
       return <Badge className="gap-1 bg-yellow-500/15 text-yellow-400 border-yellow-500/30">Chamando...</Badge>;
     }
     if (status === "answered") {
@@ -218,18 +276,27 @@ export default function VoiceSimulate() {
         </Badge>
       );
     }
-    if (status === "calling") {
-      return <Badge className="gap-1 bg-yellow-500/15 text-yellow-400 border-yellow-500/30">Chamando...</Badge>;
-    }
     if (status === "no_answer") {
       return <Badge variant="outline" className="gap-1 text-muted-foreground">Sem resposta</Badge>;
     }
     const cause = hangup_cause || status || "Encerrada";
-    return (
-      <Badge variant="outline" className="gap-1 text-muted-foreground">
-        {cause}
-      </Badge>
-    );
+    return <Badge variant="outline" className="gap-1 text-muted-foreground">{cause}</Badge>;
+  };
+
+  const sentimentIcon = (s: string | null) => {
+    if (!s) return null;
+    const sl = s.toLowerCase();
+    if (sl.includes("positiv") || sl.includes("interest")) return <ThumbsUp className="h-3.5 w-3.5 text-green-400" />;
+    if (sl.includes("negativ") || sl.includes("desinteress")) return <ThumbsDown className="h-3.5 w-3.5 text-red-400" />;
+    return <Minus className="h-3.5 w-3.5 text-gray-400" />;
+  };
+
+  const parseTranscript = (raw: string | null): TranscriptTurn[] => {
+    if (!raw) return [];
+    try {
+      const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
   };
 
   return (
@@ -320,42 +387,43 @@ export default function VoiceSimulate() {
                 className="overflow-y-auto px-4 py-3 space-y-2"
                 style={{ height: 500, background: "#0d0d14", borderRadius: "0 0 8px 8px" }}
               >
-                {transcript.length === 0 ? (
+                {liveTurns.length === 0 && systemMessages.length === 0 ? (
                   <p className="text-center text-sm text-gray-500 pt-10">Aguardando chamada...</p>
                 ) : (
-                  transcript.map((entry, i) => {
-                    if (entry.type === "system") {
+                  <>
+                    {systemMessages.map((msg, i) => (
+                      <div key={`sys-${i}`} className="text-center">
+                        <span className="text-xs text-gray-500">{msg}</span>
+                      </div>
+                    ))}
+                    {liveTurns.map((turn, i) => {
+                      const isLead = turn.role === "user";
+                      const ts = turn.timestamp ? new Date(turn.timestamp * 1000).toLocaleTimeString("pt-BR") : "";
                       return (
-                        <div key={i} className="text-center">
-                          <span className="text-xs text-gray-500">{entry.ts} — {entry.text}</span>
+                        <div key={i} className={`flex ${isLead ? "justify-end" : "justify-start"}`}>
+                          <div
+                            className="max-w-[75%] rounded-xl px-3 py-2 text-sm"
+                            style={{
+                              background: isLead ? "#1a7a4c" : "#3b2d7a",
+                              color: "#e5e7eb",
+                            }}
+                          >
+                            <div className="text-[10px] opacity-60 mb-0.5">
+                              {isLead ? "👤 Lead" : "🤖 Lucas"} · {ts}
+                            </div>
+                            <p className="whitespace-pre-wrap">{turn.text}</p>
+                          </div>
                         </div>
                       );
-                    }
-                    const isLead = entry.type === "lead";
-                    return (
-                      <div key={i} className={`flex ${isLead ? "justify-end" : "justify-start"}`}>
-                        <div
-                          className="max-w-[75%] rounded-xl px-3 py-2 text-sm"
-                          style={{
-                            background: isLead ? "#1a7a4c" : "#3b2d7a",
-                            color: "#e5e7eb",
-                          }}
-                        >
-                          <div className="text-[10px] opacity-60 mb-0.5">
-                            {isLead ? "👤 Lead" : "🤖 Lucas"} · {entry.ts}
-                          </div>
-                          <p className="whitespace-pre-wrap">{entry.text}</p>
-                        </div>
-                      </div>
-                    );
-                  })
+                    })}
+                  </>
                 )}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Recent calls */}
+        {/* Recent calls with expandable analysis */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -367,18 +435,88 @@ export default function VoiceSimulate() {
               <p className="text-sm text-muted-foreground text-center py-4">Nenhuma chamada registrada.</p>
             ) : (
               <div className="space-y-2">
-                {recentCalls.map((call) => (
-                  <div
-                    key={call.id}
-                    className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-muted-foreground">{call.destination_number || "—"}</span>
-                      {renderStatusBadge(call)}
+                {recentCalls.map((call) => {
+                  const isExpanded = expandedCall === call.id;
+                  const turns = parseTranscript(call.transcript);
+                  const hasAnalysis = call.ai_summary || call.sentiment || turns.length > 0;
+
+                  return (
+                    <div key={call.id} className="rounded-lg border border-border overflow-hidden">
+                      <div
+                        className={`flex items-center justify-between px-3 py-2 text-sm ${hasAnalysis ? "cursor-pointer hover:bg-muted/30" : ""}`}
+                        onClick={() => hasAnalysis && setExpandedCall(isExpanded ? null : call.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-muted-foreground">{call.destination_number || "—"}</span>
+                          {call.lead_name && <span className="text-xs text-muted-foreground">({call.lead_name})</span>}
+                          {renderStatusBadge(call)}
+                          {call.interest_detected && (
+                            <Badge className="gap-1 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]">
+                              Interesse
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {sentimentIcon(call.sentiment)}
+                          <span className="text-xs text-muted-foreground">{formatTimestamp(call.created_at)}</span>
+                          {hasAnalysis && (
+                            isExpanded
+                              ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                              : <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="border-t border-border px-3 py-3 space-y-3 bg-muted/10">
+                          {/* AI Summary */}
+                          {call.ai_summary && (
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground mb-1">📋 Resumo IA</p>
+                              <p className="text-sm">{call.ai_summary}</p>
+                            </div>
+                          )}
+
+                          {/* Sentiment */}
+                          {call.sentiment && (
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-medium text-muted-foreground">🎭 Sentimento:</p>
+                              <span className="text-sm">{call.sentiment}</span>
+                            </div>
+                          )}
+
+                          {/* Transcript */}
+                          {turns.length > 0 && (
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                                <MessageSquare className="h-3 w-3" /> Transcrição ({turns.length} turnos)
+                              </p>
+                              <div className="space-y-1.5 max-h-[300px] overflow-y-auto rounded-md p-2" style={{ background: "#0d0d14" }}>
+                                {turns.map((turn, i) => {
+                                  const isLead = turn.role === "user";
+                                  return (
+                                    <div key={i} className={`flex ${isLead ? "justify-end" : "justify-start"}`}>
+                                      <div
+                                        className="max-w-[80%] rounded-lg px-2.5 py-1.5 text-xs"
+                                        style={{
+                                          background: isLead ? "#1a7a4c" : "#3b2d7a",
+                                          color: "#e5e7eb",
+                                        }}
+                                      >
+                                        <span className="opacity-50 text-[9px]">{isLead ? "Lead" : "Lucas"}</span>
+                                        <p className="whitespace-pre-wrap">{turn.text}</p>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <span className="text-xs text-muted-foreground">{formatTimestamp(call.created_at)}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
