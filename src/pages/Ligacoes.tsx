@@ -9,7 +9,7 @@ import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { resolveCompanyFilter } from "@/lib/companyFilter";
 import { supabase } from "@/lib/supabase";
-import { EDGE_BASE } from "@/lib/constants";
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -124,29 +124,28 @@ const displayPhone = (lead: PoolLead) => {
   return `+${withCountry}`;
 };
 
-// ── VoIP Health ───────────────────────────────────────────────────────────────
+// ── VoIP Health (via orchestrator-proxy) ──────────────────────────────────────
+const voipProxyHeaders = {
+  "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+  "apikey": SUPABASE_ANON_KEY,
+};
+
 function useVoipStatus() {
   const [online, setOnline] = useState<boolean | null>(null);
-  const isLocal = typeof window !== "undefined" && (
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "192.168.0.206" ||
-    window.location.protocol === "http:"
-  );
   const check = useCallback(async () => {
-    // Skip health check on HTTPS (mixed content blocked by browser)
-    if (!isLocal) { setOnline(false); return; }
     try {
-      const res = await fetch("http://192.168.0.206:8500/health", {
-        signal: AbortSignal.timeout(3000),
-      });
+      const res = await fetch(
+        `${EDGE_BASE}/orchestrator-proxy?path=${encodeURIComponent("/health")}`,
+        { headers: voipProxyHeaders, signal: AbortSignal.timeout(5000) }
+      );
       setOnline(res.ok);
     } catch {
       setOnline(false);
     }
-  }, [isLocal]);
+  }, []);
   useEffect(() => {
     check();
-    const t = setInterval(check, 60000); // check every 60s, not 30s
+    const t = setInterval(check, 60000);
     return () => clearInterval(t);
   }, [check]);
   return { online, check };
@@ -296,17 +295,15 @@ function TabLigacoes({
         .update({ last_call_at: new Date().toISOString() })
         .eq("id", lead.id);
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      const res = await fetch(`${EDGE_BASE}/orchestrator-proxy?path=/api/calls`, {
+      const res = await fetch(`${EDGE_BASE}/orchestrator-proxy`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...voipProxyHeaders,
         },
         body: JSON.stringify({
-          phone: phoneToCall,
+          _path: "/call",
+          to: phoneToCall,
           company_id: companyId,
           lead_name: lead.lead_name ?? null,
           pool_id: lead.id,
