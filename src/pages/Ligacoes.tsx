@@ -57,6 +57,7 @@ type CallStatus = "idle" | "dialing" | "answered" | "in_call" | "ended";
 
 const INTEREST_LABELS: Record<string, string> = {
   pending: "Aguardando",
+  unknown: "Aguardando",
   not_interested_1: "1ª Recusa",
   not_interested_2: "2ª Recusa",
   interested: "Interesse",
@@ -65,6 +66,7 @@ const INTEREST_LABELS: Record<string, string> = {
 
 const INTEREST_COLORS: Record<string, string> = {
   pending: "bg-slate-500/20 text-slate-300",
+  unknown: "bg-slate-500/20 text-slate-300",
   not_interested_1: "bg-orange-500/20 text-orange-400",
   not_interested_2: "bg-red-500/20 text-red-400",
   interested: "bg-emerald-500/20 text-emerald-400",
