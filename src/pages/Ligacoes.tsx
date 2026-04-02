@@ -308,14 +308,15 @@ function TabLigacoes({
           }
           if (row.status === "completed" || row.status === "no_answer") {
             setCallStatus("ended");
-            // Auto-mark as no_answer if no one picked up (talk_time_seconds === 0)
-            if (row.status === "no_answer" || (row.talk_time_seconds || 0) === 0) {
-              // Small delay so UI shows "ended" before advancing
+            // Auto-advance in queue mode
+            if (dialerStateRef.current === "running") {
+              const talkTime = row.talk_time_seconds || 0;
+              const hasInterest = row.interest_detected === true;
+              // Auto-classify: no talk = no_answer, interest = interested, talked = no_interest
+              const autoResult = talkTime === 0 ? "no_answer" : hasInterest ? "interested" : "no_interest";
               setTimeout(() => {
-                if (dialerStateRef.current === "running") {
-                  markCallResult("no_answer");
-                }
-              }, 2000);
+                markCallResult(autoResult);
+              }, 1500);
             }
           }
         }
@@ -380,6 +381,7 @@ function TabLigacoes({
         // Subscribe to real-time call status
         subscribeCallStatus(data.uuid);
         // Fallback: if no CHANNEL_ANSWER in 30s, mark as no_answer
+        // Fallback: 30s timeout for dialing, 120s max call duration
         setTimeout(() => {
           if (callStatusRef.current === "dialing") {
             setCallStatus("ended");
@@ -388,6 +390,13 @@ function TabLigacoes({
             }
           }
         }, 30000);
+        // Max call duration fallback: 120s — auto-advance if still in_call
+        setTimeout(() => {
+          if (callStatusRef.current === "in_call" && dialerStateRef.current === "running") {
+            setCallStatus("ended");
+            setTimeout(() => markCallResult("no_interest"), 1500);
+          }
+        }, 120000);
       } else {
         // No UUID returned — fallback to timed simulation
         setTimeout(() => setCallStatus("in_call"), 4000);
