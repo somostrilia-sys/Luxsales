@@ -173,6 +173,8 @@ function TabLigacoes({
   const [concurrency, setConcurrency] = useState(3); // Chamadas simultâneas
   const activeCallsRef = useRef<Map<string, { lead: any; uuid: string; status: string; startedAt: number; channel?: any }>>(new Map());
   const queueIndexRef = useRef(0);
+  const fillCallSlotsRef = useRef<() => void>(() => {});
+  const originateCallRef = useRef<(lead: any) => Promise<void>>(async () => {});
   const [queue, setQueue] = useState<PoolLead[]>([]);
   const [loadingQueue, setLoadingQueue] = useState(false);
   const [queueLoaded, setQueueLoaded] = useState(false);
@@ -346,7 +348,7 @@ function TabLigacoes({
 
     // Fill next slot
     if (dialerStateRef.current === "running") {
-      setTimeout(() => fillCallSlots(), 500);
+      setTimeout(() => fillCallSlotsRef.current(), 500);
     }
   }, [cleanupCallRealtime, fetchStats]);
 
@@ -422,7 +424,7 @@ function TabLigacoes({
       // Failed to originate — skip and fill next
       setProcessedCount(p => p + 1);
       if (dialerStateRef.current === "running") {
-        setTimeout(() => fillCallSlots(), 500);
+        setTimeout(() => fillCallSlotsRef.current(), 500);
       }
     }
   }, [companyId, handleMassCallResult]);
@@ -578,7 +580,7 @@ function TabLigacoes({
       if (!lead) break;
       
       // Fire and forget — each call manages itself
-      originateCall(lead);
+      originateCallRef.current(lead);
     }
     
     // Check if queue exhausted and no active calls
@@ -587,6 +589,10 @@ function TabLigacoes({
       setDialerState("idle");
     }
   }, [concurrency]);
+
+  // Keep refs in sync
+  useEffect(() => { fillCallSlotsRef.current = fillCallSlots; }, [fillCallSlots]);
+  useEffect(() => { originateCallRef.current = originateCall; }, [originateCall]);
 
   const startDialer = () => {
     if (queueRef.current.length === 0) {
@@ -598,7 +604,7 @@ function TabLigacoes({
     setProcessedCount(0);
     setDialerState("running");
     // Small delay to let state propagate
-    setTimeout(() => fillCallSlots(), 100);
+    setTimeout(() => fillCallSlotsRef.current(), 100);
   };
 
   const pauseDialer = () => {
