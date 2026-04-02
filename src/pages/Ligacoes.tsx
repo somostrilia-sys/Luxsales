@@ -827,6 +827,7 @@ function TabLigacoes({
               </div>
             </div>
             {massCallLog.length > 0 && (
+              <>
               <div className="grid grid-cols-5 gap-2 text-[10px] uppercase tracking-wider text-muted-foreground px-2 pb-1 border-b border-border/40">
                 <span>Telefone</span><span>Nome</span><span>Status</span><span className="text-center">Duração</span><span className="text-right">Hora</span>
               </div>
@@ -841,6 +842,7 @@ function TabLigacoes({
                   </div>
                 ))}
               </div>
+              </>
             )}
           </CardContent>
         </Card>
