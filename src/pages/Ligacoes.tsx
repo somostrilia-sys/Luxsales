@@ -185,6 +185,8 @@ function TabLigacoes({
   const [callDuration, setCallDuration] = useState(0);
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
   const [processedCount, setProcessedCount] = useState(0);
+  const [activeCallCount, setActiveCallCount] = useState(0);
+  const [massCallLog, setMassCallLog] = useState<Array<{phone: string; status: string; time: string}>>([]);
   const [stats, setStats] = useState({ total: 0, answered: 0, interested: 0 });
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Refs for stable access inside timeouts
@@ -344,6 +346,8 @@ function TabLigacoes({
 
     cleanupCallRealtime(uuid);
     setProcessedCount(p => p + 1);
+    setActiveCallCount(activeCallsRef.current.size);
+    setMassCallLog(prev => [{phone: lead.phone_normalized || lead.phone || "?", status: result === "interested" ? "✅ Interesse" : result === "no_interest" ? "📞 Sem interesse" : "❌ Sem resposta", time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 50));
     fetchStats();
 
     // Fill next slot
@@ -412,6 +416,8 @@ function TabLigacoes({
         startedAt: Date.now(),
         channel,
       });
+      setActiveCallCount(activeCallsRef.current.size);
+      setMassCallLog(prev => [{phone: phoneToCall, status: "discando", time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 50));
 
       // Fallback: 45s max — if no status update, clean up
       setTimeout(() => {
@@ -423,6 +429,8 @@ function TabLigacoes({
     } catch (e: any) {
       // Failed to originate — skip and fill next
       setProcessedCount(p => p + 1);
+      setActiveCallCount(activeCallsRef.current.size);
+      setMassCallLog(prev => [{phone: phoneToCall || "?", status: "⚠️ Erro", time: new Date().toLocaleTimeString("pt-BR")}, ...prev].slice(0, 50));
       if (dialerStateRef.current === "running") {
         setTimeout(() => fillCallSlotsRef.current(), 500);
       }
@@ -602,6 +610,8 @@ function TabLigacoes({
     queueIndexRef.current = 0;
     activeCallsRef.current.clear();
     setProcessedCount(0);
+    setActiveCallCount(0);
+    setMassCallLog([]);
     setDialerState("running");
     // Small delay to let state propagate
     setTimeout(() => fillCallSlotsRef.current(), 100);
@@ -745,6 +755,36 @@ function TabLigacoes({
             </div>
         </CardContent>
       </Card>
+
+      {/* Mass Dialer Status */}
+      {dialerState === "running" && (
+        <Card>
+          <CardContent className="py-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 animate-pulse">
+                  ⚡ Discando em massa
+                </Badge>
+                <span className="text-sm font-mono">
+                  {activeCallCount} ativa{activeCallCount !== 1 ? "s" : ""} · {processedCount}/{queue.length + processedCount} processados
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground">{concurrency} linha{concurrency > 1 ? "s" : ""}</span>
+            </div>
+            {massCallLog.length > 0 && (
+              <div className="max-h-[200px] overflow-y-auto space-y-1">
+                {massCallLog.map((log, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs px-2 py-1 rounded bg-muted/30">
+                    <span className="font-mono text-muted-foreground">{log.phone}</span>
+                    <span>{log.status}</span>
+                    <span className="text-muted-foreground">{log.time}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Invalid phone badge */}
       {invalidPhoneCount > 0 && (
