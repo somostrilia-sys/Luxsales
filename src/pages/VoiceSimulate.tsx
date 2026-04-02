@@ -23,13 +23,21 @@ interface TranscriptEntry {
 }
 
 interface RecentCall {
-  call_uuid: string;
-  lead_phone: string;
+  id: string;
+  freeswitch_uuid: string | null;
+  destination_number: string | null;
   status: string;
   duration_seconds: number | null;
+  talk_time_seconds: number | null;
   created_at: string;
   hangup_cause: string | null;
 }
+
+// Headers padrão para orchestrator-proxy (sempre anon key)
+const proxyHeaders = {
+  "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+  "apikey": SUPABASE_ANON_KEY,
+};
 
 export default function VoiceSimulate() {
   const { collaborator } = useCollaborator();
@@ -55,7 +63,7 @@ export default function VoiceSimulate() {
     const fetchCalls = async () => {
       const { data } = await supabase
         .from("calls")
-        .select("call_uuid, lead_phone, status, duration_seconds, created_at, hangup_cause")
+        .select("id, freeswitch_uuid, destination_number, status, duration_seconds, talk_time_seconds, created_at, hangup_cause")
         .order("created_at", { ascending: false })
         .limit(20);
       if (data) setRecentCalls(data as RecentCall[]);
@@ -68,16 +76,8 @@ export default function VoiceSimulate() {
   // ── Health check ──
   const checkHealth = useCallback(async () => {
     try {
-      let authToken = "";
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        authToken = session?.access_token || "";
-      } catch {}
       const res = await fetch(`${EDGE_BASE}/orchestrator-proxy?path=${encodeURIComponent("/health")}`, {
-        headers: {
-          Authorization: `Bearer ${authToken || SUPABASE_ANON_KEY}`,
-          apikey: SUPABASE_ANON_KEY,
-        },
+        headers: proxyHeaders,
         signal: AbortSignal.timeout(5000),
       });
       setPipelineOnline(res.ok);
@@ -108,19 +108,9 @@ export default function VoiceSimulate() {
   const endVoipCall = useCallback(async (reason?: string) => {
     if (voipCallUuidRef.current) {
       try {
-        let authToken = SUPABASE_ANON_KEY;
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.access_token) authToken = session.access_token;
-        } catch {}
-
         await fetch(`${EDGE_BASE}/orchestrator-proxy`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`,
-            apikey: SUPABASE_ANON_KEY,
-          },
+          headers: { "Content-Type": "application/json", ...proxyHeaders },
           body: JSON.stringify({ _path: "/hangup", uuid: voipCallUuidRef.current }),
           signal: AbortSignal.timeout(5000),
         });
@@ -147,19 +137,9 @@ export default function VoiceSimulate() {
     addSystem("📞 Originando chamada via pipeline VoIP...");
 
     try {
-      let authToken = SUPABASE_ANON_KEY;
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) authToken = session.access_token;
-      } catch {}
-
       const res = await fetch(`${EDGE_BASE}/orchestrator-proxy`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-          apikey: SUPABASE_ANON_KEY,
-        },
+        headers: { "Content-Type": "application/json", ...proxyHeaders },
         body: JSON.stringify({
           _path: "/call",
           to: phoneNumber.replace(/\D/g, ""),
@@ -176,7 +156,7 @@ export default function VoiceSimulate() {
         voipPollRef.current = setInterval(async () => {
           try {
             const pollRes = await fetch(`${EDGE_BASE}/orchestrator-proxy?path=${encodeURIComponent("/calls")}`, {
-              headers: { Authorization: `Bearer ${authToken}`, apikey: SUPABASE_ANON_KEY },
+              headers: proxyHeaders,
               signal: AbortSignal.timeout(5000),
             });
             const calls = await pollRes.json();
@@ -223,7 +203,8 @@ export default function VoiceSimulate() {
   };
 
   const renderStatusBadge = (call: RecentCall) => {
-    const { status, hangup_cause, duration_seconds } = call;
+    const { status, hangup_cause, talk_time_seconds, duration_seconds } = call;
+    const dur = talk_time_seconds || duration_seconds;
     if (status === "ringing") {
       return <Badge className="gap-1 bg-yellow-500/15 text-yellow-400 border-yellow-500/30">Chamando...</Badge>;
     }
@@ -233,9 +214,15 @@ export default function VoiceSimulate() {
     if (status === "completed") {
       return (
         <Badge className="gap-1 bg-green-500/15 text-green-500 border-green-500/30">
-          Concluída · {formatDuration(duration_seconds)}
+          Concluída · {formatDuration(dur)}
         </Badge>
       );
+    }
+    if (status === "calling") {
+      return <Badge className="gap-1 bg-yellow-500/15 text-yellow-400 border-yellow-500/30">Chamando...</Badge>;
+    }
+    if (status === "no_answer") {
+      return <Badge variant="outline" className="gap-1 text-muted-foreground">Sem resposta</Badge>;
     }
     const cause = hangup_cause || status || "Encerrada";
     return (
@@ -382,11 +369,11 @@ export default function VoiceSimulate() {
               <div className="space-y-2">
                 {recentCalls.map((call) => (
                   <div
-                    key={call.call_uuid}
+                    key={call.id}
                     className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm"
                   >
                     <div className="flex items-center gap-3">
-                      <span className="font-mono text-muted-foreground">{call.lead_phone}</span>
+                      <span className="font-mono text-muted-foreground">{call.destination_number || "—"}</span>
                       {renderStatusBadge(call)}
                     </div>
                     <span className="text-xs text-muted-foreground">{formatTimestamp(call.created_at)}</span>
