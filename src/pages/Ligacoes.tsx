@@ -170,6 +170,9 @@ function TabLigacoes({
   const activeCallUuidRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<any>(null);
   const [batchSize, setBatchSize] = useState<string>("100");
+  const [concurrency, setConcurrency] = useState(3); // Chamadas simultâneas
+  const activeCallsRef = useRef<Map<string, { lead: any; uuid: string; status: string; startedAt: number; channel?: any }>>(new Map());
+  const queueIndexRef = useRef(0);
   const [queue, setQueue] = useState<PoolLead[]>([]);
   const [loadingQueue, setLoadingQueue] = useState(false);
   const [queueLoaded, setQueueLoaded] = useState(false);
@@ -276,14 +279,154 @@ function TabLigacoes({
     }
   }, [collaboratorId, batchSize]);
 
-  // Cleanup realtime subscription
-  const cleanupRealtime = useCallback(() => {
-    if (realtimeChannelRef.current) {
-      supabase.removeChannel(realtimeChannelRef.current);
-      realtimeChannelRef.current = null;
+  // Cleanup a single call's realtime subscription
+  const cleanupCallRealtime = useCallback((uuid: string) => {
+    const call = activeCallsRef.current.get(uuid);
+    if (call?.channel) {
+      supabase.removeChannel(call.channel);
     }
-    activeCallUuidRef.current = null;
+    activeCallsRef.current.delete(uuid);
   }, []);
+
+  // Cleanup all
+  const cleanupRealtime = useCallback(() => {
+    activeCallsRef.current.forEach((call, uuid) => {
+      if (call.channel) supabase.removeChannel(call.channel);
+    });
+    activeCallsRef.current.clear();
+  }, []);
+
+
+  // Handle result for a single mass-dialer call
+  const handleMassCallResult = useCallback(async (lead: any, result: "interested" | "no_interest" | "no_answer", uuid: string) => {
+    const newAttempts = (lead.call_attempts || 0) + 1;
+    let newInterestStatus = lead.interest_status || "pending";
+    let removeFromQueue = false;
+    let dispatchAvailable = false;
+
+    if (result === "interested") {
+      newInterestStatus = "interested";
+      dispatchAvailable = true;
+      removeFromQueue = true;
+    } else if (result === "no_interest") {
+      if (lead.interest_status === "not_interested_1") {
+        newInterestStatus = "not_interested_2";
+        removeFromQueue = true;
+      } else {
+        newInterestStatus = "not_interested_1";
+      }
+    } else if (newAttempts >= 5) {
+      newInterestStatus = "discarded";
+      removeFromQueue = true;
+    }
+
+    const statusUpdate =
+      result === "no_interest" && newInterestStatus === "not_interested_2"
+        ? { status: "discarded" }
+        : result === "no_interest"
+        ? { status: "closed" }
+        : newAttempts >= 5
+        ? { status: "discarded" }
+        : {};
+
+    await supabase
+      .from("consultant_lead_pool")
+      .update({
+        interest_status: newInterestStatus,
+        call_attempts: newAttempts,
+        last_call_at: new Date().toISOString(),
+        ...statusUpdate,
+        ...(dispatchAvailable ? { dispatch_available: true } : {}),
+      })
+      .eq("id", lead.id);
+
+    cleanupCallRealtime(uuid);
+    setProcessedCount(p => p + 1);
+    fetchStats();
+
+    // Fill next slot
+    if (dialerStateRef.current === "running") {
+      setTimeout(() => fillCallSlots(), 500);
+    }
+  }, [cleanupCallRealtime, fetchStats]);
+
+  // Originate a single call (for mass dialer)
+  const originateCall = useCallback(async (lead: any) => {
+    const phoneToCall = lead.phone_normalized ||
+      (lead.phone?.startsWith("+") ? lead.phone : `+55${(lead.phone || "").replace(/\D/g, "")}`);
+
+    try {
+      await supabase
+        .from("consultant_lead_pool")
+        .update({ last_call_at: new Date().toISOString() })
+        .eq("id", lead.id);
+
+      const res = await fetch(`${EDGE_BASE}/orchestrator-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...voipProxyHeaders },
+        body: JSON.stringify({
+          _path: "/call",
+          to: phoneToCall,
+          company_id: companyId,
+          lead_name: lead.lead_name ?? null,
+          pool_id: lead.id,
+        }),
+      });
+
+      if (!res.ok) throw new Error("HTTP " + res.status);
+
+      const data = await res.json();
+      if (!data.uuid) throw new Error("No UUID");
+
+      const callUuid = data.uuid;
+
+      // Subscribe to realtime status
+      const channel = supabase
+        .channel(`mass-${callUuid}`)
+        .on("postgres_changes", {
+          event: "UPDATE",
+          schema: "public",
+          table: "calls",
+          filter: `freeswitch_uuid=eq.${callUuid}`,
+        }, (payload: any) => {
+          const row = payload.new;
+          if (row.status === "answered") {
+            const entry = activeCallsRef.current.get(callUuid);
+            if (entry) entry.status = "answered";
+          }
+          if (row.status === "completed" || row.status === "no_answer") {
+            const talkTime = row.talk_time_seconds || 0;
+            const hasInterest = row.interest_detected === true;
+            const autoResult = talkTime === 0 ? "no_answer" : hasInterest ? "interested" : "no_interest";
+            handleMassCallResult(lead, autoResult, callUuid);
+          }
+        })
+        .subscribe();
+
+      activeCallsRef.current.set(callUuid, {
+        lead,
+        uuid: callUuid,
+        status: "dialing",
+        startedAt: Date.now(),
+        channel,
+      });
+
+      // Fallback: 45s max — if no status update, clean up
+      setTimeout(() => {
+        if (activeCallsRef.current.has(callUuid)) {
+          handleMassCallResult(lead, "no_answer", callUuid);
+        }
+      }, 45000);
+
+    } catch (e: any) {
+      // Failed to originate — skip and fill next
+      setProcessedCount(p => p + 1);
+      if (dialerStateRef.current === "running") {
+        setTimeout(() => fillCallSlots(), 500);
+      }
+    }
+  }, [companyId, handleMassCallResult]);
+
 
   // Subscribe to call status changes via Supabase Realtime
   const subscribeCallStatus = useCallback((callUuid: string) => {
@@ -423,13 +566,39 @@ function TabLigacoes({
     return () => { cleanupRealtime(); };
   }, [cleanupRealtime]);
 
+  // Fill concurrent call slots
+  const fillCallSlots = useCallback(() => {
+    const q = queueRef.current;
+    const active = activeCallsRef.current;
+    const maxSlots = concurrency;
+    
+    while (active.size < maxSlots && queueIndexRef.current < q.length) {
+      const lead = q[queueIndexRef.current];
+      queueIndexRef.current++;
+      if (!lead) break;
+      
+      // Fire and forget — each call manages itself
+      originateCall(lead);
+    }
+    
+    // Check if queue exhausted and no active calls
+    if (active.size === 0 && queueIndexRef.current >= q.length) {
+      toast.info("Fila finalizada! Todos os leads foram processados.");
+      setDialerState("idle");
+    }
+  }, [concurrency]);
+
   const startDialer = () => {
     if (queueRef.current.length === 0) {
       toast.warning("Carregue a fila primeiro");
       return;
     }
+    queueIndexRef.current = 0;
+    activeCallsRef.current.clear();
+    setProcessedCount(0);
     setDialerState("running");
-    startNextCall();
+    // Small delay to let state propagate
+    setTimeout(() => fillCallSlots(), 100);
   };
 
   const pauseDialer = () => {
