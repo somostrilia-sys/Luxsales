@@ -71,7 +71,7 @@ function PipelineTestTab({
       if (res.ok) {
         const data = await res.json();
         setPipelineHealth(data);
-        setIsOnline(data.pipeline === "online" || data.ok === true);
+        setIsOnline(data.status === "online" || data.ok === true);
       } else {
         setIsOnline(false);
       }
@@ -86,7 +86,7 @@ function PipelineTestTab({
     try {
       const { data } = await supabase
         .from("calls")
-        .select("id, destination_number, status, duration_seconds, call_summary, sentiment, interest_detected, created_at, ai_analysis")
+        .select("id, destination_number, status, duration_seconds, call_summary, sentiment, interest_detected, created_at, ai_analysis, hangup_cause")
         .eq("company_id", testCompanyId || companyId)
         .order("created_at", { ascending: false })
         .limit(10);
@@ -144,15 +144,35 @@ function PipelineTestTab({
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
-  const statusBadge = (status: string) => {
-    const map: Record<string, string> = {
-      completed: "bg-green-500/15 text-green-500",
-      calling: "bg-yellow-500/15 text-yellow-400 animate-pulse",
-      simulated: "bg-blue-500/15 text-blue-400",
-      failed: "bg-red-500/15 text-red-400",
-      initiated: "bg-yellow-500/15 text-yellow-400",
+  const statusInfo = (status: string, durationSec?: number | null) => {
+    // Se completed com duração > 0, a pessoa atendeu
+    if (status === "completed" && durationSec && durationSec > 0) {
+      return { label: "Atendida", cls: "bg-green-500/15 text-green-500" };
+    }
+    // Completed mas sem duração = não atendeu / caixa postal
+    if (status === "completed" && (!durationSec || durationSec === 0)) {
+      return { label: "Não atendeu", cls: "bg-orange-500/15 text-orange-400" };
+    }
+    const map: Record<string, { label: string; cls: string }> = {
+      calling: { label: "Chamando...", cls: "bg-yellow-500/15 text-yellow-400 animate-pulse" },
+      ringing: { label: "Tocando...", cls: "bg-yellow-500/15 text-yellow-400 animate-pulse" },
+      "in-progress": { label: "Em andamento", cls: "bg-blue-500/15 text-blue-400 animate-pulse" },
+      answered: { label: "Atendida", cls: "bg-green-500/15 text-green-500" },
+      "no-answer": { label: "Não atendeu", cls: "bg-orange-500/15 text-orange-400" },
+      busy: { label: "Ocupado", cls: "bg-orange-500/15 text-orange-400" },
+      failed: { label: "Falhou", cls: "bg-red-500/15 text-red-400" },
+      simulated: { label: "Simulada", cls: "bg-blue-500/15 text-blue-400" },
+      initiated: { label: "Iniciada", cls: "bg-yellow-500/15 text-yellow-400" },
     };
-    return map[status] || "bg-gray-500/15 text-gray-400";
+    return map[status] || { label: status, cls: "bg-gray-500/15 text-gray-400" };
+  };
+
+  const formatDuration = (seconds: number | null | undefined) => {
+    if (!seconds || seconds === 0) return null;
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    if (m > 0) return `${m}m ${s.toString().padStart(2, "0")}s`;
+    return `${s}s`;
   };
 
   return (
@@ -284,29 +304,35 @@ function PipelineTestTab({
             {callHistory.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-10">Nenhuma chamada registrada</p>
             ) : (
-              callHistory.map((call) => (
-                <div key={call.id} className="px-4 py-3 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm">{call.destination_number}</span>
-                      <Badge className={`text-[10px] border-0 ${statusBadge(call.status)}`}>
-                        {call.status}
-                      </Badge>
+              callHistory.map((call) => {
+                const info = statusInfo(call.status, call.duration_seconds);
+                const dur = formatDuration(call.duration_seconds);
+                return (
+                  <div key={call.id} className="px-4 py-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm">{call.destination_number}</span>
+                        <Badge className={`text-[10px] border-0 ${info.cls}`}>
+                          {info.label}
+                        </Badge>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{formatDate(call.created_at)}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">{formatDate(call.created_at)}</span>
-                  </div>
-                  {call.duration_seconds != null && (
-                    <p className="text-xs text-muted-foreground">
-                      Duracao: {Math.floor(call.duration_seconds / 60)}:{(call.duration_seconds % 60).toString().padStart(2, "0")}
-                      {call.sentiment && ` | Sentimento: ${call.sentiment}`}
-                      {call.interest_detected && " | Interesse detectado"}
+                    <p className="text-xs text-muted-foreground flex items-center gap-2">
+                      {dur ? (
+                        <span className="text-green-400 font-medium">Duração: {dur}</span>
+                      ) : (
+                        <span>Duração: --</span>
+                      )}
+                      {call.sentiment && <span>| Sentimento: {call.sentiment}</span>}
+                      {call.interest_detected && <span>| Interesse detectado</span>}
                     </p>
-                  )}
-                  {call.call_summary && (
-                    <p className="text-xs text-muted-foreground/80 line-clamp-2">{call.call_summary}</p>
-                  )}
-                </div>
-              ))
+                    {call.call_summary && (
+                      <p className="text-xs text-muted-foreground/80 line-clamp-2">{call.call_summary}</p>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </CardContent>
@@ -405,17 +431,25 @@ export default function VoiceSimulate() {
     setSavingSip(false);
   };
 
-  // ── Health check for pipeline ──
+  // ── Health check for pipeline (via make-call) ──
   const checkHealth = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${EDGE_BASE}/orchestrator-proxy?path=${encodeURIComponent("/health")}`, {
+      const res = await fetch(`${EDGE_BASE}/make-call`, {
+        method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
         },
+        body: JSON.stringify({ action: "pipeline-status" }),
       });
-      setPipelineOnline(res.ok);
+      if (res.ok) {
+        const data = await res.json();
+        setPipelineOnline(data.status === "online" || data.ok === true);
+      } else {
+        setPipelineOnline(false);
+      }
     } catch {
       setPipelineOnline(false);
     }

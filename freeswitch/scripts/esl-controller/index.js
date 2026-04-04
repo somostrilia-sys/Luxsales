@@ -158,14 +158,31 @@ async function onCallHangup(event, callId) {
     hangupSource = whoHungUp === 'send_bye' ? 'caller' : 'callee';
   }
 
+  // Determinar status final baseado no hangup_cause
+  const billSeconds = parseInt(billSec) || 0;
+  const noAnswerCauses = ['NO_ANSWER', 'NO_USER_RESPONSE', 'ORIGINATOR_CANCEL', 'ALLOTTED_TIMEOUT'];
+  const busyCauses = ['USER_BUSY', 'CALL_REJECTED'];
+  const failCauses = ['NETWORK_OUT_OF_ORDER', 'DESTINATION_OUT_OF_ORDER', 'INVALID_NUMBER_FORMAT', 'UNALLOCATED_NUMBER'];
+
+  let finalStatus = 'completed';
+  if (noAnswerCauses.includes(hangupCause)) {
+    finalStatus = 'no-answer';
+  } else if (busyCauses.includes(hangupCause)) {
+    finalStatus = 'busy';
+  } else if (failCauses.includes(hangupCause)) {
+    finalStatus = 'failed';
+  } else if (billSeconds > 0) {
+    finalStatus = 'completed';
+  }
+
   // Atualizar call
   await supabase
     .from('calls')
     .update({
-      status: 'completed',
+      status: finalStatus,
       ended_at: new Date().toISOString(),
       duration_seconds: parseInt(duration) || 0,
-      billable_duration_sec: parseInt(billSec) || 0,
+      billable_duration_sec: billSeconds,
       hangup_source: hangupSource,
       hangup_cause: hangupCause,
     })

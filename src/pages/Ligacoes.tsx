@@ -122,29 +122,33 @@ const displayPhone = (lead: PoolLead) => {
   return `+${withCountry}`;
 };
 
-// ── VoIP Health ───────────────────────────────────────────────────────────────
+// ── VoIP Health (via edge function) ───────────────────────────────────────────
 function useVoipStatus() {
   const [online, setOnline] = useState<boolean | null>(null);
-  const isLocal = typeof window !== "undefined" && (
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "192.168.0.206" ||
-    window.location.protocol === "http:"
-  );
   const check = useCallback(async () => {
-    // Skip health check on HTTPS (mixed content blocked by browser)
-    if (!isLocal) { setOnline(false); return; }
     try {
-      const res = await fetch("http://192.168.0.206:8500/health", {
-        signal: AbortSignal.timeout(3000),
+      const res = await fetch(`${EDGE_BASE}/make-call`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+        },
+        body: JSON.stringify({ action: "pipeline-status" }),
+        signal: AbortSignal.timeout(5000),
       });
-      setOnline(res.ok);
+      if (res.ok) {
+        const data = await res.json();
+        setOnline(data.status === "online");
+      } else {
+        setOnline(false);
+      }
     } catch {
       setOnline(false);
     }
-  }, [isLocal]);
+  }, []);
   useEffect(() => {
     check();
-    const t = setInterval(check, 60000); // check every 60s, not 30s
+    const t = setInterval(check, 60000);
     return () => clearInterval(t);
   }, [check]);
   return { online, check };
@@ -472,7 +476,7 @@ function TabLigacoes({
                 </Badge>
               )}
             </div>
-            <span className="text-xs text-muted-foreground">192.168.0.206:8500</span>
+            <span className="text-xs text-muted-foreground">LiveKit Pipeline</span>
           </div>
           {voipConfig && voipConfig.ramal ? (
             <div className="flex items-center gap-2 text-sm">
