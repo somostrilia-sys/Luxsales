@@ -118,6 +118,17 @@ const formatDate = (iso: string | null) => {
   });
 };
 
+
+const formatTranscript = (raw: string | null): { role: string; text: string }[] => {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.filter((t: any) => t.text);
+  } catch {}
+  // Fallback: return as single block
+  return [{ role: "system", text: raw }];
+};
+
 const displayPhone = (lead: PoolLead) => {
   if (lead.phone_normalized) return lead.phone_normalized;
   const raw = (lead.phone || "").replace(/\D/g, "");
@@ -1442,8 +1453,23 @@ function TabHistorico({ companyId }: { companyId: string | null | undefined }) {
                       )}
                       {call.transcript && (
                         <div className="rounded-lg bg-secondary/30 p-3 max-h-48 overflow-y-auto">
-                          <p className="text-xs font-medium text-muted-foreground mb-1">Transcrição</p>
-                          <p className="text-xs whitespace-pre-wrap font-mono">{call.transcript}</p>
+                          <p className="text-xs font-medium text-muted-foreground mb-2">Transcrição</p>
+                          <div className="space-y-2">
+                            {formatTranscript(call.transcript).map((turn, i) => (
+                              <div key={i} className={`flex gap-2 ${turn.role === "assistant" ? "" : "justify-end"}`}>
+                                <div className={`rounded-lg px-3 py-1.5 max-w-[85%] ${
+                                  turn.role === "assistant"
+                                    ? "bg-primary/10 text-primary"
+                                    : "bg-muted/50 text-foreground"
+                                }`}>
+                                  <p className="text-[10px] font-medium mb-0.5 opacity-60">
+                                    {turn.role === "assistant" ? "🤖 Lucas" : "👤 Lead"}
+                                  </p>
+                                  <p className="text-xs">{turn.text}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
