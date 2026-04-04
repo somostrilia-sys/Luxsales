@@ -330,15 +330,12 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
     try {
       let vq = supabase.from("calls")
         .select("id, destination_number, lead_name, status, duration_seconds, talk_time_seconds, transcript, ai_summary, sentiment, interest_detected, started_at, ended_at, hangup_cause, company_id")
-        .eq("direction", "outbound")
         .order("started_at", { ascending: false })
         .limit(100);
-      if (companyId && companyId !== "all") vq = vq.eq("company_id", companyId);
+      if (companyId) vq = vq.eq("company_id", companyId);
       const { data: vData, error: vErr } = await vq;
       if (!vErr && vData) setVoipCalls(vData);
-      else if (vErr) console.error("VoIP fetch error:", vErr);
-    } catch (e) {
-      console.error("VoIP fetch crash:", e);
+      setCalls([]);
     } finally {
       setLoading(false);
     }
@@ -1303,7 +1300,7 @@ export default function Historico() {
                           <p className="text-sm font-medium">{vc.lead_name || phone}</p>
                           <p className="text-xs text-muted-foreground">
                             {vc.lead_name ? phone + " · " : ""}
-                            {vc.started_at ? new Date(vc.started_at).toLocaleString("pt-BR", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) : "—"}
+                            {new Date(vc.started_at).toLocaleString("pt-BR", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"})}
                           </p>
                         </div>
                       </div>
