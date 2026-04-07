@@ -74,10 +74,10 @@ export default function VoiceSimulate() {
     const fetchCalls = async () => {
       const { data } = await supabase
         .from("calls")
-        .select("id, freeswitch_uuid, destination_number, status, duration_seconds, talk_time_seconds, created_at, hangup_cause, transcript, ai_summary, sentiment, interest_detected, lead_name")
+        .select("id, freeswitch_uuid, destination_number, status, duration_seconds, talk_time_seconds, created_at, hangup_cause, transcript, ai_summary, call_summary, sentiment, interest_detected, lead_name")
         .order("created_at", { ascending: false })
         .limit(20);
-      if (data) setRecentCalls(data as RecentCall[]);
+      if (data) setRecentCalls(data.map((c: any) => ({ ...c, ai_summary: c.ai_summary || c.call_summary || null })) as RecentCall[]);
     };
     fetchCalls();
     const interval = setInterval(fetchCalls, 5000);

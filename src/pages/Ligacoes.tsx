@@ -1308,7 +1308,7 @@ function TabHistorico({ companyId }: { companyId: string | null | undefined }) {
       let query = supabase
         .from("calls")
         .select(
-          "id, destination_number, lead_name, duration_seconds, status, started_at, transcript, ai_summary, ai_analysis, sentiment, interest_detected, talk_time_seconds, hangup_cause"
+          "id, destination_number, lead_name, duration_seconds, status, started_at, transcript, ai_summary, call_summary, ai_analysis, sentiment, interest_detected, talk_time_seconds, hangup_cause"
         )
         .order("started_at", { ascending: false })
         .limit(100);
@@ -1327,7 +1327,7 @@ function TabHistorico({ companyId }: { companyId: string | null | undefined }) {
           started_at: d.started_at ?? null,
           ai_qualification: d.interest_detected ? "Interesse" : d.sentiment ?? null,
           transcript: d.transcript ?? null,
-          ai_summary: d.ai_summary ?? null,
+          ai_summary: d.ai_summary || d.call_summary || null,
         }))
       );
     } catch (e: any) {

@@ -183,6 +183,7 @@ async function handleCallComplete(body: any) {
       status: "completed",
       duration_seconds: durationSecs || null,
       call_summary: call_summary || null,
+      ai_summary: call_summary || null,
       sentiment: sentiment || null,
       extracted_data: extracted_data || {},
       whatsapp_authorized: whatsapp_authorized || false,

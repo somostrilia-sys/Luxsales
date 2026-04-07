@@ -224,6 +224,11 @@ serve(async (req) => {
             .eq('id', recording_id)
         }
 
+        // Salvar transcrição na tabela calls mesmo sem análise IA
+        if (transcriptText.length > 0 && taCallId) {
+          await supabase.from('calls').update({ transcript: transcriptText }).eq('id', taCallId)
+        }
+
         // 2. Analisar com Claude (se transcrição ok)
         if (transcriptText.length > 20 && ANTHROPIC_API_KEY) {
           try {
@@ -235,6 +240,7 @@ serve(async (req) => {
               .update({
                 transcript: transcriptText,
                 call_summary: analysis.summary,
+                ai_summary: analysis.summary,
                 sentiment: analysis.sentiment,
                 interest_detected: analysis.lead_temperature === 'hot' || analysis.lead_temperature === 'warm',
                 ai_analysis: analysis,

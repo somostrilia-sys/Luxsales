@@ -86,11 +86,11 @@ export default function DashboardVoip() {
     // Recent calls (with new fields from migration)
     const { data: calls } = await supabase
       .from("calls")
-      .select("id, destination_number, status, duration_seconds, talk_time_seconds, talk_duration_sec, ai_qualification, ai_summary, started_at, ai_handled, cost_brl, quality_mos, hangup_source, transfer_count, codec")
+      .select("id, destination_number, status, duration_seconds, talk_time_seconds, talk_duration_sec, ai_qualification, ai_summary, call_summary, started_at, ai_handled, cost_brl, quality_mos, hangup_source, transfer_count, codec")
       .eq("company_id", companyId)
       .order("started_at", { ascending: false })
       .limit(15);
-    setRecentCalls(calls ?? []);
+    setRecentCalls((calls ?? []).map((c: any) => ({ ...c, ai_summary: c.ai_summary || c.call_summary || null })));
 
     // Build hourly distribution from calls
     const hourCounts: Record<string, { total: number; answered: number }> = {};

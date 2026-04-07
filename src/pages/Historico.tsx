@@ -329,12 +329,12 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
     // Fetch VoIP calls from `calls` table
     try {
       let vq = supabase.from("calls")
-        .select("id, destination_number, lead_name, status, duration_seconds, talk_time_seconds, transcript, ai_summary, sentiment, interest_detected, started_at, ended_at, hangup_cause, company_id")
+        .select("id, destination_number, lead_name, status, duration_seconds, talk_time_seconds, transcript, ai_summary, call_summary, sentiment, interest_detected, started_at, ended_at, hangup_cause, company_id")
         .order("started_at", { ascending: false })
         .limit(100);
       if (companyId) vq = vq.eq("company_id", companyId);
       const { data: vData, error: vErr } = await vq;
-      if (!vErr && vData) setVoipCalls(vData);
+      if (!vErr && vData) setVoipCalls(vData.map((vc: any) => ({ ...vc, ai_summary: vc.ai_summary || vc.call_summary || null })));
       setCalls([]);
     } finally {
       setLoading(false);
