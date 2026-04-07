@@ -45,10 +45,60 @@ serve(async (req) => {
     const companyId = body.company_id || null;
     const campaignId = body.campaign_id || null;
     const leadId = body.lead_id || null;
+    const consultorId = body.consultor_id || body.consultant_id || null;
+    let voiceProfileId = body.voice_profile_id || null;
+    let voiceId = body.voice_id || null;
+    let voiceName = body.voice_name || null;
 
     if (!toNumber) {
       return jsonResponse({ error: "to (phone number) is required" }, 400);
     }
+
+    // Buscar voice profile pra pegar gender (pra definir nome do vendedor)
+    let voiceGender: string | null = null;
+
+    if (voiceProfileId && !voiceId) {
+      const { data: vp } = await supabase
+        .from("voice_profiles")
+        .select("voice_id, voice_name, provider, gender")
+        .eq("id", voiceProfileId)
+        .eq("active", true)
+        .maybeSingle();
+      if (vp) {
+        voiceId = vp.voice_id;
+        voiceName = vp.voice_name;
+        voiceGender = vp.gender;
+      }
+    }
+
+    // Se passou voice_id direto, buscar gender tambem
+    if (voiceId && !voiceGender) {
+      const { data: vp } = await supabase
+        .from("voice_profiles")
+        .select("gender")
+        .eq("voice_id", voiceId)
+        .eq("active", true)
+        .maybeSingle();
+      if (vp) voiceGender = vp.gender;
+    }
+
+    // Fallback: voz default global (qualquer provider)
+    if (!voiceId) {
+      const { data: defaultVoice } = await supabase
+        .from("voice_profiles")
+        .select("voice_id, voice_name, gender")
+        .eq("active", true)
+        .eq("is_default", true)
+        .maybeSingle();
+      if (defaultVoice) {
+        voiceId = defaultVoice.voice_id;
+        voiceName = defaultVoice.voice_name;
+        voiceGender = defaultVoice.gender;
+      }
+    }
+
+    // Nome do vendedor: usa voice_name do perfil, senão fallback por gender
+    const sellerName = voiceName || (voiceGender === "female" ? "Cléo" : "Lucas");
 
     // Normalizar número para E.164
     let e164 = toNumber.replace(/\D/g, "");
@@ -57,7 +107,7 @@ serve(async (req) => {
     else if (!e164.startsWith("+")) e164 = "+" + e164;
     else e164 = toNumber;
 
-    // Chamar LiveKit Call API
+    // Chamar LiveKit Call API com voice_id + seller_name (Lucas masculino / Luana feminino)
     let callRes;
     try {
       callRes = await fetch(`${CALL_API_URL}/call`, {
@@ -67,6 +117,9 @@ serve(async (req) => {
           to: e164,
           company_id: companyId,
           lead_id: leadId,
+          voice_id: voiceId,
+          agent_name: sellerName,
+          consultor_id: consultorId,
         }),
       });
     } catch (err) {
@@ -92,6 +145,7 @@ serve(async (req) => {
         company_id: companyId,
         campaign_id: campaignId,
         lead_id: leadId,
+        collaborator_id: consultorId,
         destination_number: e164,
         direction: "outbound",
         status: "initiated",
@@ -118,6 +172,26 @@ serve(async (req) => {
       status: "initiated",
       phone_number: e164,
     });
+  }
+
+  // ── CALL-STATUS: consulta status direto via LiveKit Call API ──────────
+  if (action === "call-status") {
+    const room = body.room;
+    if (!room) {
+      return jsonResponse({ error: "room required" }, 400);
+    }
+    try {
+      const r = await fetch(`${CALL_API_URL}/call-status?room=${encodeURIComponent(room)}`, {
+        method: "GET",
+      });
+      if (r.ok) {
+        const d = await r.json();
+        return jsonResponse(d);
+      }
+      return jsonResponse({ active: false });
+    } catch (_) {
+      return jsonResponse({ active: false });
+    }
   }
 
   // ── STATUS: consulta status de uma chamada ─────────────────────────────

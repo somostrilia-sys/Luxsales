@@ -5,58 +5,42 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { EDGE_BASE } from "@/lib/constants";
 import { toast } from "sonner";
 import {
-  Loader2, Phone, PhoneOff, Mic, MicOff, Settings, Volume2,
-  AlertTriangle, CheckCircle, XCircle, Save, Zap,
+  Loader2, Phone, Volume2, AlertTriangle, CheckCircle, XCircle, Clock,
 } from "lucide-react";
+import { VoiceSelector, type VoiceProfile } from "@/components/VoiceSelector";
+import { VoiceGallery } from "@/components/VoiceGallery";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Phone as PhoneIcon, Volume2 as Volume2Icon } from "lucide-react";
 
-import { useRealtimeSession } from "@/hooks/useRealtimeSession";
+import { resolveCompanyRequired } from "@/lib/companyFilter";
 
-import { resolveCompanyFilter, resolveCompanyRequired } from "@/lib/companyFilter";
+export default function VoiceSimulate() {
+  const { collaborator } = useCollaborator();
+  const { selectedCompanyId } = useCompanyFilter();
+  const companyId = resolveCompanyRequired(selectedCompanyId, collaborator?.company_id);
 
-interface TranscriptEntry {
-  type: "lead" | "ai" | "system";
-  text: string;
-  ts: string;
-}
-
-declare const JsSIP: any;
-
-// ── Web Speech API types ──
-interface SpeechRecognitionEvent {
-  resultIndex: number;
-  results: { [key: number]: { [key: number]: { transcript: string }; isFinal: boolean }; length: number };
-}
-
-// ── Pipeline Test Tab ────────────────────────────────────────────────────────
-function PipelineTestTab({
-  companyId,
-  pipelineOnline,
-  checkHealth,
-}: {
-  companyId: string;
-  pipelineOnline: boolean | null;
-  checkHealth: () => void;
-}) {
   const [testPhone, setTestPhone] = useState("");
   const [testCompanyId, setTestCompanyId] = useState(companyId || "");
   const [calling, setCalling] = useState(false);
   const [callResult, setCallResult] = useState<any>(null);
   const [callHistory, setCallHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [pipelineOnline, setPipelineOnline] = useState<boolean | null>(null);
   const [pipelineHealth, setPipelineHealth] = useState<any>(null);
+  const [activeCallTimer, setActiveCallTimer] = useState(0);
+  const [activeCallRoom, setActiveCallRoom] = useState<string | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState<{ role: string; text: string }[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState<VoiceProfile | null>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
 
-  const [isOnline, setIsOnline] = useState(false);
-
-  // Buscar health detalhado do pipeline via make-call (mais confiável que orchestrator-proxy)
-  const fetchPipelineHealth = useCallback(async () => {
+  // Pipeline health check
+  const checkHealth = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${EDGE_BASE}/make-call`, {
@@ -71,38 +55,113 @@ function PipelineTestTab({
       if (res.ok) {
         const data = await res.json();
         setPipelineHealth(data);
-        setIsOnline(data.status === "online" || data.ok === true);
+        setPipelineOnline(data.status === "online" || data.ok === true);
       } else {
-        setIsOnline(false);
+        setPipelineOnline(false);
       }
     } catch {
-      setIsOnline(false);
+      setPipelineOnline(false);
     }
   }, []);
 
-  // Buscar últimas chamadas de teste
+  // Fetch call history
   const fetchHistory = useCallback(async () => {
     setLoadingHistory(true);
     try {
       const { data } = await supabase
         .from("calls")
-        .select("id, destination_number, status, duration_seconds, call_summary, sentiment, interest_detected, created_at, ai_analysis, hangup_cause")
+        .select("id, destination_number, status, duration_seconds, call_summary, sentiment, interest_detected, created_at, transcript")
         .eq("company_id", testCompanyId || companyId)
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(15);
       setCallHistory(data || []);
     } catch { /* ignore */ }
     setLoadingHistory(false);
   }, [testCompanyId, companyId]);
 
+  // Auto-refresh: health every 15s, history every 5s
   useEffect(() => {
-    fetchPipelineHealth();
+    checkHealth();
     fetchHistory();
-    const iv = setInterval(fetchPipelineHealth, 10000);
-    return () => clearInterval(iv);
-  }, [fetchPipelineHealth, fetchHistory]);
+    const healthIv = setInterval(checkHealth, 15000);
+    const historyIv = setInterval(fetchHistory, 5000);
+    return () => {
+      clearInterval(healthIv);
+      clearInterval(historyIv);
+    };
+  }, [checkHealth, fetchHistory]);
 
-  // Disparar chamada real via pipeline
+  // Poll call status every 2s + local timer fallback
+  useEffect(() => {
+    if (!activeCallRoom) {
+      setActiveCallTimer(0);
+      return;
+    }
+    let cancelled = false;
+    let localTimer = 0;
+
+    // Local timer (runs regardless of API)
+    const timerIv = setInterval(() => {
+      localTimer++;
+      setActiveCallTimer(localTimer);
+    }, 1000);
+
+    // Clear live transcript
+    setLiveTranscript([]);
+
+    // API polling: call status + live transcript
+    const poll = async () => {
+      await new Promise(r => setTimeout(r, 8000));
+      while (!cancelled) {
+        try {
+          // Check call status
+          const res = await fetch(`${EDGE_BASE}/make-call`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+            },
+            body: JSON.stringify({ action: "call-status", room: activeCallRoom }),
+            signal: AbortSignal.timeout(5000),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (!data.active) {
+              setActiveCallRoom(null);
+              setCalling(false);
+              fetchHistory();
+              break;
+            }
+          }
+
+          // Fetch live transcript from Supabase
+          const { data: callData } = await supabase
+            .from("calls")
+            .select("transcript")
+            .eq("freeswitch_uuid", activeCallRoom)
+            .maybeSingle();
+          if (callData?.transcript) {
+            try {
+              const entries = JSON.parse(callData.transcript);
+              if (Array.isArray(entries)) {
+                setLiveTranscript(entries);
+                transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight, behavior: "smooth" });
+              }
+            } catch { /* ignore parse errors */ }
+          }
+        } catch { /* ignore */ }
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    };
+    poll();
+
+    return () => {
+      cancelled = true;
+      clearInterval(timerIv);
+    };
+  }, [activeCallRoom, fetchHistory]);
+
+  // Dispatch call
   const dispatchCall = async () => {
     if (!testPhone) {
       toast.error("Preencha o número de telefone");
@@ -123,49 +182,28 @@ function PipelineTestTab({
           action: "dial",
           to: testPhone,
           company_id: testCompanyId || companyId,
+          voice_profile_id: selectedVoice?.id ?? null,
+          voice_id: selectedVoice?.voice_id ?? null,
         }),
       });
       const data = await res.json();
-      setCallResult(data);
+      setCallResult({ ...data, startedAt: new Date().toISOString() });
       if (data.success) {
         toast.success(`Chamada disparada para ${testPhone}`);
-        // Atualizar histórico após 5s
-        setTimeout(fetchHistory, 5000);
+        setActiveCallRoom(data.room || data.uuid || "active");
       } else {
         toast.error(data.error || "Falha ao disparar chamada");
+        setCalling(false);
       }
     } catch (err: any) {
       toast.error("Erro: " + err.message);
       setCallResult({ error: err.message });
+      setCalling(false);
     }
-    setCalling(false);
   };
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-
-  const statusInfo = (status: string, durationSec?: number | null) => {
-    // Se completed com duração > 0, a pessoa atendeu
-    if (status === "completed" && durationSec && durationSec > 0) {
-      return { label: "Atendida", cls: "bg-green-500/15 text-green-500" };
-    }
-    // Completed mas sem duração = não atendeu / caixa postal
-    if (status === "completed" && (!durationSec || durationSec === 0)) {
-      return { label: "Não atendeu", cls: "bg-orange-500/15 text-orange-400" };
-    }
-    const map: Record<string, { label: string; cls: string }> = {
-      calling: { label: "Chamando...", cls: "bg-yellow-500/15 text-yellow-400 animate-pulse" },
-      ringing: { label: "Tocando...", cls: "bg-yellow-500/15 text-yellow-400 animate-pulse" },
-      "in-progress": { label: "Em andamento", cls: "bg-blue-500/15 text-blue-400 animate-pulse" },
-      answered: { label: "Atendida", cls: "bg-green-500/15 text-green-500" },
-      "no-answer": { label: "Não atendeu", cls: "bg-orange-500/15 text-orange-400" },
-      busy: { label: "Ocupado", cls: "bg-orange-500/15 text-orange-400" },
-      failed: { label: "Falhou", cls: "bg-red-500/15 text-red-400" },
-      simulated: { label: "Simulada", cls: "bg-blue-500/15 text-blue-400" },
-      initiated: { label: "Iniciada", cls: "bg-yellow-500/15 text-yellow-400" },
-    };
-    return map[status] || { label: status, cls: "bg-gray-500/15 text-gray-400" };
-  };
 
   const formatDuration = (seconds: number | null | undefined) => {
     if (!seconds || seconds === 0) return null;
@@ -175,1172 +213,306 @@ function PipelineTestTab({
     return `${s}s`;
   };
 
-  return (
-    <div className="flex gap-4" style={{ minHeight: 550 }}>
-      <div className="w-[400px] shrink-0 space-y-4">
-        {/* Pipeline Status */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <span className={`h-2.5 w-2.5 rounded-full ${isOnline ? "bg-green-500" : "bg-red-500"}`} />
-              Pipeline de Voz
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div className="text-muted-foreground">Status:</div>
-              <div className={isOnline ? "text-green-400 font-medium" : "text-red-400 font-medium"}>
-                {isOnline ? "Online" : "Offline"}
-              </div>
-              {pipelineHealth?.running !== undefined && (
-                <>
-                  <div className="text-muted-foreground">Discador:</div>
-                  <div className={pipelineHealth.running ? "text-green-400" : "text-yellow-400"}>
-                    {pipelineHealth.running ? "Rodando" : "Parado"}
-                  </div>
-                </>
-              )}
-              {pipelineHealth?.active_calls !== undefined && (
-                <>
-                  <div className="text-muted-foreground">Chamadas ativas:</div>
-                  <div>{pipelineHealth.active_calls}</div>
-                </>
-              )}
-              {pipelineHealth?.simulation_mode !== undefined && (
-                <>
-                  <div className="text-muted-foreground">Modo:</div>
-                  <div className={pipelineHealth.simulation_mode ? "text-blue-400" : "text-orange-400 font-medium"}>
-                    {pipelineHealth.simulation_mode ? "Simulacao" : "REAL"}
-                  </div>
-                </>
-              )}
-            </div>
-            <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => { checkHealth(); fetchPipelineHealth(); }}>
-              Atualizar Status
-            </Button>
-          </CardContent>
-        </Card>
+  const formatTimer = (s: number) =>
+    `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
-        {/* Disparar Teste */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Phone className="h-4 w-4" /> Disparar Ligacao Teste
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <Label className="text-xs">Telefone</Label>
-              <Input
-                value={testPhone}
-                onChange={(e) => setTestPhone(e.target.value)}
-                placeholder="31999999999"
-                disabled={calling}
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Company ID</Label>
-              <Input
-                value={testCompanyId}
-                onChange={(e) => setTestCompanyId(e.target.value)}
-                placeholder="objetivo"
-                disabled={calling}
-              />
-            </div>
-
-            <Button
-              className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
-              onClick={dispatchCall}
-              disabled={calling || !testPhone}
-            >
-              {calling ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Phone className="h-4 w-4" />
-              )}
-              {calling ? "Disparando..." : "Disparar Ligacao Real"}
-            </Button>
-
-            {!isOnline && (
-              <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                <span>Pipeline offline. Verifique se os servicos no PC Gamer estao rodando.</span>
-              </div>
-            )}
-
-            {/* Resultado */}
-            {callResult && (
-              <div className={`rounded-lg border px-3 py-2 text-xs ${
-                callResult.success ? "border-green-500/30 bg-green-500/10 text-green-300" : "border-red-500/30 bg-red-500/10 text-red-300"
-              }`}>
-                {callResult.success ? (
-                  <div className="space-y-1">
-                    <p className="font-medium">Chamada disparada com sucesso</p>
-                    {callResult.uuid && <p>UUID: <span className="font-mono">{callResult.uuid}</span></p>}
-                    {callResult.call_id && <p>Call ID: <span className="font-mono">{callResult.call_id}</span></p>}
-                    {callResult.simulated && <p className="text-blue-400">Modo simulacao (nao discou de verdade)</p>}
-                  </div>
-                ) : (
-                  <p>{callResult.error || callResult.detail || "Erro desconhecido"}</p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Historico de chamadas recentes */}
-      <Card className="flex-1 flex flex-col overflow-hidden">
-        <CardHeader className="pb-2 shrink-0 flex flex-row items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Volume2 className="h-4 w-4" /> Ultimas Chamadas
-          </CardTitle>
-          <Button size="sm" variant="ghost" onClick={fetchHistory} disabled={loadingHistory}>
-            {loadingHistory ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Atualizar"}
-          </Button>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-y-auto p-0">
-          <div className="divide-y divide-border/40">
-            {callHistory.length === 0 ? (
-              <p className="text-center text-sm text-muted-foreground py-10">Nenhuma chamada registrada</p>
-            ) : (
-              callHistory.map((call) => {
-                const info = statusInfo(call.status, call.duration_seconds);
-                const dur = formatDuration(call.duration_seconds);
-                return (
-                  <div key={call.id} className="px-4 py-3 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm">{call.destination_number}</span>
-                        <Badge className={`text-[10px] border-0 ${info.cls}`}>
-                          {info.label}
-                        </Badge>
-                      </div>
-                      <span className="text-xs text-muted-foreground">{formatDate(call.created_at)}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground flex items-center gap-2">
-                      {dur ? (
-                        <span className="text-green-400 font-medium">Duração: {dur}</span>
-                      ) : (
-                        <span>Duração: --</span>
-                      )}
-                      {call.sentiment && <span>| Sentimento: {call.sentiment}</span>}
-                      {call.interest_detected && <span>| Interesse detectado</span>}
-                    </p>
-                    {call.call_summary && (
-                      <p className="text-xs text-muted-foreground/80 line-clamp-2">{call.call_summary}</p>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-export default function VoiceSimulate() {
-  const { collaborator } = useCollaborator();
-  const { selectedCompanyId } = useCompanyFilter();
-  const companyId = resolveCompanyRequired(selectedCompanyId, collaborator?.company_id);
-
-  const [mode, setMode] = useState<"browser" | "pipeline">("browser");
-  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
-  const [inCall, setInCall] = useState(false);
-  const [callTimer, setCallTimer] = useState(0);
-  const [phoneNumber, setPhoneNumber] = useState("5531997441277");
-  const [listening, setListening] = useState(false);
-  const [aiThinking, setAiThinking] = useState(false);
-  const [ttsPlaying, setTtsPlaying] = useState(false);
-  const [realtimeMode, setRealtimeMode] = useState(false);
-
-  // VoIP config
-  const [sipHost, setSipHost] = useState("");
-  const [sipPort, setSipPort] = useState("5060");
-  const [sipUser, setSipUser] = useState("");
-  const [sipPass, setSipPass] = useState("");
-  const [sipTransport, setSipTransport] = useState("WSS");
-  const [sipConnected, setSipConnected] = useState(false);
-  const [savingSip, setSavingSip] = useState(false);
-  const [loadingSip, setLoadingSip] = useState(true);
-
-  // Pipeline
-  const [pipelineOnline, setPipelineOnline] = useState<boolean | null>(null);
-
-  // Knowledge base context
-  const [knowledgeContext, setKnowledgeContext] = useState("");
-
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const ttsPlayingRef = useRef(false);
-  const recognitionStartingRef = useRef(false);
-  const recognitionRef = useRef<any>(null);
-  const uaRef = useRef<any>(null);
-  const sessionRef = useRef<any>(null);
-  const conversationRef = useRef<{ role: string; content: string }[]>([]);
-  const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const bgAudioRef = useRef<HTMLAudioElement | null>(null);
-  const bgAudioCtxRef = useRef<AudioContext | null>(null);
-
-  // ── Load SIP config from DB ──
-  useEffect(() => {
-    const load = async () => {
-      setLoadingSip(true);
-      const { data } = await supabase
-        .from("sip_trunks")
-        .select("host, port, username, password, transport")
-        .eq("company_id", companyId)
-        .maybeSingle();
-      if (data) {
-        setSipHost(data.host || "");
-        setSipPort(data.port?.toString() || "5060");
-        setSipUser(data.username || "");
-        setSipPass(data.password || "");
-        setSipTransport(data.transport || "WSS");
-      }
-      setLoadingSip(false);
+  const statusInfo = (status: string, durationSec?: number | null) => {
+    if (status === "completed" && durationSec && durationSec > 0) {
+      return { label: "Atendida", cls: "bg-green-500/15 text-green-500" };
+    }
+    if (status === "completed" && (!durationSec || durationSec === 0)) {
+      return { label: "Não atendeu", cls: "bg-orange-500/15 text-orange-400" };
+    }
+    const map: Record<string, { label: string; cls: string }> = {
+      calling: { label: "Chamando...", cls: "bg-yellow-500/15 text-yellow-400 animate-pulse" },
+      ringing: { label: "Tocando...", cls: "bg-yellow-500/15 text-yellow-400 animate-pulse" },
+      "in-progress": { label: "Em andamento", cls: "bg-blue-500/15 text-blue-400 animate-pulse" },
+      answered: { label: "Em conversa", cls: "bg-emerald-500/15 text-emerald-400 animate-pulse" },
+      "no-answer": { label: "Não atendeu", cls: "bg-orange-500/15 text-orange-400" },
+      no_answer: { label: "Não atendeu", cls: "bg-orange-500/15 text-orange-400" },
+      busy: { label: "Ocupado", cls: "bg-orange-500/15 text-orange-400" },
+      failed: { label: "Falhou", cls: "bg-red-500/15 text-red-400" },
     };
-    load();
-  }, [companyId]);
-
-  // ── Save SIP config ──
-  const saveSipConfig = async () => {
-    if (!sipHost || !sipUser) {
-      toast.error("Preencha host e usuário");
-      return;
-    }
-    setSavingSip(true);
-    const { error } = await supabase.from("sip_trunks").upsert({
-      company_id: companyId,
-      host: sipHost,
-      port: parseInt(sipPort) || 5060,
-      username: sipUser,
-      password: sipPass,
-      transport: sipTransport,
-      provider: "custom",
-      max_channels: 10,
-    }, { onConflict: "company_id" });
-    if (error) {
-      toast.error("Erro ao salvar: " + error.message);
-    } else {
-      toast.success("Configuração VoIP salva");
-    }
-    setSavingSip(false);
+    return map[status] || { label: status, cls: "bg-gray-500/15 text-gray-400" };
   };
 
-  // ── Health check for pipeline (via make-call) ──
-  const checkHealth = useCallback(async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${EDGE_BASE}/make-call`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
-        },
-        body: JSON.stringify({ action: "pipeline-status" }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPipelineOnline(data.status === "online" || data.ok === true);
-      } else {
-        setPipelineOnline(false);
-      }
-    } catch {
-      setPipelineOnline(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    checkHealth();
-    const iv = setInterval(checkHealth, 15000);
-    return () => clearInterval(iv);
-  }, [checkHealth]);
-
-  // ── Auto-scroll transcript ──
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [transcript]);
-
-  const addSystem = useCallback((text: string) => {
-    setTranscript((prev) => [...prev, { type: "system", text, ts: new Date().toLocaleTimeString("pt-BR") }]);
-  }, []);
-
-  const addEntry = useCallback((type: "lead" | "ai", text: string) => {
-    setTranscript((prev) => [...prev, { type, text, ts: new Date().toLocaleTimeString("pt-BR") }]);
-  }, []);
-
-  // ── OpenAI Realtime session hook (Modo Rápido) ──
-  const {
-    connect: connectRealtime,
-    disconnect: disconnectRealtime,
-    isConnected: realtimeConnected,
-    isConnecting: realtimeConnecting,
-  } = useRealtimeSession({
-    onUserSpeech: (text) => addEntry("lead", text),
-    onAISpeech: (text) => addEntry("ai", text),
-    onSystem: addSystem,
-  });
-
-  // ══════════════════════════════════════════════
-  // ── MODO BROWSER: Web Speech + AI Simulator ──
-  // ══════════════════════════════════════════════
-
-  // Limpar markdown e artefatos para fala natural
-  const cleanForTTS = (text: string): string => {
-    return text
-      .replace(/\*\*([^*]+)\*\*/g, "$1")     // **bold** → bold
-      .replace(/\*([^*]+)\*/g, "$1")          // *italic* → italic
-      .replace(/#{1,6}\s/g, "")               // # headers
-      .replace(/[-•]\s/g, "")                 // bullets
-      .replace(/\n{2,}/g, " ")               // double newlines → espaço
-      .replace(/\n/g, " ")                   // single newline → espaço
-      .replace(/[`_~]/g, "")                 // backticks, underscores
-      .replace(/,\s*,/g, ",")               // vírgulas duplas → uma
-      .replace(/\.\s*\./g, ".")             // pontos duplos → um
-      .replace(/,\s*\./g, ".")             // vírgula antes de ponto → só ponto
-      .replace(/:\s/g, ", ")               // dois pontos → vírgula
-      .replace(/;\s/g, ", ")               // ponto-vírgula → vírgula
-      .replace(/\s{2,}/g, " ")               // multiple spaces
-      .replace(/\.$/g, "")                    // remover ponto final (XTTS lê "ponto")
-      .replace(/\.\s*$/g, "")                 // ponto final + espaço
-      .replace(/\s+$/g, "")                   // trim final
-      .trim();
-  };
-
-  // Trunca na última frase completa (não corta no meio da palavra)
-  const smartTruncate = (text: string, maxLen = 250): string => {
-    if (text.length <= maxLen) return text;
-    // Find last sentence-ending punctuation before maxLen
-    const sub = text.slice(0, maxLen);
-    const lastPeriod = Math.max(sub.lastIndexOf("."), sub.lastIndexOf("!"), sub.lastIndexOf("?"), sub.lastIndexOf(","));
-    if (lastPeriod > maxLen * 0.4) return sub.slice(0, lastPeriod + 1).trim();
-    // Fallback: last space
-    const lastSpace = sub.lastIndexOf(" ");
-    if (lastSpace > maxLen * 0.4) return sub.slice(0, lastSpace).trim() + ".";
-    return sub.trim() + ".";
-  };
-
-  // Pausar mic, tocar áudio XTTS, retomar mic
-  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
-  const XTTS_LOCAL = "http://192.168.0.206:8300/tts";
-
-  // Safe start — prevents double .start() race condition (must be declared BEFORE interruptTTS)
-  const safeStartRecognition = useCallback(() => {
-    if (!recognitionRef.current || recognitionStartingRef.current || ttsPlayingRef.current) return;
-    if (sessionRef.current !== "browser") return;
-    recognitionStartingRef.current = true;
-    try {
-      recognitionRef.current.start();
-      setListening(true);
-    } catch {
-      // Already running — that's fine
-    } finally {
-      setTimeout(() => { recognitionStartingRef.current = false; }, 200);
-    }
-  }, []);
-
-  // Interrupt TTS when user speaks or presses button/space
-  const interruptTTS = useCallback(() => {
-    if (ttsAudioRef.current) {
-      ttsAudioRef.current.pause();
-      ttsAudioRef.current.currentTime = 0;
-      ttsAudioRef.current.onended = null;
-      ttsAudioRef.current = null;
-    }
-    ttsPlayingRef.current = false;
-    setTtsPlaying(false);
-    addSystem("🔇 Interrompido — sua vez de falar");
-    safeStartRecognition();
-  }, [addSystem, safeStartRecognition]);
-
-  const playAudioBlob = (blob: Blob): Promise<void> => {
-    return new Promise((resolve) => {
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.volume = 1.0;
-      audio.playbackRate = 1.15;
-      ttsAudioRef.current = audio;
-      audio.onended = () => { URL.revokeObjectURL(url); ttsAudioRef.current = null; resolve(); };
-      audio.onerror = () => { ttsAudioRef.current = null; resolve(); };
-      audio.play().catch(() => resolve());
-      setTimeout(resolve, 20000);
-    });
-  };
-
-  const playXTTS = useCallback(async (text: string) => {
-    ttsPlayingRef.current = true;
-    setTtsPlaying(true);
-    // Keep recognition running during TTS — if user speaks, we detect and interrupt
-    // Don't stop it here anymore
-
-    try {
-      // Tentativa 1: XTTS direto na rede local (mais rápido, ~1s)
-      const localRes = await fetch(XTTS_LOCAL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, speed: 1.15 }),
-        signal: AbortSignal.timeout(4000),
-      });
-      if (localRes.ok) {
-        const blob = await localRes.blob();
-        await playAudioBlob(blob);
-      } else {
-        throw new Error("local failed");
-      }
-    } catch {
-      // Tentativa 2: via Edge Function proxy (mais lento, ~3-5s)
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
-          },
-          body: JSON.stringify({ action: "tts", text, tts_url: "http://134.122.17.106/api/tts" }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.audio) {
-            const byteChars = atob(data.audio);
-            const byteArray = new Uint8Array(byteChars.length);
-            for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-            await playAudioBlob(new Blob([byteArray], { type: "audio/wav" }));
-          }
-        }
-      } catch (err) {
-        console.error("TTS proxy error:", err);
-      }
-    }
-
-    // Small delay to avoid echo capture
-    await new Promise(r => setTimeout(r, 300));
-    ttsPlayingRef.current = false;
-    setTtsPlaying(false);
-
-    // Retomar mic — safe start prevents double .start()
-    safeStartRecognition();
-  }, [safeStartRecognition]);
-
-  // Carregar base de conhecimento da empresa
-  useEffect(() => {
-    if (!companyId) return;
-    (async () => {
-      // Priorizar script com knowledge_base preenchido
-      let { data } = await supabase
-        .from("ai_call_scripts")
-        .select("system_prompt, knowledge_base, personality, tone, opening_message, objection_handlers, forbidden_words, sales_techniques")
-        .eq("company_id", companyId)
-        .eq("is_active", true)
-        .not("knowledge_base", "is", null)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      // Fallback: qualquer script ativo
-      if (!data) {
-        ({ data } = await supabase
-          .from("ai_call_scripts")
-          .select("system_prompt, knowledge_base, personality, tone, opening_message, objection_handlers, forbidden_words, sales_techniques")
-          .eq("company_id", companyId)
-          .eq("is_active", true)
-          .order("updated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle());
-      }
-      if (data) {
-        const parts = [];
-        if (data.system_prompt) parts.push(data.system_prompt);
-        // NÃO passar knowledge_base na ligação — só o system_prompt
-        // A base de conhecimento é para o closer no WhatsApp, não para o qualificador
-        if (data.personality) parts.push(`\nPERSONALIDADE: ${data.personality}`);
-        if (data.tone) parts.push(`\nTOM: ${data.tone}`);
-        if (data.forbidden_words?.length) parts.push(`\nNUNCA diga: ${data.forbidden_words.join(", ")}`);
-        if (data.objection_handlers) {
-          const objs = Object.entries(data.objection_handlers)
-            .map(([k, v]) => `- Se disser "${k}": ${v}`)
-            .join("\n");
-          if (objs) parts.push(`\nOBJEÇÕES:\n${objs}`);
-        }
-        if (data.sales_techniques) parts.push(`\nTÉCNICAS DE VENDA:\n${data.sales_techniques}`);
-        setKnowledgeContext(parts.join("\n"));
-      }
-    })();
-  }, [companyId]);
-
-  const callAiSimulator = useCallback(async (userMessage: string) => {
-    setAiThinking(true);
-    conversationRef.current.push({ role: "user", content: userMessage });
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      const systemPrompt = `${knowledgeContext || "Você é Lucas, consultor da Objetivo."}
-
-REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
-- Fale como humano ao telefone. Frases curtas e naturais, como conversa real.
-- MÁXIMO 2 frases por vez. Seja direto.
-- NUNCA use markdown, bullets, asteriscos, emojis, listas ou formatação.
-- NUNCA repita o que já disse. Leia todo o histórico.
-- Se já se apresentou, NÃO se apresente de novo.
-- AVANCE: cada fala traz algo novo ou faz pergunta diferente.
-- Se o lead mostrou interesse: pergunte o veículo e dê o preço.
-- Fale de forma CONTÍNUA e fluida, sem pausas longas entre palavras.
-- Use contrações naturais: "tô", "tá", "né", "pro", "pra".`;
-
-      const messagesWithSystem = [
-        { role: "system", content: systemPrompt },
-        ...conversationRef.current,
-      ];
-
-      const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
-        },
-        body: JSON.stringify({
-          action: "respond",
-          text: userMessage,
-          messages: messagesWithSystem,
-          company_id: companyId,
-          system_prompt: systemPrompt,
-          context: { phone_number: phoneNumber },
-          llm_provider: "claude",
-          max_tokens: 40,
-        }),
-      });
-
-      const data = await res.json();
-      if (data.error) { console.error("ai-simulator error:", data.error); }
-      const rawText = data.text || data.response || data.message || "...";
-      // Limpar e truncar para TTS rápido
-      const aiText = smartTruncate(cleanForTTS(rawText), 150);
-      conversationRef.current.push({ role: "assistant", content: aiText });
-      addEntry("ai", aiText);
-
-      // TTS via XTTS
-      await playXTTS(aiText);
-    } catch (err: any) {
-      addSystem(`❌ Erro IA: ${err.message || "falha na conexão"}`);
-    }
-    setAiThinking(false);
-  }, [companyId, phoneNumber, addEntry, addSystem, playXTTS, knowledgeContext]);
-
-  // Helper: inicializa o Web Speech Recognition e retorna a instância
-  const setupRecognition = useCallback(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return null;
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = "pt-BR";
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    let pendingText = "";
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Se TTS tocando e usuário fala → INTERROMPER o agente
-      if (ttsPlayingRef.current) {
-        // Check if there's actual speech (not echo)
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result && result.isFinal) {
-            const text = result[0].transcript.trim();
-            if (text && text.length > 1) {
-              // User is speaking — interrupt TTS
-              if (ttsAudioRef.current) {
-                ttsAudioRef.current.pause();
-                ttsAudioRef.current.currentTime = 0;
-                ttsAudioRef.current.onended = null;
-                ttsAudioRef.current = null;
-              }
-              ttsPlayingRef.current = false;
-              setTtsPlaying(false);
-              // Don't return — let the speech be processed below
-              break;
-            }
-          }
-        }
-        if (ttsPlayingRef.current) return; // Still playing, was just noise
-      }
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result && result.isFinal) {
-          const text = result[0].transcript.trim();
-          if (text && text.length > 1) {
-            // Debounce: acumula falas próximas antes de mandar pra IA
-            pendingText += (pendingText ? " " : "") + text;
-            if (debounceTimer) clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-              const final = pendingText.trim();
-              pendingText = "";
-              if (final) {
-                addEntry("lead", final);
-                callAiSimulator(final);
-              }
-            }, 800);
-          }
-        }
-      }
-    };
-
-    recognition.onend = () => {
-      setListening(false);
-      // Restart automatically if still in call — mas NÃO durante TTS
-      if (sessionRef.current === "browser" && !ttsPlayingRef.current) {
-        setTimeout(() => {
-          safeStartRecognition();
-        }, 500);
-      }
-    };
-
-    recognition.onstart = () => {
-      setListening(true);
-    };
-
-    recognition.onerror = (e: any) => {
-      if (e.error === "not-allowed") {
-        addSystem("❌ Microfone bloqueado. Permita o acesso nas configurações do navegador.");
-      } else if (e.error === "no-speech") {
-        // Silêncio — restart automático via onend
-      } else if (e.error !== "aborted") {
-        addSystem(`⚠️ Erro microfone: ${e.error}`);
-      }
-    };
-
-    return recognition;
-  }, [addEntry, addSystem, callAiSimulator]);
-
-  const startBrowserCall = useCallback(async () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      toast.error("Seu navegador não suporta reconhecimento de voz. Use Chrome.");
-      return;
-    }
-
-    setInCall(true);
-    setCallTimer(0);
-    setTranscript([]);
-    conversationRef.current = [];
-    timerRef.current = setInterval(() => setCallTimer((p) => p + 1), 1000);
-
-    // Iniciar background office
-    try {
-      const bgAudio = new Audio("/audio/office-bg.mp3");
-      bgAudio.loop = true;
-      bgAudio.volume = 0.03;
-      bgAudio.play().catch(() => {});
-      bgAudioRef.current = bgAudio;
-    } catch {}
-
-    addSystem("📞 Chamada simulada iniciada (modo browser)");
-
-    // Configurar recognition mas NÃO iniciar ainda (Lucas fala primeiro)
-    const recognition = setupRecognition();
-    if (!recognition) {
-      addSystem("❌ Navegador não suporta reconhecimento de voz.");
-      return;
-    }
-    recognitionRef.current = recognition;
-    sessionRef.current = "browser";
-
-    // ── LUCAS FALA PRIMEIRO ──
-    addSystem("🤖 Lucas está iniciando a conversa...");
-    setAiThinking(true);
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      // Buscar opening_message do script da empresa (priorizar com knowledge_base)
-      let openingMessage = "";
-      let { data: scriptData } = await supabase
-        .from("ai_call_scripts")
-        .select("opening_message")
-        .eq("company_id", companyId)
-        .eq("is_active", true)
-        .not("knowledge_base", "is", null)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!scriptData) {
-        ({ data: scriptData } = await supabase
-          .from("ai_call_scripts")
-          .select("opening_message")
-          .eq("company_id", companyId)
-          .eq("is_active", true)
-          .order("updated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle());
-      }
-      
-      if (scriptData?.opening_message) {
-        openingMessage = scriptData.opening_message;
-      } else {
-        // Gerar abertura via IA
-        const systemPrompt = `${knowledgeContext || "Você é Lucas, vendedor IA da proteção veicular."}
-
-REGRAS DE LIGAÇÃO:
-- Máximo 2-3 frases curtas
-- NUNCA use markdown, bullets, asteriscos
-- Fale como pessoa real ao telefone
-- Seja conciso e simpático
-- Esta é a PRIMEIRA fala da ligação — se apresente brevemente`;
-
-        const res = await fetch(`${EDGE_BASE}/ai-simulator`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "",
-          },
-          body: JSON.stringify({
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: "Inicie a ligação. Você está ligando para um lead interessado em proteção veicular. Cumprimente-o." },
-            ],
-            company_id: companyId,
-            context: { phone_number: phoneNumber },
-            system_prompt: systemPrompt,
-          }),
-        });
-        const data = await res.json();
-        openingMessage = smartTruncate(cleanForTTS(data.text || data.response || data.message || "Olá, aqui é o Lucas! Tudo bem? Vi que você tem interesse em proteção veicular, posso te ajudar?"));
-      }
-
-      const cleanOpening = smartTruncate(cleanForTTS(openingMessage));
-      conversationRef.current.push({ role: "assistant", content: cleanOpening });
-      addEntry("ai", cleanOpening);
-      setAiThinking(false);
-
-      // Falar via XTTS (mic fica pausado automaticamente pelo playXTTS)
-      await playXTTS(cleanOpening);
-
-      // Agora sim, iniciar mic — Lucas já falou
-      addSystem("🎤 Microfone ativo — sua vez de falar");
-      safeStartRecognition();
-    } catch (err: any) {
-      setAiThinking(false);
-      addSystem(`⚠️ Erro ao gerar abertura: ${err.message}. Iniciando mic...`);
-      // Fallback: iniciar mic mesmo sem abertura
-      safeStartRecognition();
-    }
-  }, [addSystem, addEntry, callAiSimulator, setupRecognition, playXTTS, companyId, phoneNumber, knowledgeContext, cleanForTTS, safeStartRecognition]);
-
-  // Keyboard shortcut: Space to interrupt TTS
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.code === "Space" && ttsPlaying && inCall) {
-        e.preventDefault();
-        interruptTTS();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [ttsPlaying, inCall, interruptTTS]);
-
-  const endBrowserCall = useCallback(() => {
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    sessionRef.current = null;
-    window.speechSynthesis?.cancel();
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = null;
-    // Parar background office
-    if (bgAudioRef.current) {
-      bgAudioRef.current.pause();
-      bgAudioRef.current = null;
-    }
-    setInCall(false);
-    setListening(false);
-    addSystem("📵 Chamada simulada encerrada");
-  }, [addSystem]);
-
-  // ══════════════════════════════════════════════
-  // ── MODO RÁPIDO: OpenAI Realtime (WebRTC) ──
-  // ══════════════════════════════════════════════
-
-  const startRealtimeCall = useCallback(async () => {
-    setInCall(true);
-    setCallTimer(0);
-    setTranscript([]);
-    timerRef.current = setInterval(() => setCallTimer((p) => p + 1), 1000);
-    addSystem("⚡ Iniciando Modo Rápido (OpenAI Realtime)...");
-
-    const systemPrompt = `${knowledgeContext || "Você é Lucas, consultor da proteção veicular."}
-
-REGRAS DE FALA (você está numa LIGAÇÃO TELEFÔNICA, não chat):
-- Fale como humano ao telefone. Frases curtas e naturais, como conversa real.
-- MÁXIMO 2 frases por vez. Seja direto.
-- NUNCA use markdown, bullets, asteriscos, emojis, listas ou formatação.
-- Use contrações naturais: "tô", "tá", "né", "pro", "pra".
-- Inicie a conversa se apresentando brevemente e perguntando se o lead tem interesse.`;
-
-    await connectRealtime(systemPrompt);
-  }, [connectRealtime, addSystem, knowledgeContext]);
-
-  const endRealtimeCall = useCallback(() => {
-    disconnectRealtime();
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = null;
-    setInCall(false);
-    addSystem("📵 Modo Rápido encerrado");
-  }, [disconnectRealtime, addSystem]);
-
-  // ══════════════════════════════════════════
-  // ── MODO VOIP: SIP via JsSIP ──
-  // ══════════════════════════════════════════
-
-  const connectSip = useCallback(() => {
-    if (typeof JsSIP === "undefined") {
-      addSystem("❌ JsSIP não carregado. Recarregue a página.");
-      return;
-    }
-    if (!sipHost || !sipUser) {
-      toast.error("Configure host e usuário SIP primeiro");
-      return;
-    }
-
-    try {
-      // Disconnect previous
-      if (uaRef.current) {
-        uaRef.current.stop();
-        uaRef.current = null;
-      }
-
-      const wsPort = sipTransport === "WSS" ? "7443" : "5066";
-      const wsUri = `${sipTransport.toLowerCase()}://${sipHost}:${wsPort}`;
-      const socket = new JsSIP.WebSocketInterface(wsUri);
-      const config = {
-        sockets: [socket],
-        uri: `sip:${sipUser}@${sipHost}`,
-        password: sipPass,
-        display_name: "LuxSales",
-        register: true,
-      };
-
-      const ua = new JsSIP.UA(config);
-
-      ua.on("registered", () => {
-        setSipConnected(true);
-        addSystem("✅ Registrado no servidor SIP");
-      });
-      ua.on("unregistered", () => {
-        setSipConnected(false);
-        addSystem("⚠️ Desconectado do SIP");
-      });
-      ua.on("registrationFailed", (e: any) => {
-        setSipConnected(false);
-        addSystem(`❌ Falha no registro SIP: ${e?.cause || "desconhecido"}`);
-      });
-      ua.on("newRTCSession", (data: any) => {
-        if (data.originator === "remote") {
-          data.session.answer({ mediaConstraints: { audio: true, video: false } });
-        }
-      });
-
-      ua.start();
-      uaRef.current = ua;
-      addSystem("🔄 Conectando ao servidor SIP...");
-    } catch (err: any) {
-      addSystem(`❌ Erro SIP: ${err.message}`);
-    }
-  }, [sipHost, sipUser, sipPass, sipTransport, addSystem]);
-
-  const startSipCall = useCallback(() => {
-    if (!uaRef.current || !sipConnected) return;
-
-    const target = `sip:${phoneNumber}@${sipHost}`;
-    const options = {
-      mediaConstraints: { audio: true, video: false },
-      rtcOfferConstraints: { offerToReceiveAudio: true },
-    };
-
-    const session = uaRef.current.call(target, options);
-
-    session.on("connecting", () => addSystem("📞 Chamando..."));
-    session.on("accepted", () => {
-      setInCall(true);
-      setCallTimer(0);
-      timerRef.current = setInterval(() => setCallTimer((p) => p + 1), 1000);
-      addSystem("✅ Chamada aceita");
-    });
-    session.on("confirmed", () => {
-      const streams = session.connection?.getRemoteStreams?.();
-      if (streams?.length && audioRef.current) {
-        audioRef.current.srcObject = streams[0];
-      }
-    });
-    session.on("ended", () => endSipCall("Chamada encerrada"));
-    session.on("failed", (e: any) => endSipCall(`Chamada falhou: ${e?.cause || "código desconhecido"}`));
-
-    if (session.connection) {
-      session.connection.ontrack = (event: RTCTrackEvent) => {
-        if (audioRef.current && event.streams?.[0]) {
-          audioRef.current.srcObject = event.streams[0];
-        }
-      };
-    }
-
-    sessionRef.current = session;
-  }, [sipConnected, sipHost, phoneNumber, addSystem]);
-
-  const endSipCall = useCallback((reason: string) => {
-    if (sessionRef.current && sessionRef.current !== "browser") {
-      sessionRef.current.terminate?.();
-    }
-    setInCall(false);
-    setSipConnected(false);
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = null;
-    sessionRef.current = null;
-    addSystem(`📵 ${reason}`);
-  }, [addSystem]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.stop();
-      uaRef.current?.stop();
-      window.speechSynthesis?.cancel();
-      bgAudioRef.current?.pause();
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
-
-  const formatTimer = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
-  };
-
-  // ── Render ──
   return (
     <DashboardLayout>
       <div className="space-y-4">
-        <Tabs value={mode} onValueChange={(v) => setMode(v as "browser" | "pipeline")}>
-          <div className="flex items-center justify-between gap-4">
-            <TabsList>
-              <TabsTrigger value="browser" className="gap-1.5">
-                <Mic className="h-3.5 w-3.5" /> Teste no Browser
-              </TabsTrigger>
-              <TabsTrigger value="pipeline" className="gap-1.5">
-                <Phone className="h-3.5 w-3.5" /> Teste Pipeline
-              </TabsTrigger>
-            </TabsList>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold">Simulação</h1>
+            <p className="text-sm text-muted-foreground">Teste chamadas reais via pipeline de voz</p>
+          </div>
+          {pipelineOnline === null ? (
+            <Badge variant="outline" className="gap-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" /> Verificando...
+            </Badge>
+          ) : pipelineOnline ? (
+            <Badge className="gap-1.5 bg-green-500/15 text-green-500 border-green-500/30">
+              <CheckCircle className="h-3 w-3" /> Pipeline Online
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="gap-1.5 text-muted-foreground">
+              <XCircle className="h-3 w-3" /> Pipeline Offline
+            </Badge>
+          )}
+        </div>
 
-            {/* Pipeline status inline */}
-            <div>
-              {pipelineOnline === null ? (
-                <Badge variant="outline" className="gap-1.5">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Verificando pipeline...
-                </Badge>
-              ) : pipelineOnline ? (
-                <Badge className="gap-1.5 bg-green-500/15 text-green-500 border-green-500/30">
-                  <CheckCircle className="h-3 w-3" /> Pipeline Online
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="gap-1.5 text-muted-foreground">
-                  <XCircle className="h-3 w-3" /> Pipeline Offline
-                </Badge>
-              )}
-            </div>
+        <Tabs defaultValue="simular" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-2 max-w-sm">
+            <TabsTrigger value="simular">
+              <PhoneIcon className="h-3.5 w-3.5 mr-1.5" />
+              Simular
+            </TabsTrigger>
+            <TabsTrigger value="vozes">
+              <Volume2Icon className="h-3.5 w-3.5 mr-1.5" />
+              Vozes
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="simular">
+        <div className="flex gap-4" style={{ minHeight: 600 }}>
+          {/* Left: Controls */}
+          <div className="w-[400px] shrink-0 space-y-4">
+            {/* Pipeline Status */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <span className={`h-2.5 w-2.5 rounded-full ${pipelineOnline ? "bg-green-500" : "bg-red-500"}`} />
+                  Pipeline de Voz
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="text-muted-foreground">Status:</div>
+                  <div className={pipelineOnline ? "text-green-400 font-medium" : "text-red-400 font-medium"}>
+                    {pipelineOnline ? "Online" : "Offline"}
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" className="w-full mt-2" onClick={checkHealth}>
+                  Atualizar Status
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Dispatch Call */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Phone className="h-4 w-4" /> Disparar Ligação Teste
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <Label className="text-xs">Telefone</Label>
+                  <Input
+                    value={testPhone}
+                    onChange={(e) => setTestPhone(e.target.value)}
+                    placeholder="31999999999"
+                    disabled={calling}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Company ID</Label>
+                  <Input
+                    value={testCompanyId}
+                    onChange={(e) => setTestCompanyId(e.target.value)}
+                    disabled={calling}
+                  />
+                </div>
+
+                <VoiceSelector
+                  value={selectedVoice?.id ?? null}
+                  onChange={setSelectedVoice}
+                />
+
+                <Button
+                  className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
+                  onClick={dispatchCall}
+                  disabled={calling || !testPhone}
+                >
+                  {calling ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Phone className="h-4 w-4" />
+                  )}
+                  {calling ? "Ligação em andamento..." : "Disparar Ligação Real"}
+                </Button>
+
+                {/* Active call timer */}
+                {activeCallRoom && (
+                  <div className="flex items-center justify-center gap-3 rounded-lg border-2 border-emerald-500/30 bg-emerald-500/5 p-3">
+                    <Clock className="h-4 w-4 text-emerald-400 animate-pulse" />
+                    <span className="font-mono text-2xl font-bold text-emerald-400">{formatTimer(activeCallTimer)}</span>
+                    <span className="text-xs text-emerald-400/60">em andamento</span>
+                  </div>
+                )}
+
+                {!pipelineOnline && !calling && (
+                  <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    <span>Pipeline offline. Verifique os serviços no PC Gamer.</span>
+                  </div>
+                )}
+
+                {callResult && !activeCallRoom && (
+                  <div className={`rounded-lg border px-3 py-2 text-xs ${
+                    callResult.success ? "border-green-500/30 bg-green-500/10 text-green-300" : "border-red-500/30 bg-red-500/10 text-red-300"
+                  }`}>
+                    {callResult.success ? (
+                      <p className="font-medium">Chamada disparada com sucesso</p>
+                    ) : (
+                      <p>{callResult.error || "Erro desconhecido"}</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
-          {/* ── BROWSER MODE ── */}
-          <TabsContent value="browser" className="mt-4">
-            <div className="flex gap-4" style={{ minHeight: 550 }}>
-              <div className="w-[380px] shrink-0 space-y-4">
-                {/* Info */}
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Mic className="h-4 w-4" /> Simulação via Browser
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm text-muted-foreground space-y-2">
-                    <p>Simule uma ligação usando o microfone do seu navegador. A IA responde em tempo real como se fosse uma chamada.</p>
-                    <p className="text-xs">Requisitos: Chrome/Edge, microfone ativo.</p>
-                  </CardContent>
-                </Card>
-
-                {/* Phone + Call */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Chamada Simulada</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Input
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="Número do lead (para contexto)"
-                      disabled={inCall}
-                    />
-
-                    {/* Modo Rápido toggle */}
-                    <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <Zap className={`h-3.5 w-3.5 ${realtimeMode ? "text-yellow-400" : "text-muted-foreground"}`} />
-                        <span className="text-sm font-medium">
-                          {realtimeMode ? "Modo Rápido (Realtime)" : "Modo XTTS (Claude)"}
-                        </span>
-                      </div>
-                      <button
-                        disabled={inCall}
-                        onClick={() => setRealtimeMode((v) => !v)}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${realtimeMode ? "bg-yellow-500" : "bg-muted"}`}
-                        role="switch"
-                        aria-checked={realtimeMode}
-                      >
-                        <span
-                          className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${realtimeMode ? "translate-x-4" : "translate-x-0"}`}
-                        />
-                      </button>
-                    </div>
-
-                    {!inCall ? (
-                      <Button
-                        className={`w-full gap-2 text-white ${realtimeMode ? "bg-yellow-600 hover:bg-yellow-700" : "bg-green-600 hover:bg-green-700"}`}
-                        onClick={realtimeMode ? startRealtimeCall : startBrowserCall}
-                      >
-                        {realtimeMode ? <Zap className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                        {realtimeMode ? "Iniciar Modo Rápido" : "Iniciar Simulação"}
-                      </Button>
-                    ) : (
-                      <>
+          {/* Right: Live Transcript (during call) or Call History */}
+          <Card className="flex-1 flex flex-col overflow-hidden">
+            <CardHeader className="pb-2 shrink-0 flex flex-row items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                {activeCallRoom ? (
+                  <>
+                    <Volume2 className="h-4 w-4 text-emerald-400 animate-pulse" /> Transcrição ao Vivo
+                  </>
+                ) : (
+                  <>
+                    <Volume2 className="h-4 w-4" /> Últimas Chamadas
+                    <span className="text-xs text-muted-foreground font-normal ml-1">(atualiza a cada 5s)</span>
+                  </>
+                )}
+              </CardTitle>
+              {!activeCallRoom && loadingHistory && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto p-0">
+              {/* Live transcript during active call */}
+              {activeCallRoom ? (
+                <div
+                  ref={transcriptRef}
+                  className="p-4 space-y-2 overflow-y-auto"
+                  style={{ height: 500, background: "#0d0d14", borderRadius: "0 0 8px 8px" }}
+                >
+                  {liveTranscript.length === 0 ? (
+                    <p className="text-center text-sm text-gray-500 pt-10 animate-pulse">
+                      Aguardando conversa...
+                    </p>
+                  ) : (
+                    liveTranscript.map((entry, i) => {
+                      const isLead = entry.role === "user";
+                      return (
+                        <div key={i} className={`flex ${isLead ? "justify-end" : "justify-start"}`}>
+                          <div
+                            className="max-w-[75%] rounded-xl px-3 py-2 text-sm"
+                            style={{
+                              background: isLead ? "#1a7a4c" : "#3b2d7a",
+                              color: "#e5e7eb",
+                            }}
+                          >
+                            <div className="text-[10px] opacity-60 mb-0.5">
+                              {isLead ? "Lead" : "Lucas"}
+                            </div>
+                            <p className="whitespace-pre-wrap">{entry.text}</p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : (
+              <div className="divide-y divide-border/40">
+                {callHistory.length === 0 ? (
+                  <p className="text-center text-sm text-muted-foreground py-10">Nenhuma chamada registrada</p>
+                ) : (
+                  callHistory.map((call) => {
+                    const info = statusInfo(call.status, call.duration_seconds);
+                    const dur = formatDuration(call.duration_seconds);
+                    const isActive = call.status === "ringing" || call.status === "answered" || call.status === "in-progress";
+                    return (
+                      <div key={call.id} className={`px-4 py-3 space-y-1 ${isActive ? "bg-emerald-500/5" : ""}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            {realtimeMode ? (
-                              realtimeConnecting ? (
-                                <Badge variant="outline" className="gap-1 text-yellow-400 border-yellow-400/30">
-                                  <Loader2 className="h-3 w-3 animate-spin" /> Conectando...
-                                </Badge>
-                              ) : realtimeConnected ? (
-                                <Badge className="gap-1 bg-yellow-500/15 text-yellow-400 border-yellow-500/30 animate-pulse">
-                                  <Zap className="h-3 w-3" /> Realtime ativo
-                                </Badge>
-                              ) : null
-                            ) : (
-                              <>
-                                {listening ? (
-                                  <Badge className="gap-1 bg-green-500/15 text-green-500 border-green-500/30 animate-pulse">
-                                    <Mic className="h-3 w-3" /> Ouvindo...
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="gap-1 text-muted-foreground">
-                                    <MicOff className="h-3 w-3" /> Mic pausado
-                                  </Badge>
-                                )}
-                                {aiThinking && (
-                                  <Badge variant="outline" className="gap-1 text-blue-400 border-blue-400/30">
-                                    <Loader2 className="h-3 w-3 animate-spin" /> IA pensando...
-                                  </Badge>
-                                )}
-                                {ttsPlaying && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="gap-1 text-yellow-400 border-yellow-400/30 hover:bg-yellow-400/10 animate-pulse"
-                                    onClick={interruptTTS}
-                                  >
-                                    <Volume2 className="h-3 w-3" /> Interromper e Falar
-                                  </Button>
-                                )}
-                              </>
-                            )}
+                            <span className="font-mono text-sm">{call.destination_number}</span>
+                            <Badge className={`text-[10px] border-0 ${info.cls}`}>
+                              {info.label}
+                            </Badge>
                           </div>
-                          <span className="font-mono text-lg font-bold">{formatTimer(callTimer)}</span>
+                          <span className="text-xs text-muted-foreground">{formatDate(call.created_at)}</span>
                         </div>
-                        <Button
-                          className="w-full gap-2 bg-red-600 hover:bg-red-700 text-white"
-                          onClick={realtimeMode ? endRealtimeCall : endBrowserCall}
-                        >
-                          <PhoneOff className="h-4 w-4" /> Encerrar Simulação
-                        </Button>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
+                        <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                          {dur ? (
+                            <span className="text-green-400 font-medium">Duração: {dur}</span>
+                          ) : isActive ? (
+                            <span className="text-emerald-400 animate-pulse">Em andamento...</span>
+                          ) : (
+                            <span>Duração: --</span>
+                          )}
+                          {call.sentiment && <span>| Sentimento: {call.sentiment}</span>}
+                          {call.interest_detected && (
+                            <Badge className="text-[10px] border-0 bg-emerald-500/15 text-emerald-400">
+                              Interesse
+                            </Badge>
+                          )}
+                        </div>
+                        {call.call_summary && (
+                          <p className="text-xs text-muted-foreground/80 line-clamp-2">💡 {call.call_summary}</p>
+                        )}
+                        {call.transcript && (
+                          <details className="mt-1">
+                            <summary className="text-xs text-primary/70 cursor-pointer hover:text-primary">Ver transcrição</summary>
+                            <div className="mt-1 rounded-md bg-secondary/30 p-2 max-h-32 overflow-y-auto">
+                              <p className="text-xs whitespace-pre-wrap font-mono">{(() => {
+                                try {
+                                  const entries = JSON.parse(call.transcript);
+                                  if (Array.isArray(entries)) {
+                                    return entries.map((e: any) => `${e.role === "assistant" ? "Lucas" : "Lead"}: ${e.text}`).join("\n");
+                                  }
+                                } catch {}
+                                return call.transcript;
+                              })()}</p>
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
-
-              {/* Transcript */}
-              <Card className="flex-1 flex flex-col overflow-hidden">
-                <CardHeader className="pb-2 shrink-0">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Volume2 className="h-4 w-4" /> Transcrição em Tempo Real
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 p-0">
-                  {renderTranscript()}
-                </CardContent>
-              </Card>
-            </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
           </TabsContent>
 
-          {/* ── PIPELINE MODE — Teste real via FreeSWITCH + FoneTalk ── */}
-          <TabsContent value="pipeline" className="mt-4">
-            <PipelineTestTab
-              companyId={companyId}
-              pipelineOnline={pipelineOnline}
-              checkHealth={checkHealth}
-            />
+          <TabsContent value="vozes">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Volume2Icon className="h-4 w-4" />
+                  Galeria de Vozes
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Ouça as amostras e escolha a voz que vai disparar as simulações.
+                </p>
+                <VoiceGallery
+                  selectedId={selectedVoice?.id ?? null}
+                  onSelect={(v) => {
+                    setSelectedVoice(v);
+                    localStorage.setItem("luxsales_selected_voice_id", v.id);
+                    window.dispatchEvent(new CustomEvent("voice-selected", { detail: v }));
+                  }}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
-
-        <audio ref={audioRef} autoPlay style={{ display: "none" }} />
       </div>
     </DashboardLayout>
   );
-
-  function renderTranscript() {
-    return (
-      <div
-        ref={scrollRef}
-        className="overflow-y-auto px-4 py-3 space-y-2"
-        style={{ height: 500, background: "#0d0d14", borderRadius: "0 0 8px 8px" }}
-      >
-        {transcript.length === 0 ? (
-          <p className="text-center text-sm text-gray-500 pt-10">
-            {mode === "browser" ? "Inicie a simulação para conversar com a IA" : "Aguardando chamada..."}
-          </p>
-        ) : (
-          transcript.map((entry, i) => {
-            if (entry.type === "system") {
-              return (
-                <div key={i} className="text-center">
-                  <span className="text-xs text-gray-500">{entry.ts} — {entry.text}</span>
-                </div>
-              );
-            }
-            const isLead = entry.type === "lead";
-            return (
-              <div key={i} className={`flex ${isLead ? "justify-end" : "justify-start"}`}>
-                <div
-                  className="max-w-[75%] rounded-xl px-3 py-2 text-sm"
-                  style={{
-                    background: isLead ? "#1a7a4c" : "#3b2d7a",
-                    color: "#e5e7eb",
-                  }}
-                >
-                  <div className="text-[10px] opacity-60 mb-0.5">
-                    {isLead ? "👤 Lead" : "🤖 Lucas"} · {entry.ts}
-                  </div>
-                  <p className="whitespace-pre-wrap">{entry.text}</p>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-    );
-  }
 }

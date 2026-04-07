@@ -262,13 +262,10 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
         query = query.eq("status", statusFilter);
       }
 
-      // CEO: sem filtro de empresa/colaborador
-      // Gestor (roleLevel === 2): filtra por empresa
-      // Consultor (outros > 0): filtra por collaborator_id
-      if (roleLevel === 0) {
-        // CEO vê tudo
-      } else if (roleLevel === 2) {
-        if (collaboratorCompanyId) query = query.eq("company_id", collaboratorCompanyId);
+      // CEO/Diretor: sem filtro por colaborador
+      // Gestor + Consultor: vê só suas ligações
+      if (roleLevel === 0 || roleLevel === 1) {
+        if (companyId && companyId !== "all") query = query.eq("company_id", companyId);
       } else if (collaboratorId) {
         query = query.eq("collaborator_id", collaboratorId);
         if (collaboratorCompanyId) query = query.eq("company_id", collaboratorCompanyId);
@@ -982,7 +979,7 @@ function TabConversasEncerradas({
 
 // ─── Aba 3: Linha do Tempo ────────────────────────────────────────────────────
 
-function TabLinhaDoTempo({ companyId }: { companyId: string }) {
+function TabLinhaDoTempo({ companyId, roleLevel, collaboratorId }: { companyId: string; roleLevel: number; collaboratorId?: string }) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
@@ -1004,6 +1001,12 @@ function TabLinhaDoTempo({ companyId }: { companyId: string }) {
         .limit(50);
 
       if (companyId && companyId !== "all") callQuery = callQuery.eq("company_id", companyId);
+
+      // Colaborador: filtrar apenas suas ligações (ou sem dono)
+      // Gestor + Consultor: só suas ligações
+      if (roleLevel >= 2 && collaboratorId) {
+        callQuery = callQuery.eq("collaborator_id", collaboratorId);
+      }
 
       if (q.replace(/\D/g, "").length >= 8) {
         callQuery = callQuery.ilike("lead_phone", `%${q.replace(/\D/g, "")}%`);
@@ -1232,7 +1235,7 @@ export default function Historico() {
           </TabsContent>
 
           <TabsContent value="timeline" className="mt-4">
-            <TabLinhaDoTempo companyId={companyId} />
+            <TabLinhaDoTempo companyId={companyId} roleLevel={roleLevel} collaboratorId={collaborator?.id} />
           </TabsContent>
         </Tabs>
       </div>

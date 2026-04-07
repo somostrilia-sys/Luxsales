@@ -183,6 +183,42 @@ async function respondToLead(body: any) {
     return json({ action_taken: "call_requested" });
   }
 
+  // ── Detectar placa de veículo → cotação automática via GIA ──
+  const placaMatch = user_message.match(/\b([A-Za-z]{3}[0-9][A-Za-z0-9][0-9]{2})\b/);
+  if (placaMatch) {
+    const placa = placaMatch[1].toUpperCase();
+    try {
+      const giaRes = await fetch("https://dxuoppekxgvdqnytftho.supabase.co/functions/v1/gia-sdr-api", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${Deno.env.get("GIA_API_KEY") || ""}`, "apikey": Deno.env.get("GIA_API_KEY") || "" },
+        body: JSON.stringify({
+          acao: "cotacao_completa",
+          placa,
+          nome: conv?.lead_name || "Lead",
+          telefone: phone_number,
+          consultor_nome: "Lucas SDR IA",
+          cooperativa: "Objetivo Auto Benefícios",
+        }),
+      });
+      if (giaRes.ok) {
+        const giaData = await giaRes.json();
+        if (giaData.sucesso && giaData.mensagem_whatsapp) {
+          // Salvar no histórico
+          await supabase.from("whatsapp_ai_messages").insert({
+            conversation_id: convId, role: "assistant", content: giaData.mensagem_whatsapp, message_type: "text",
+          });
+          await sendWhatsAppMessage(company_id, phone_number, giaData.mensagem_whatsapp);
+          // Atualizar lifecycle
+          await supabase.from("lead_whatsapp_lifecycle").update({
+            stage: "proposta_enviada", lead_interests: { placa, veiculo: giaData.veiculo || null, cotacao_id: giaData.cotacao_id || null },
+            updated_at: new Date().toISOString(),
+          }).eq("company_id", company_id).eq("phone_number", phone_number);
+          return json({ success: true, action_taken: "gia_cotacao", placa, cotacao_id: giaData.cotacao_id });
+        }
+      }
+    } catch { /* Se GIA falhar, segue com IA normal */ }
+  }
+
   // Buscar histórico da conversa
   const { data: history } = await supabase
     .from("whatsapp_ai_messages")
@@ -665,7 +701,13 @@ REGRAS:
 7. Se o lead pedir ligação, diga que vai providenciar
 8. Objetivo: avançar o lead no funil naturalmente, sem pressionar
 9. Não use markdown, asteriscos ou formatação — texto puro do WhatsApp
-10. Não use emojis em excesso (máximo 1 por mensagem)`;
+10. Não use emojis em excesso (máximo 1 por mensagem)
+
+COTAÇÃO AUTOMÁTICA:
+- Se o lead demonstrar interesse, peça a PLACA do veículo: "Me manda a placa do seu veículo que eu já te envio a cotação rapidinho"
+- Quando o lead enviar a placa, o sistema faz a cotação automaticamente (não precisa fazer nada)
+- Se o lead perguntar preço/valor, direcione pra placa: "O valor depende do veículo. Me passa a placa que eu faço a simulação na hora"
+- NUNCA invente valores. Sempre peça a placa primeiro`;
   }
 
   // Fallback genérico (sem company_config)

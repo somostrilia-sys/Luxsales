@@ -121,7 +121,24 @@ async function handleCallComplete(body: any) {
     call_uuid,
     transcript,
     interest_detected,
+    collaborator_id: body_collaborator_id,
   } = body;
+
+  // Se não veio collaborator_id, tentar resolver via phone no consultant_lead_pool
+  let collaborator_id = body_collaborator_id || null;
+  if (!collaborator_id && phone_number) {
+    const digits = phone_number.replace(/\D/g, "");
+    const { data: poolMatch } = await supabase
+      .from("consultant_lead_pool")
+      .select("collaborator_id")
+      .or(`phone_normalized.ilike.%${digits.slice(-10)}%`)
+      .not("collaborator_id", "is", null)
+      .order("last_call_at", { ascending: false, nullsFirst: false })
+      .limit(1);
+    if (poolMatch?.[0]?.collaborator_id) {
+      collaborator_id = poolMatch[0].collaborator_id;
+    }
+  }
 
   if (!phone_number) {
     return json({ error: "phone_number é obrigatório" }, 400);
@@ -177,6 +194,7 @@ async function handleCallComplete(body: any) {
     .from("calls")
     .insert({
       company_id,
+      collaborator_id,
       destination_number: normalized,
       lead_name: lead_name || null,
       direction: "outbound",
@@ -304,6 +322,24 @@ async function handleCallComplete(body: any) {
         .eq("id", updatedLead.id);
     }
     result.leads_master_updated = true;
+
+    // Sincronizar consultant_lead_pool com resultado da IA
+    const poolUpdate: Record<string, unknown> = {
+      last_call_at: new Date().toISOString(),
+    };
+    if (interest_detected) {
+      poolUpdate.interest_status = "interested";
+      poolUpdate.dispatch_available = true;
+    } else if (durationSecs >= 5) {
+      poolUpdate.interest_status = "not_interested_1";
+    }
+    if (summary) {
+      poolUpdate.lucas_summary = summary;
+    }
+    await supabase
+      .from("consultant_lead_pool")
+      .update(poolUpdate)
+      .eq("phone_normalized", normalized);
   }
 
   // ── Se não elegível E não autorizou WhatsApp → parar ──

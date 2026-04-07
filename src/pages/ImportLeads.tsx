@@ -80,8 +80,13 @@ function normalizePhone(raw: string): { normalized: string | null; wasFixed: boo
     normalized = "+55" + cleaned;
     wasFixed = true;
   } else if (cleaned.length === 10) {
-    normalized = "+55" + cleaned.slice(0, 2) + "9" + cleaned.slice(2);
-    wasFixed = true;
+    const firstDigit = cleaned[2];
+    // Só adiciona 9 se o número começa com 6,7,8,9 (celular sem nono dígito)
+    // Fixos começam com 2,3,4,5 — descarta
+    if ("6789".includes(firstDigit)) {
+      normalized = "+55" + cleaned.slice(0, 2) + "9" + cleaned.slice(2);
+      wasFixed = true;
+    }
   }
 
   // Validate: +55XX9XXXXXXXX = 14 chars, index 4 = '9' (celular)
