@@ -1296,7 +1296,7 @@ function TabLigacoes({
 // ═══════════════════════════════════════════════════════════════════════════════
 // ABA HISTÓRICO
 // ═══════════════════════════════════════════════════════════════════════════════
-function TabHistorico({ companyId }: { companyId: string | null | undefined }) {
+function TabHistorico({ companyId, collaboratorId, isCEO = false }: { companyId: string | null | undefined; collaboratorId: string; isCEO?: boolean }) {
   const [calls, setCalls] = useState<CallLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -1313,6 +1313,7 @@ function TabHistorico({ companyId }: { companyId: string | null | undefined }) {
         .order("started_at", { ascending: false })
         .limit(100);
       if (companyId) query = query.eq("company_id", companyId);
+      if (!isCEO && collaboratorId) query = query.eq("collaborator_id", collaboratorId);
       const { data, error } = await query;
 
       if (error) throw error;
@@ -1335,7 +1336,7 @@ function TabHistorico({ companyId }: { companyId: string | null | undefined }) {
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, collaboratorId, isCEO]);
 
   useEffect(() => { fetchCalls(); }, [fetchCalls]);
 
@@ -1527,7 +1528,7 @@ export default function Ligacoes() {
         </TabsContent>
 
         <TabsContent value="historico">
-          <TabHistorico companyId={companyId} />
+          <TabHistorico companyId={companyId} collaboratorId={collaboratorId} isCEO={isCEO} />
         </TabsContent>
       </Tabs>
     </DashboardLayout>
