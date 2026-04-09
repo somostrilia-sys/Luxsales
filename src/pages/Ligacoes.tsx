@@ -292,7 +292,7 @@ function TabLigacoes({
       // CEO sees all leads from the company; consultants see only their own
       let countQ = supabase.from("consultant_lead_pool").select("id, phone_normalized").in("interest_status", validStatuses);
       if (isCEO && companyId) countQ = countQ.eq("company_id", companyId);
-      if (!isCEO) countQ = countQ.eq("collaborator_id", collaboratorId);
+      if (!isCEO && collaboratorId) countQ = countQ.eq("collaborator_id", collaboratorId);
       const { data: allData } = await countQ;
       const invalidCount = (allData || []).filter(l => !l.phone_normalized).length;
       setInvalidPhoneCount(invalidCount);
@@ -304,7 +304,7 @@ function TabLigacoes({
         .in("interest_status", validStatuses)
         .limit(parseInt(batchSize));
       if (isCEO && companyId) query = query.eq("company_id", companyId);
-      if (!isCEO) query = query.eq("collaborator_id", collaboratorId);
+      if (!isCEO && collaboratorId) query = query.eq("collaborator_id", collaboratorId);
       const { data, error } = await query;
 
       if (error) throw error;
@@ -326,7 +326,7 @@ function TabLigacoes({
     } finally {
       setLoadingQueue(false);
     }
-  }, [collaboratorId, batchSize]);
+  }, [collaboratorId, batchSize, isCEO, companyId]);
 
   // Cleanup a single call's realtime subscription
   const cleanupCallRealtime = useCallback((uuid: string) => {
