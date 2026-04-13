@@ -82,6 +82,7 @@ const LeadsDiscador = lazy(() => import("./pages/LeadsDiscador"));
 const VoiceAI = lazy(() => import("./pages/VoiceAI"));
 const VoiceDialer = lazy(() => import("./pages/VoiceDialer"));
 const VoiceSimulate = lazy(() => import("./pages/VoiceSimulate"));
+const IvrStudio = lazy(() => import("./pages/IvrStudio"));
 const VoiceCalls = lazy(() => import("./pages/VoiceCalls"));
 const RelatoriosVoz = lazy(() => import("./pages/RelatoriosVoz"));
 const ComplianceVoz = lazy(() => import("./pages/ComplianceVoz"));
@@ -93,6 +94,7 @@ const MetaRules = lazy(() => import("./pages/MetaRules"));
 const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase"));
 const GestaoUsuarios = lazy(() => import("./pages/GestaoUsuarios"));
 const AceitarConvite = lazy(() => import("./pages/AceitarConvite"));
+const ConviteRedirect = lazy(() => import("./pages/ConviteRedirect"));
 const Ligacoes = lazy(() => import("./pages/Ligacoes"));
 const Disparos = lazy(() => import("./pages/Disparos"));
 const Historico = lazy(() => import("./pages/Historico"));
@@ -127,6 +129,7 @@ const App = () => (
           <Route path="/criar-conta" element={<CriarConta />} />
           <Route path="/venda" element={<Venda />} />
           <Route path="/convite/:token" element={<AceitarConvite />} />
+          <Route path="/c/:code" element={<ConviteRedirect />} />
           <Route path="/trocar-senha" element={<ProtectedRoute><TrocarSenha /></ProtectedRoute>} />
 
           {/* WB Core — CEO */}
@@ -172,6 +175,7 @@ const App = () => (
           <Route path="/meta-rules" element={<ProtectedRoute minLevel={0}><MetaRules /></ProtectedRoute>} />
           <Route path="/voice/dialer" element={<Navigate to="/ligacoes" replace />} />
           <Route path="/voice/simulate" element={<ProtectedRoute minLevel={0}><VoiceSimulate /></ProtectedRoute>} />
+          <Route path="/voice/ivr-studio" element={<ProtectedRoute minLevel={0}><IvrStudio /></ProtectedRoute>} />
           <Route path="/voice/calls" element={<ProtectedRoute minLevel={0}><VoiceCalls /></ProtectedRoute>} />
 
           {/* Plataforma — CEO grupo only */}
