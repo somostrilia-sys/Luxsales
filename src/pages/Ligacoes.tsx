@@ -771,18 +771,31 @@ function TabLigacoes({
       })
       .eq("id", currentLead.id);
 
-    // Register call_log for answered calls
-    if (result !== "no_answer") {
-      supabase.from("call_logs").insert({
-        collaborator_id: collaboratorId,
-        lead_name: currentLead.lead_name,
-        lead_phone: displayPhone(currentLead),
-        pool_id: currentLead.id,
-        transcript: "[ligação registrada via discador]",
-        interest_detected: result === "interested",
-        duration_sec: duration,
-        started_at: startedAt,
-      }).then(() => {}).catch(() => {});
+    // Register call_log for EVERY call (answered or not) so the history is complete
+    const callLogStatus =
+      result === "no_answer" ? "no_answer" : "answered";
+    const callLogPayload = {
+      company_id: companyId ?? null,
+      collaborator_id: collaboratorId,
+      lead_name: currentLead.lead_name,
+      lead_phone: displayPhone(currentLead),
+      pool_id: currentLead.id,
+      transcript:
+        result === "no_answer"
+          ? "[ligação não atendida]"
+          : "[ligação registrada via discador]",
+      interest_detected: result === "interested",
+      duration_sec: duration,
+      started_at: startedAt,
+      status: callLogStatus,
+      result,
+    };
+    const { error: callLogErr } = await supabase
+      .from("call_logs")
+      .insert(callLogPayload);
+    if (callLogErr) {
+      console.error("[Ligacoes] Falha ao gravar call_log:", callLogErr, callLogPayload);
+      toast.error("Não foi possível registrar a ligação no histórico.");
     }
 
     // Update queue: remove current (queue[0]) and optionally push back to end

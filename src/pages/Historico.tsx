@@ -326,16 +326,19 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
       console.error("Error fetching calls:", err);
     }
 
-    // Fetch VoIP calls from `calls` table
+    // Fetch VoIP calls from `calls` table (complementary list, does NOT replace call_logs)
     try {
       let vq = supabase.from("calls")
         .select("id, destination_number, lead_name, status, duration_seconds, talk_time_seconds, transcript, ai_summary, sentiment, interest_detected, started_at, ended_at, hangup_cause, company_id")
         .order("started_at", { ascending: false })
         .limit(100);
-      if (companyId) vq = vq.eq("company_id", companyId);
+      if (companyId && companyId !== "all") vq = vq.eq("company_id", companyId);
       const { data: vData, error: vErr } = await vq;
-      if (!vErr && vData) setVoipCalls(vData);
-      setCalls([]);
+      if (vErr) {
+        console.error("Error fetching VoIP calls:", vErr);
+      } else if (vData) {
+        setVoipCalls(vData);
+      }
     } finally {
       setLoading(false);
     }
