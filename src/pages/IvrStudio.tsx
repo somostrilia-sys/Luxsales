@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/lib/supabase";
 import { EDGE_BASE } from "@/lib/constants";
 import { toast } from "sonner";
-import { Loader2, Play, MessageSquare, Volume2, Zap, GitBranch, Tag, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, Play, MessageSquare, Volume2, Zap, GitBranch, Tag, CheckCircle2, AlertCircle, PhoneCall } from "lucide-react";
 
 type IvrScript = {
   id: string;
@@ -53,6 +53,11 @@ export default function IvrStudio() {
   const [testTranscript, setTestTranscript] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
+
+  // IVR dial tester
+  const [dialPhone, setDialPhone] = useState("");
+  const [dialing, setDialing] = useState(false);
+  const [dialResult, setDialResult] = useState<{ room?: string; call_id?: string | null; error?: string } | null>(null);
 
   // Load dimensions
   useEffect(() => {
@@ -152,6 +157,36 @@ export default function IvrStudio() {
       toast.error("Erro: " + err.message);
     }
     setTesting(false);
+  }
+
+  async function dialIvr() {
+    const digits = dialPhone.replace(/\D/g, "");
+    if (digits.length < 10) {
+      toast.error("Número inválido");
+      return;
+    }
+    setDialing(true);
+    setDialResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("make-call", {
+        body: {
+          action: "dial",
+          route: "ivr",
+          to: dialPhone,
+          company_id: selectedCompany,
+          voice_profile_id: selectedVoice,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.detail || data.error);
+      setDialResult({ room: data.room, call_id: data.call_id });
+      toast.success(`Ligação IVR iniciada — sala ${data.room}`);
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      setDialResult({ error: msg });
+      toast.error("Falha: " + msg);
+    }
+    setDialing(false);
   }
 
   return (
@@ -282,6 +317,47 @@ export default function IvrStudio() {
 
           {/* Right: Details + classifier tester */}
           <div className="space-y-4">
+            {/* IVR dial tester */}
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <PhoneCall className="h-4 w-4 text-primary" />
+                  Testar ligação IVR
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="+5531987654321"
+                    value={dialPhone}
+                    onChange={e => setDialPhone(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && dialIvr()}
+                    disabled={dialing || !selectedCompany || !selectedVoice}
+                  />
+                  <Button onClick={dialIvr} disabled={dialing || !dialPhone.trim() || !selectedCompany || !selectedVoice}>
+                    {dialing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Discar"}
+                  </Button>
+                </div>
+                {dialResult?.room && (
+                  <div className="rounded-md px-3 py-2 text-xs border bg-green-500/10 border-green-500/30 text-green-200">
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      sala <strong className="font-mono">{dialResult.room}</strong>
+                      {dialResult.call_id && <> · call_id <span className="font-mono">{dialResult.call_id}</span></>}
+                    </span>
+                  </div>
+                )}
+                {dialResult?.error && (
+                  <div className="rounded-md px-3 py-2 text-xs border bg-red-500/10 border-red-500/30 text-red-200">
+                    <span className="flex items-center gap-1.5">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      {dialResult.error}
+                    </span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Classifier tester */}
             <Card className="border-primary/20 bg-primary/5">
               <CardHeader className="pb-2">

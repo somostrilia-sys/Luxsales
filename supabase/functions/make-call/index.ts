@@ -46,6 +46,7 @@ serve(async (req) => {
     const campaignId = body.campaign_id || null;
     const leadId = body.lead_id || null;
     const consultorId = body.consultor_id || body.consultant_id || null;
+    const route = body.route === "ivr" ? "ivr" : null;
     let voiceProfileId = body.voice_profile_id || null;
     let voiceId = body.voice_id || null;
     let voiceName = body.voice_name || null;
@@ -120,6 +121,8 @@ serve(async (req) => {
           voice_id: voiceId,
           agent_name: sellerName,
           consultor_id: consultorId,
+          voice_profile_id: voiceProfileId,
+          ...(route ? { route } : {}),
         }),
       });
     } catch (err) {
