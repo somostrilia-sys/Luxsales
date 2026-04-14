@@ -1,7 +1,8 @@
 import {
   LayoutDashboard, Phone, MessageSquare, LogOut, Settings,
   FileText, Send, UserCog, Users, ShieldCheck, Sparkles, Brain,
-  ClipboardList, PhoneCall, Upload, Loader2, Mic, FlaskConical, History, Users2, BarChart2,
+  ClipboardList, PhoneCall, Upload, Loader2, Mic, FlaskConical, History, Users2, BarChart2, GitBranch, Library,
+  Building2, Rocket,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -9,6 +10,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,7 +39,7 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
     label: "Leads",
     items: [
       { title: "Leads Master", url: "/leads", icon: Users, levels: [0] },
-      { title: "Importar", url: "/import", icon: Upload, levels: [0] },
+      { title: "Importar", url: "/import", icon: Upload, levels: [0, 1, 2, 3] },
       { title: "Meus Leads", url: "/my-leads", icon: ClipboardList, levels: [1, 2, 3] },
     ],
   },
@@ -46,6 +48,8 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
     items: [
       { title: "Ligações", url: "/ligacoes", icon: Phone, levels: [0, 1, 2, 3] },
       { title: "Simulação", url: "/voice/simulate", icon: FlaskConical, levels: [0] },
+      { title: "IVR Studio", url: "/voice/ivr-studio", icon: GitBranch, levels: [0] },
+      { title: "Biblioteca de Vozes", url: "/voice/library", icon: Library, levels: [0] },
     ],
   },
   {
@@ -70,7 +74,15 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
       { title: "Base de Conhecimento", url: "/knowledge-base", icon: Brain, levels: [0] },
       { title: "Opt-ins", url: "/opt-ins", icon: ShieldCheck, levels: [0] },
       { title: "WhatsApp Empresas", url: "/config-whatsapp", icon: MessageSquare, levels: [0] },
-      { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0, 1, 2, 3] },
+      { title: "Configurações", url: "/configuracoes", icon: Settings, levels: [0] },
+    ],
+  },
+  {
+    label: "Plataforma",
+    ceoOnly: true,
+    items: [
+      { title: "Organizações", url: "/organizations", icon: Building2, levels: [0] },
+      { title: "Onboarding", url: "/onboarding", icon: Rocket, levels: [0] },
     ],
   },
 ];
@@ -79,6 +91,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const { collaborator, roleLevel } = useCollaborator();
+  const { isGroupOwner } = useOrganization();
   const { signOut } = useAuth();
   const { unreadCount, resetUnread } = useRealtimeMessages();
   const { callsToday } = useCallsToday();
@@ -167,6 +180,8 @@ export function AppSidebar() {
         </div>
 
         {sections.map((section) => {
+          // Seção "Plataforma" só aparece para CEO de org interna (grupo)
+          if (section.ceoOnly && !isGroupOwner) return null;
           const visible = filterByLevel(section.items);
           if (visible.length === 0) return null;
           return (

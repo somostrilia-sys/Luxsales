@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 
 import { resolveCompanyRequired } from "@/lib/companyFilter";
+import { VoiceSelector, type VoiceProfile } from "@/components/VoiceSelector";
+import { VoiceGallery } from "@/components/VoiceGallery";
+import { Label } from "@/components/ui/label";
 
 interface TranscriptTurn {
   role: "user" | "assistant";
@@ -56,6 +59,8 @@ export default function VoiceSimulate() {
 
   // Pipeline
   const [pipelineOnline, setPipelineOnline] = useState<boolean | null>(null);
+  const [selectedVoice, setSelectedVoice] = useState<VoiceProfile | null>(null);
+  const [route, setRoute] = useState<"ivr" | "default">("ivr");
 
   // Live transcript (from Supabase Realtime)
   const [liveTurns, setLiveTurns] = useState<TranscriptTurn[]>([]);
@@ -84,14 +89,22 @@ export default function VoiceSimulate() {
     return () => clearInterval(interval);
   }, []);
 
-  // ── Health check ──
+  // ── Health check (LiveKit via make-call pipeline-status) ──
   const checkHealth = useCallback(async () => {
     try {
-      const res = await fetch(`${EDGE_BASE}/orchestrator-proxy?path=${encodeURIComponent("/health")}`, {
-        headers: proxyHeaders,
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${EDGE_BASE}/make-call`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ action: "pipeline-status" }),
         signal: AbortSignal.timeout(5000),
       });
-      setPipelineOnline(res.ok);
+      const data = await res.json().catch(() => null);
+      setPipelineOnline(res.ok && (data?.status === "online" || data?.ok === true));
     } catch {
       setPipelineOnline(false);
     }
@@ -160,10 +173,15 @@ export default function VoiceSimulate() {
   const endVoipCall = useCallback(async (reason?: string) => {
     if (voipCallUuidRef.current) {
       try {
-        await fetch(`${EDGE_BASE}/orchestrator-proxy`, {
+        const { data: { session } } = await supabase.auth.getSession();
+        await fetch(`${EDGE_BASE}/make-call`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...proxyHeaders },
-          body: JSON.stringify({ _path: "/hangup", uuid: voipCallUuidRef.current }),
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
+            apikey: SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ action: "hangup", room: voipCallUuidRef.current }),
           signal: AbortSignal.timeout(5000),
         });
       } catch {}
@@ -191,26 +209,31 @@ export default function VoiceSimulate() {
     addSystem("📞 Originando chamada via pipeline VoIP...");
 
     try {
-      const res = await fetch(`${EDGE_BASE}/orchestrator-proxy`, {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${EDGE_BASE}/make-call`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...proxyHeaders },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
+          apikey: SUPABASE_ANON_KEY,
+        },
         body: JSON.stringify({
-          _path: "/call",
+          action: "dial",
           to: phoneNumber.replace(/\D/g, ""),
           company_id: companyId,
+          voice_profile_id: selectedVoice?.id ?? null,
+          voice_id: selectedVoice?.voice_id ?? null,
+          route,
         }),
         signal: AbortSignal.timeout(20000),
       });
 
       const data = await res.json();
-      if (data.success && data.uuid) {
-        voipCallUuidRef.current = data.uuid;
-        addSystem(`✅ Chamada originada: ${data.destination}`);
-
-        // Subscribe to real-time transcript updates
-        subscribeToCall(data.uuid);
-
-        // Status tracking via Supabase Realtime (no polling needed)
+      const callUuid = data.room || data.uuid || data.participant_id;
+      if (data.success && callUuid) {
+        voipCallUuidRef.current = callUuid;
+        addSystem(`✅ Chamada originada → ${data.phone_number || phoneNumber} (${route === "ivr" ? "IVR v3" : "LLM livre"})`);
+        subscribeToCall(callUuid);
         voipPollRef.current = null;
       } else {
         addSystem(`❌ Erro: ${data.error || "Falha ao originar"}`);
@@ -220,7 +243,7 @@ export default function VoiceSimulate() {
       addSystem(`❌ Pipeline indisponível: ${err.message}`);
       endVoipCall("Pipeline offline");
     }
-  }, [phoneNumber, companyId, addSystem, endVoipCall, subscribeToCall]);
+  }, [phoneNumber, companyId, selectedVoice, route, addSystem, endVoipCall, subscribeToCall]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -327,6 +350,40 @@ export default function VoiceSimulate() {
                   placeholder="(31) 99744-1277"
                   disabled={inCall}
                 />
+
+                <VoiceSelector
+                  value={selectedVoice?.id ?? null}
+                  onChange={setSelectedVoice}
+                  companyId={companyId}
+                  provider={route === "ivr" ? "elevenlabs" : "cartesia"}
+                />
+
+                <div>
+                  <Label className="text-xs">Fluxo</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={route === "ivr" ? "default" : "outline"}
+                      className="flex-1"
+                      disabled={inCall}
+                      onClick={() => setRoute("ivr")}
+                    >
+                      IVR v3
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={route === "default" ? "default" : "outline"}
+                      className="flex-1"
+                      disabled={inCall}
+                      onClick={() => setRoute("default")}
+                    >
+                      LLM livre
+                    </Button>
+                  </div>
+                </div>
+
                 {!inCall ? (
                   <Button
                     className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"

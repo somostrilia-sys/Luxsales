@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { Loader2, ShieldAlert } from "lucide-react";
@@ -13,6 +13,7 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, minLevel }: ProtectedRouteProps) {
   const { user, loading: authLoading, signOut } = useAuth();
   const { collaborator, loading: collabLoading, error, roleLevel } = useCollaborator();
+  const location = useLocation();
 
   if (authLoading || collabLoading) {
     return (
@@ -41,6 +42,11 @@ export function ProtectedRoute({ children, minLevel }: ProtectedRouteProps) {
         </Card>
       </div>
     );
+  }
+
+  // Force password change on first login
+  if (collaborator.must_change_password && location.pathname !== "/trocar-senha") {
+    return <Navigate to="/trocar-senha" replace />;
   }
 
   if (minLevel !== undefined && roleLevel > minLevel) {

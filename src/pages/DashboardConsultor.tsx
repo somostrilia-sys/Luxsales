@@ -152,6 +152,7 @@ export default function DashboardConsultor() {
     setAllLoading(true);
 
     const periodStart = getPeriodStart(period);
+    const today = getPeriodStart("today");
     const month = monthStart();
 
     await Promise.all([
@@ -278,6 +279,7 @@ export default function DashboardConsultor() {
             .from("leads_master")
             .select("id", { count: "exact", head: true })
             .eq("company_id", company_id)
+            .eq("assigned_to", collaboratorId)
             .eq("status", "converted")
             .gte("updated_at", month);
           if (isIndividual && collaboratorId) convQ = convQ.eq("collaborator_id", collaboratorId);

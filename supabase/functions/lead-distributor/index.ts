@@ -404,10 +404,10 @@ async function listMaster(body: any) {
  * Importar leads em lote no leads_master
  */
 async function importLeads(body: any) {
-  const { company_id, requester_role, leads, source = "import", source_detail, segment } = body;
+  const { company_id, requester_role, leads, source = "import", source_detail, segment, collaborator_id } = body;
 
-  if (requester_role !== "ceo") {
-    return json({ error: "Apenas o CEO pode importar leads" }, 403);
+  if (!["ceo", "director", "manager", "collaborator"].includes(requester_role)) {
+    return json({ error: "Sem permissão para importar leads" }, 403);
   }
 
   if (!leads?.length) {
@@ -464,6 +464,7 @@ async function importLeads(body: any) {
           priority: lead.priority || 5,
           import_batch_id: batch.id,
           status: "new",
+          ...(collaborator_id ? { assigned_to: collaborator_id } : {}),
         };
       })
       .filter(Boolean);
@@ -481,6 +482,31 @@ async function importLeads(body: any) {
       const insertedCount = inserted?.length || 0;
       results.imported += insertedCount;
       results.duplicates += rows.length - insertedCount;
+
+      // Se importado por consultor, adicionar ao pool pessoal
+      if (collaborator_id && inserted?.length) {
+        const poolRows = inserted.map((ins: any, idx: number) => {
+          const row = rows[idx];
+          return {
+            collaborator_id,
+            company_id,
+            lead_id: ins.id,
+            phone: row.phone_number,
+            phone_normalized: row.phone_number,
+            lead_name: row.lead_name || null,
+            lead_city: row.city || null,
+            lead_category: row.segment || null,
+            lead_ddd: row.phone_number?.slice(3, 5) || null,
+            status: "new",
+            campaign_tag: source,
+            priority: row.priority || 5,
+            assigned_at: new Date().toISOString(),
+            interest_status: "unknown",
+            dispatch_available: true,
+          };
+        });
+        await supabase.from("consultant_lead_pool").insert(poolRows).then(() => {}).catch(() => {});
+      }
     }
   }
 

@@ -94,6 +94,19 @@ async function sendTemplate(body: any) {
     }, 503);
   }
 
+  // ── VERIFICAÇÃO 3.5: Rate limit Meta (tier diário) ──
+  const { data: rateCheck } = await supabase.rpc("fn_check_rate_limit", {
+    p_company_id: company_id,
+  });
+  if (rateCheck?.[0] && !rateCheck[0].allowed) {
+    return json({
+      error: rateCheck[0].reason,
+      code: "RATE_LIMIT",
+      daily_sent: rateCheck[0].daily_sent,
+      daily_limit: rateCheck[0].daily_limit,
+    }, 429);
+  }
+
   // ── VERIFICAÇÃO 4: Template existe e está aprovado ──
   const template = await getApprovedTemplate(company_id, template_name);
   if (!template) {

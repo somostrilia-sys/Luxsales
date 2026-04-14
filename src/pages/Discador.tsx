@@ -175,6 +175,7 @@ export default function Discador() {
     try {
       await supabase.from("call_logs").insert({
         company_id: companyId,
+        collaborator_id: collaborator?.id ?? null,
         lead_phone: selectedLead.lead?.phone_number ?? null,
         lead_name: selectedLead.lead?.lead_name ?? null,
         lead_temperature: selectedLead.lead?.lead_temperature ?? null,

@@ -330,7 +330,7 @@ export default function Disparos() {
   };
 
   // ── Dispatch single lead ──
-  const handleDispatch = async (lead: EligibleLead, mode: "lucas" | "manual") => {
+  const handleDispatch = async (lead: EligibleLead, mode: "lucas" | "cleo" | "manual") => {
     if (!selectedTemplate) {
       toast.error("Selecione um template antes de disparar");
       return;
@@ -354,8 +354,9 @@ export default function Disparos() {
           collaborator_id: collaborator.id,
           phone_number: displayPhone(lead),
           template_name: selectedTemplate,
-          dispatch_reason: mode === "lucas" ? "lucas_ia" : "manual",
-          use_lucas: mode === "lucas",
+          dispatch_reason: mode === "manual" ? "manual" : `${mode}_ia`,
+          use_lucas: mode !== "manual",
+          ai_voice: mode !== "manual" ? mode : undefined,
         }),
       });
 
@@ -363,8 +364,8 @@ export default function Disparos() {
 
       if (res.ok && result.success) {
         toast.success(
-          mode === "lucas"
-            ? "🤖 Lucas assumiu a conversa!"
+          mode === "lucas" ? "🤖 Lucas assumiu a conversa!"
+            : mode === "cleo" ? "🤖 Cléo assumiu a conversa!"
             : "✅ Template enviado com sucesso!"
         );
 
@@ -419,7 +420,7 @@ export default function Disparos() {
   };
 
   // ── Bulk dispatch ──
-  const handleBulkDispatch = async (mode: "lucas" | "manual") => {
+  const handleBulkDispatch = async (mode: "lucas" | "cleo" | "manual") => {
     if (!selectedTemplate) {
       toast.error("Selecione um template antes de disparar em massa");
       return;
@@ -451,8 +452,9 @@ export default function Disparos() {
             collaborator_id: collaborator!.id,
             phone_number: displayPhone(lead),
             template_name: selectedTemplate,
-            dispatch_reason: mode === "lucas" ? "lucas_ia" : "manual",
-            use_lucas: mode === "lucas",
+            dispatch_reason: mode === "manual" ? "manual" : `${mode}_ia`,
+            use_lucas: mode !== "manual",
+            ai_voice: mode !== "manual" ? mode : undefined,
           }),
         });
         const result = await res.json();
@@ -583,7 +585,16 @@ export default function Disparos() {
                 onClick={() => handleBulkDispatch("lucas")}
               >
                 {dispatchingBulk ? <Loader2 className="h-3 w-3 animate-spin" /> : <Bot className="h-3 w-3" />}
-                Disparar em Massa (Lucas)
+                Massa (Lucas)
+              </Button>
+              <Button
+                size="sm"
+                className="h-7 text-xs gap-1.5 bg-purple-600 hover:bg-purple-700"
+                disabled={dispatchingBulk || !selectedTemplate || (limitInfo?.dispatches_available ?? 1) <= 0}
+                onClick={() => handleBulkDispatch("cleo")}
+              >
+                <Bot className="h-3 w-3" />
+                Massa (Cléo)
               </Button>
               <Button
                 size="sm"
@@ -593,7 +604,7 @@ export default function Disparos() {
                 onClick={() => handleBulkDispatch("manual")}
               >
                 <Hand className="h-3 w-3" />
-                Em Massa (Manual)
+                Massa (Sem IA)
               </Button>
             </div>
           )}
@@ -693,6 +704,20 @@ export default function Disparos() {
                   </Button>
                   <Button
                     size="sm"
+                    className="flex-1 gap-1.5 text-xs bg-purple-600 hover:bg-purple-700"
+                    disabled={
+                      dispatchingId === lead.id ||
+                      dispatchingBulk ||
+                      !selectedTemplate ||
+                      (limitInfo?.dispatches_available ?? 1) <= 0
+                    }
+                    onClick={() => handleDispatch(lead, "cleo")}
+                  >
+                    <Bot className="h-3 w-3" />
+                    Com Cléo
+                  </Button>
+                  <Button
+                    size="sm"
                     variant="outline"
                     className="flex-1 gap-1.5 text-xs"
                     disabled={
@@ -704,7 +729,7 @@ export default function Disparos() {
                     onClick={() => handleDispatch(lead, "manual")}
                   >
                     <Hand className="h-3 w-3" />
-                    Manual
+                    Sem IA
                   </Button>
                 </div>
 

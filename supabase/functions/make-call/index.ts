@@ -1,7 +1,7 @@
 /**
  * make-call
- * Inicia uma ligação telefônica via VAPI AI
- * Actions: dial, test-voice, status, hangup
+ * Inicia uma ligação telefônica via LiveKit Voice Agent (self-hosted)
+ * Actions: dial, status, hangup
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -12,21 +12,14 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// LiveKit Call API via tunnel (PC Gamer → VPS → edge function)
+const CALL_API_URL = Deno.env.get("LIVEKIT_CALL_API_URL") || "http://localhost:3003";
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-}
-
-async function getConfigs(supabase: any, keys: string[]): Promise<Record<string, string>> {
-  const { data } = await supabase
-    .from("system_configs")
-    .select("key, value")
-    .in("key", keys);
-  const cfg: Record<string, string> = {};
-  (data || []).forEach((c: any) => { cfg[c.key] = c.value; });
-  return cfg;
 }
 
 serve(async (req) => {
@@ -43,156 +36,134 @@ serve(async (req) => {
   const action = body.action;
 
   if (!action) {
-    return jsonResponse({ error: "action required: dial, test-voice, status, hangup" }, 400);
+    return jsonResponse({ error: "action required: dial, status, hangup" }, 400);
   }
 
-  // ── TEST-VOICE: gera áudio TTS com Fish Audio ─────────────────────────
-  if (action === "test-voice") {
-    const voiceKey = body.voice_key || "fish-alex";
-    const text = body.text || body.script || "Boa tarde! Meu nome é Lucas e estou entrando em contato para falar sobre proteção veicular.";
-
-    const cfg = await getConfigs(supabase, ["fish_audio_api_key"]);
-
-    const { data: voice } = await supabase
-      .from("voice_profiles")
-      .select("voice_id")
-      .eq("voice_key", voiceKey)
-      .eq("active", true)
-      .maybeSingle();
-
-    const fishKey = cfg["fish_audio_api_key"];
-    const voiceId = voice?.voice_id;
-
-    if (!fishKey || !voiceId) {
-      return jsonResponse({ error: "Voice not configured" }, 500);
-    }
-
-    const ttsRes = await fetch("https://api.fish.audio/v1/tts", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${fishKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        text: text.slice(0, 1000),
-        reference_id: voiceId,
-        format: "mp3",
-        mp3_bitrate: 128,
-        latency: "normal",
-      }),
-    });
-
-    if (!ttsRes.ok) {
-      const err = await ttsRes.text();
-      return jsonResponse({ error: `TTS failed: ${err}` }, 502);
-    }
-
-    const audioData = await ttsRes.arrayBuffer();
-    const base64 = btoa(new Uint8Array(audioData).reduce((d, b) => d + String.fromCharCode(b), ""));
-
-    return jsonResponse({ audio: base64, format: "mp3", voice: voiceKey, text });
-  }
-
-  // ── DIAL: inicia uma ligação real via VAPI ─────────────────────────────
+  // ── DIAL: inicia uma ligação via LiveKit ─────────────────────────────
   if (action === "dial") {
     const toNumber = body.to || body.phone_number;
-    const voiceKey = body.voice_key || "fish-alex";
-    const openingScript = body.opening_script || null;
-    const systemPrompt = body.system_prompt || null;
     const companyId = body.company_id || null;
     const campaignId = body.campaign_id || null;
+    const leadId = body.lead_id || null;
+    const consultorId = body.consultor_id || body.consultant_id || null;
+    const route = body.route === "ivr" ? "ivr" : null;
+    let voiceProfileId = body.voice_profile_id || null;
+    let voiceId = body.voice_id || null;
+    let voiceName = body.voice_name || null;
 
     if (!toNumber) {
-      return jsonResponse({ error: "to (phone number in E.164 format) is required" }, 400);
+      return jsonResponse({ error: "to (phone number) is required" }, 400);
     }
+
+    // Buscar voice profile pra pegar gender (pra definir nome do vendedor)
+    let voiceGender: string | null = null;
+
+    if (voiceProfileId && !voiceId) {
+      const { data: vp } = await supabase
+        .from("voice_profiles")
+        .select("voice_id, voice_name, provider, gender")
+        .eq("id", voiceProfileId)
+        .eq("active", true)
+        .maybeSingle();
+      if (vp) {
+        voiceId = vp.voice_id;
+        voiceName = vp.voice_name;
+        voiceGender = vp.gender;
+      }
+    }
+
+    // Se passou voice_id direto, buscar gender tambem
+    if (voiceId && !voiceGender) {
+      const { data: vp } = await supabase
+        .from("voice_profiles")
+        .select("gender")
+        .eq("voice_id", voiceId)
+        .eq("active", true)
+        .maybeSingle();
+      if (vp) voiceGender = vp.gender;
+    }
+
+    // Se voice_profile escolhido for ElevenLabs (rota IVR), o voice_id que vai
+    // pra LiveKit Call API deve ser o Cartesia equivalente (fallback quando LLM-livre).
+    // O voice_profile_id sozinho resolve o mp3 cacheado IVR; voice_id Cartesia é pro fallback Cartesia HTTP.
+    if (voiceProfileId) {
+      const { data: chosen } = await supabase
+        .from("voice_profiles")
+        .select("provider, gender")
+        .eq("id", voiceProfileId)
+        .maybeSingle();
+      if (chosen?.provider === "elevenlabs") {
+        const cartKey = chosen.gender === "female" ? "cart-rayanne-v3" : "cart-alex-walk-v2";
+        const { data: cart } = await supabase
+          .from("voice_profiles")
+          .select("voice_id, gender")
+          .eq("voice_key", cartKey)
+          .eq("active", true)
+          .maybeSingle();
+        if (cart?.voice_id) {
+          voiceId = cart.voice_id;
+          if (!voiceGender) voiceGender = cart.gender;
+        }
+      }
+    }
+
+    // Fallback: voz default global (qualquer provider)
+    if (!voiceId) {
+      const { data: defaultVoice } = await supabase
+        .from("voice_profiles")
+        .select("voice_id, voice_name, gender")
+        .eq("active", true)
+        .eq("is_default", true)
+        .maybeSingle();
+      if (defaultVoice) {
+        voiceId = defaultVoice.voice_id;
+        voiceName = defaultVoice.voice_name;
+        voiceGender = defaultVoice.gender;
+      }
+    }
+
+    // Nome do vendedor: usa voice_name do perfil, senão fallback por gender
+    const sellerName = voiceName || (voiceGender === "female" ? "Cléo" : "Lucas");
 
     // Normalizar número para E.164
     let e164 = toNumber.replace(/\D/g, "");
-    if (!e164.startsWith("+")) {
-      if (e164.length === 11) e164 = "+55" + e164;
-      else if (e164.length === 13 && e164.startsWith("55")) e164 = "+" + e164;
-      else e164 = "+" + e164;
-    } else {
-      e164 = toNumber;
-    }
+    if (e164.length === 11) e164 = "+55" + e164;
+    else if (e164.length === 13 && e164.startsWith("55")) e164 = "+" + e164;
+    else if (!e164.startsWith("+")) e164 = "+" + e164;
+    else e164 = toNumber;
 
-    // Buscar configs do VAPI
-    const cfg = await getConfigs(supabase, [
-      "vapi_api_key",
-      "vapi_assistant_id",
-      "vapi_phone_number_id",
-      "fish_audio_api_key",
-      "fish_audio_model_alex",
-    ]);
-
-    const vapiKey = cfg["vapi_api_key"];
-    const assistantId = cfg["vapi_assistant_id"];
-    const phoneNumberId = cfg["vapi_phone_number_id"];
-
-    if (!vapiKey || !assistantId || !phoneNumberId) {
+    // Chamar LiveKit Call API com voice_id + seller_name (Lucas masculino / Luana feminino)
+    let callRes;
+    try {
+      callRes = await fetch(`${CALL_API_URL}/call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: e164,
+          company_id: companyId,
+          lead_id: leadId,
+          voice_id: voiceId,
+          agent_name: sellerName,
+          consultor_id: consultorId,
+          voice_profile_id: voiceProfileId,
+          ...(route ? { route } : {}),
+        }),
+      });
+    } catch (err) {
       return jsonResponse({
-        error: "VAPI não configurado",
-        detail: "Configure vapi_api_key, vapi_assistant_id e vapi_phone_number_id em system_configs",
-        missing: [
-          ...(!vapiKey ? ["vapi_api_key"] : []),
-          ...(!assistantId ? ["vapi_assistant_id"] : []),
-          ...(!phoneNumberId ? ["vapi_phone_number_id"] : []),
-        ],
-      }, 400);
-    }
-
-    // Montar payload VAPI com assistant inline (garante que overrides são aplicados)
-    const defaultPrompt = "Você é um vendedor IA brasileiro. Fale em português brasileiro natural. Respostas curtas de 2-4 frases.";
-    const vapiPayload: any = {
-      phoneNumberId,
-      customer: { number: e164 },
-      assistant: {
-        name: "Lucas - Vendedor IA",
-        firstMessage: openingScript || "Boa tarde! Meu nome é Lucas. Posso falar rapidamente?",
-        model: {
-          provider: "groq",
-          model: "llama-3.3-70b-versatile",
-          temperature: 0.7,
-          messages: [{ role: "system", content: systemPrompt || defaultPrompt }],
-        },
-        voice: {
-          provider: "custom-voice",
-          server: {
-            url: Deno.env.get("SUPABASE_URL") + "/functions/v1/vapi-tts-webhook",
-          },
-        },
-        transcriber: {
-          provider: "deepgram",
-          model: "nova-3",
-          language: "pt-BR",
-        },
-        silenceTimeoutSeconds: 30,
-        maxDurationSeconds: 300,
-        endCallMessage: "Muito obrigado pelo seu tempo! Tenha um ótimo dia!",
-      },
-    };
-
-    // Chamar VAPI
-    const vapiRes = await fetch("https://api.vapi.ai/call", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${vapiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(vapiPayload),
-    });
-
-    const vapiData = await vapiRes.json().catch(() => null);
-
-    if (!vapiRes.ok) {
-      return jsonResponse({
-        error: "VAPI call failed",
-        detail: vapiData?.message || vapiData?.error || `HTTP ${vapiRes.status}`,
-        vapi_response: vapiData,
+        error: "LiveKit Call API unreachable",
+        detail: String(err),
       }, 502);
     }
 
-    const vapiCallId = vapiData?.id || vapiData?.callId || null;
+    const callData = await callRes.json().catch(() => null);
+
+    if (!callRes.ok || !callData?.success) {
+      return jsonResponse({
+        error: "Call failed",
+        detail: callData?.error || `HTTP ${callRes.status}`,
+      }, 502);
+    }
 
     // Registrar chamada no banco
     const { data: call, error: callErr } = await supabase
@@ -200,20 +171,22 @@ serve(async (req) => {
       .insert({
         company_id: companyId,
         campaign_id: campaignId,
+        lead_id: leadId,
+        collaborator_id: consultorId,
         destination_number: e164,
         direction: "outbound",
         status: "initiated",
-        vapi_call_id: vapiCallId,
+        livekit_room: callData.room,
+        livekit_participant_id: callData.uuid,
       })
       .select()
       .single();
 
     if (callErr) {
-      // Chamada VAPI já foi feita, mas erro ao salvar — retornar mesmo assim
       return jsonResponse({
         success: true,
         call_id: null,
-        vapi_call_id: vapiCallId,
+        room: callData.room,
         warning: `Call started but DB save failed: ${callErr.message}`,
       });
     }
@@ -221,52 +194,40 @@ serve(async (req) => {
     return jsonResponse({
       success: true,
       call_id: call.id,
-      vapi_call_id: vapiCallId,
+      room: callData.room,
+      participant_id: callData.uuid,
       status: "initiated",
       phone_number: e164,
-      voice: voiceKey,
     });
+  }
+
+  // ── CALL-STATUS: consulta status direto via LiveKit Call API ──────────
+  if (action === "call-status") {
+    const room = body.room;
+    if (!room) {
+      return jsonResponse({ error: "room required" }, 400);
+    }
+    try {
+      const r = await fetch(`${CALL_API_URL}/call-status?room=${encodeURIComponent(room)}`, {
+        method: "GET",
+      });
+      if (r.ok) {
+        const d = await r.json();
+        return jsonResponse(d);
+      }
+      return jsonResponse({ active: false });
+    } catch (_) {
+      return jsonResponse({ active: false });
+    }
   }
 
   // ── STATUS: consulta status de uma chamada ─────────────────────────────
   if (action === "status") {
     const callId = body.call_id;
-    const vapiCallId = body.vapi_call_id;
-
-    if (!callId && !vapiCallId) {
-      return jsonResponse({ error: "call_id or vapi_call_id required" }, 400);
+    if (!callId) {
+      return jsonResponse({ error: "call_id required" }, 400);
     }
 
-    // Se tem vapi_call_id, consultar VAPI diretamente
-    if (vapiCallId) {
-      const cfg = await getConfigs(supabase, ["vapi_api_key"]);
-      const vapiKey = cfg["vapi_api_key"];
-      if (!vapiKey) {
-        return jsonResponse({ error: "vapi_api_key not configured" }, 500);
-      }
-
-      const vapiRes = await fetch(`https://api.vapi.ai/call/${vapiCallId}`, {
-        method: "GET",
-        headers: { "Authorization": `Bearer ${vapiKey}` },
-      });
-
-      const vapiData = await vapiRes.json().catch(() => null);
-      if (!vapiRes.ok) {
-        return jsonResponse({ error: "VAPI status failed", detail: vapiData }, 502);
-      }
-
-      // Atualizar status local se temos call_id
-      if (callId) {
-        await supabase
-          .from("calls")
-          .update({ status: vapiData?.status || "unknown", metadata: vapiData })
-          .eq("id", callId);
-      }
-
-      return jsonResponse({ vapi_call_id: vapiCallId, ...vapiData });
-    }
-
-    // Fallback: buscar do banco local
     const { data: call } = await supabase
       .from("calls")
       .select("*")
@@ -279,36 +240,18 @@ serve(async (req) => {
   // ── HANGUP: encerra chamada ────────────────────────────────────────────
   if (action === "hangup") {
     const callId = body.call_id;
-    const vapiCallId = body.vapi_call_id;
+    const room = body.room;
 
-    if (!callId && !vapiCallId) {
-      return jsonResponse({ error: "call_id or vapi_call_id required" }, 400);
-    }
-
-    // Se tem vapi_call_id, encerrar no VAPI
-    if (vapiCallId) {
-      const cfg = await getConfigs(supabase, ["vapi_api_key"]);
-      const vapiKey = cfg["vapi_api_key"];
-      if (vapiKey) {
-        const vapiRes = await fetch(`https://api.vapi.ai/call/${vapiCallId}`, {
-          method: "DELETE",
-          headers: { "Authorization": `Bearer ${vapiKey}` },
+    if (room) {
+      try {
+        await fetch(`${CALL_API_URL}/hangup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ room }),
         });
-        // VAPI pode usar DELETE ou POST com hangup — tentamos DELETE primeiro
-        if (!vapiRes.ok) {
-          // Fallback: POST hangup
-          await fetch(`https://api.vapi.ai/call/${vapiCallId}/hangup`, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${vapiKey}`,
-              "Content-Type": "application/json",
-            },
-          });
-        }
-      }
+      } catch (_) { /* best effort */ }
     }
 
-    // Atualizar banco local
     if (callId) {
       await supabase
         .from("calls")
@@ -319,7 +262,22 @@ serve(async (req) => {
         .eq("id", callId);
     }
 
-    return jsonResponse({ status: "completed", call_id: callId, vapi_call_id: vapiCallId });
+    return jsonResponse({ status: "completed", call_id: callId, room });
+  }
+
+  // ── PIPELINE-STATUS: verifica saúde do pipeline ───────────────────────
+  if (action === "pipeline-status") {
+    try {
+      const healthRes = await fetch(`${CALL_API_URL}/health`, { method: "GET" });
+      const healthData = await healthRes.json().catch(() => null);
+      return jsonResponse({
+        pipeline: "livekit",
+        status: healthRes.ok ? "online" : "offline",
+        ...healthData,
+      });
+    } catch (_) {
+      return jsonResponse({ pipeline: "livekit", status: "offline", error: "Call API unreachable" });
+    }
   }
 
   return jsonResponse({ error: "Invalid action" }, 400);

@@ -48,7 +48,7 @@ export default function AceitarConvite() {
           setInviteError("Este convite foi revogado.");
         } else if (data.expires_at && new Date(data.expires_at) < new Date()) {
           setInviteError("Este convite expirou.");
-        } else if (data.max_uses !== null && data.used_count >= data.max_uses) {
+        } else if (data.max_uses !== null && data.max_uses > 0 && data.used_count >= data.max_uses) {
           setInviteError("Este convite atingiu o limite de usos.");
         } else {
           setInvite(data as unknown as InviteInfo);

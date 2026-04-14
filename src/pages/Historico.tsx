@@ -154,7 +154,7 @@ const callStatusConfig: Record<string, { label: string; cls: string }> = {
   simulated: { label: "Simulado", cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
 };
 
-const FALLBACK_COMPANY = "70967469-9a9b-4e29-a744-410e41eb47a5"; // Objetivo
+// Sem fallback hardcoded — usar empresa do colaborador ou null
 
 // ─── Template Picker Dialog ───────────────────────────────────────────────────
 
@@ -282,13 +282,10 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
         query = query.eq("status", statusFilter);
       }
 
-      // CEO: sem filtro de empresa/colaborador
-      // Gestor (roleLevel === 2): filtra por empresa
-      // Consultor (outros > 0): filtra por collaborator_id
-      if (roleLevel === 0) {
-        // CEO vê tudo
-      } else if (roleLevel === 2) {
-        if (collaboratorCompanyId) query = query.eq("company_id", collaboratorCompanyId);
+      // CEO/Diretor: sem filtro por colaborador
+      // Gestor + Consultor: vê só suas ligações
+      if (roleLevel === 0 || roleLevel === 1) {
+        if (companyId && companyId !== "all") query = query.eq("company_id", companyId);
       } else if (collaboratorId) {
         query = query.eq("collaborator_id", collaboratorId);
         if (collaboratorCompanyId) query = query.eq("company_id", collaboratorCompanyId);
@@ -360,7 +357,7 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
 
   const sendTemplate = async (templateName: string) => {
     if (!targetPhone) return;
-    const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || FALLBACK_COMPANY;
+    const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || collaborator?.company_id;
     setSendingTemplate(true);
     try {
       const session = await supabase.auth.getSession();
@@ -424,7 +421,7 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
       if (error) throw error;
 
       // Enviar template de reativação
-      const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || FALLBACK_COMPANY;
+      const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || collaborator?.company_id;
       try {
         const session = await supabase.auth.getSession();
         await fetch(`${EDGE_BASE}/send-meta-message`, {
@@ -819,7 +816,7 @@ function TabConversasEncerradas({
 
   const sendReactivation = async (templateName: string) => {
     if (!targetConv) return;
-    const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || FALLBACK_COMPANY;
+    const cid = collaboratorCompanyId || (companyId !== "all" ? companyId : null) || collaborator?.company_id;
     setSendingTemplate(true);
     try {
       const session = await supabase.auth.getSession();
@@ -1016,7 +1013,7 @@ function TabConversasEncerradas({
 
 // ─── Aba 3: Linha do Tempo ────────────────────────────────────────────────────
 
-function TabLinhaDoTempo({ companyId }: { companyId: string }) {
+function TabLinhaDoTempo({ companyId, roleLevel, collaboratorId }: { companyId: string; roleLevel: number; collaboratorId?: string }) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
@@ -1038,6 +1035,12 @@ function TabLinhaDoTempo({ companyId }: { companyId: string }) {
         .limit(50);
 
       if (companyId && companyId !== "all") callQuery = callQuery.eq("company_id", companyId);
+
+      // Colaborador: filtrar apenas suas ligações (ou sem dono)
+      // Gestor + Consultor: só suas ligações
+      if (roleLevel >= 2 && collaboratorId) {
+        callQuery = callQuery.eq("collaborator_id", collaboratorId);
+      }
 
       if (q.replace(/\D/g, "").length >= 8) {
         callQuery = callQuery.ilike("lead_phone", `%${q.replace(/\D/g, "")}%`);
@@ -1224,7 +1227,7 @@ export default function Historico() {
   const companyId =
     selectedCompanyId && selectedCompanyId !== "all"
       ? selectedCompanyId
-      : collaborator?.company_id || FALLBACK_COMPANY;
+      : collaborator?.company_id;
 
   return (
     <DashboardLayout>
@@ -1269,7 +1272,7 @@ export default function Historico() {
           </TabsContent>
 
           <TabsContent value="timeline" className="mt-4">
-            <TabLinhaDoTempo companyId={companyId} />
+            <TabLinhaDoTempo companyId={companyId} roleLevel={roleLevel} collaboratorId={collaborator?.id} />
           </TabsContent>
 
           <TabsContent value="voip" className="mt-4">

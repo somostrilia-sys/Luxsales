@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,8 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useCompany } from "@/contexts/CompanyContext";
-import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
+import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -159,14 +159,14 @@ function KpiRowSkeleton() {
 export default function DashboardGeral() {
   const { company_id: baseCompanyId, user_role } = useCompany();
   const { selectedCompanyId } = useCompanyFilter();
-  const { collaborator, isCEO, isColaborador } = useCollaborator();
+  const { roleLevel, collaborator, isCEO, isColaborador } = useCollaborator();
   const company_id = selectedCompanyId !== "all" ? selectedCompanyId : baseCompanyId;
   const navigate = useNavigate();
 
-  // Redirecionar consultor (level 3) para /meus-numeros
-  useEffect(() => {
-    if (isColaborador) navigate("/meus-numeros", { replace: true });
-  }, [isColaborador, navigate]);
+  // Gestors (level 2) and consultors (level 3) should use their own dashboard
+  if (roleLevel >= 2) {
+    return <Navigate to="/meus-numeros" replace />;
+  }
 
   // Edge-function data (existing sections)
   const [data, setData] = useState<DashboardData>(defaultData);
