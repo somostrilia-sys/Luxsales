@@ -219,7 +219,7 @@ function shortResponseBranch(
   if (words.length === 0 || words.length > 4) return null;
 
   const POSITIVE = new Set([
-    "sim","s","positivo","pode","claro","fechou","beleza","blz","manda","bora","tá","ta","tudo bem","tudo","vamo","vamos","certo","ok","okay","isso","exato","exatamente","uhum","aham","perfeito","show","dale","firmeza","tranquilo","com certeza","ótimo","otimo","legal","massa","afirmativo","combinado","concordo","dito","pode sim","pode mandar","pode falar","fala","diz","diga","continua","continue","manda bala","manda ver","manda a real","confirmado","oi","ei","eae","e ae","opa","ola","olá","alô","alo","bom dia","boa tarde","boa noite",
+    "sim","s","positivo","pode","claro","fechou","beleza","blz","manda","bora","tá","ta","tudo bem","tudo","vamo","vamos","vai","vai lá","vai la","vai nessa","vai sim","toca ficha","parte pra cima","certo","ok","okay","isso","exato","exatamente","uhum","aham","perfeito","show","dale","firmeza","tranquilo","com certeza","ótimo","otimo","legal","massa","afirmativo","combinado","concordo","dito","pode sim","pode mandar","pode falar","fala","diz","diga","continua","continue","manda bala","manda ver","manda a real","confirmado","oi","ei","eae","e ae","opa","ola","olá","alô","alo","bom dia","boa tarde","boa noite",
   ]);
   const NEGATIVE = new Set([
     "não","nao","n","nada","nem","nop","não quero","nao quero","agora não","agora nao","outro dia","depois","mais tarde","só depois","so depois","pra frente","deixa","dispenso","dispensa","recuso","negativo","nega","jamais","nunca","esquece","deixa pra lá","deixa la","de jeito nenhum","sem chance","passa","não obrigado","nao obrigado","valeu mas não","valeu mas nao","não curti","nao curti","não tenho","nao tenho",
