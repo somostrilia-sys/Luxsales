@@ -303,10 +303,14 @@ function TabLigacoes({
       setInvalidPhoneCount(invalidCount);
 
       // Load queue — works regardless of VoIP status (it's just a list)
+      // Ordem: priority ASC (1=topo), depois never-called, depois mais antigos primeiro
       let query = supabase
         .from("consultant_lead_pool")
         .select("id, collaborator_id, lead_name, phone, phone_normalized, interest_status, call_attempts, last_call_at, priority, lead_category, dispatched, responded_at")
         .in("interest_status", validStatuses)
+        .order("priority", { ascending: true, nullsFirst: false })
+        .order("call_attempts", { ascending: true })
+        .order("last_call_at", { ascending: true, nullsFirst: true })
         .limit(parseInt(batchSize));
       if (isCEO && companyId) query = query.eq("company_id", companyId);
       if (!isCEO) query = query.eq("collaborator_id", collaboratorId);
