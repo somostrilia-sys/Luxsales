@@ -125,12 +125,15 @@ serve(async (req) => {
     // Nome do vendedor: usa voice_name do perfil, senão fallback por gender
     const sellerName = voiceName || (voiceGender === "female" ? "Cléo" : "Lucas");
 
-    // Normalizar número para E.164
+    // Normalizar número para E.164 (fix móvel BR sem o "9" prefixo)
     let e164 = toNumber.replace(/\D/g, "");
-    if (e164.length === 11) e164 = "+55" + e164;
-    else if (e164.length === 13 && e164.startsWith("55")) e164 = "+" + e164;
-    else if (!e164.startsWith("+")) e164 = "+" + e164;
-    else e164 = toNumber;
+    if (e164.length === 11) e164 = "55" + e164;
+    else if (e164.length === 10) e164 = "55" + e164;
+    if (e164.length === 12 && e164.startsWith("55") && /[6-9]/.test(e164[4])) {
+      // 55 + DDD + 8 dígitos começando em 6-9 = móvel sem 9 → injetar
+      e164 = e164.slice(0, 4) + "9" + e164.slice(4);
+    }
+    if (!e164.startsWith("+")) e164 = "+" + e164;
 
     // Chamar LiveKit Call API com voice_id + seller_name (Lucas masculino / Luana feminino)
     let callRes;
