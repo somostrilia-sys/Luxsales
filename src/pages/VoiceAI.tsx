@@ -593,7 +593,7 @@ export default function VoiceAI() {
       // Montar system prompt completo
       const systemPrompt = buildSimulatorSystemPrompt(trainingForm);
 
-      // Chamar edge function make-call com action dial
+      // Chamar edge function make-call com action dial (FreeSWITCH + FoneTalk)
       const { data, error } = await supabase.functions.invoke("make-call", {
         body: {
           action: "dial",
@@ -610,7 +610,7 @@ export default function VoiceAI() {
         return;
       }
 
-      toast.success("Ligação iniciada para " + e164Number + "! (VAPI: " + (data.vapi_call_id || "") + ")", { id: loadingToast });
+      toast.success("Ligação iniciada para " + e164Number + " via FoneTalk!", { id: loadingToast });
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "Erro ao iniciar teste.", { id: loadingToast });

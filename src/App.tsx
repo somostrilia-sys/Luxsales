@@ -151,13 +151,13 @@ const App = () => (
           <Route path="/dispatch-queues" element={<ProtectedRoute minLevel={0}><DispatchQueues /></ProtectedRoute>} />
           <Route path="/opt-ins" element={<ProtectedRoute minLevel={0}><OptIns /></ProtectedRoute>} />
           <Route path="/config" element={<ProtectedRoute minLevel={0}><CompanySetup /></ProtectedRoute>} />
-          <Route path="/configuracoes" element={<ProtectedRoute minLevel={0}><Configuracoes /></ProtectedRoute>} />
+          <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
           <Route path="/gestao-usuarios" element={<ProtectedRoute minLevel={1}><GestaoUsuarios /></ProtectedRoute>} />
 
           {/* WB — All roles */}
           <Route path="/my-leads" element={<ProtectedRoute><MyLeads /></ProtectedRoute>} />
           <Route path="/conversations" element={<ProtectedRoute><Conversas /></ProtectedRoute>} />
-          <Route path="/historico" element={<ProtectedRoute><Historico /></ProtectedRoute>} />
+          <Route path="/historico" element={<Historico />} />
 
           {/* VoIP */}
           <Route path="/calls" element={<ProtectedRoute minLevel={0}><DashboardCalls /></ProtectedRoute>} />

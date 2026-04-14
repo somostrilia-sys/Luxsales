@@ -347,6 +347,7 @@ export default function Templates() {
 
   const approved = templates.filter((t) =>
     t.status === "APPROVED" &&
+    (isCEO || (t.category || "").toUpperCase() !== "MARKETING") &&
     (!search || t.name.toLowerCase().includes(search.toLowerCase())) &&
     (categoryFilter === "all" || (t.category || "").toUpperCase() === categoryFilter.toUpperCase())
   );

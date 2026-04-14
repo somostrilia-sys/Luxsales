@@ -125,6 +125,22 @@ Transcrição: ${transcriptText}`;
     return json({ ok: true, sent: false, reason: analysis?.reason || "opus_said_no", analysis });
   }
 
+  // Resolver collaborator_id via consultant_lead_pool (pelo telefone do lead)
+  let resolvedCollaboratorId: string | null = null;
+  try {
+    const normalizedPhone = phone.replace(/\D/g, "");
+    let poolQ = supabase
+      .from("consultant_lead_pool")
+      .select("collaborator_id")
+      .or(`phone_normalized.eq.${normalizedPhone},phone.eq.${phone}`)
+      .limit(1);
+    if (company_id) poolQ = poolQ.eq("company_id", company_id);
+    const { data: poolRow } = await poolQ.maybeSingle();
+    if (poolRow?.collaborator_id) resolvedCollaboratorId = poolRow.collaborator_id;
+  } catch (e) {
+    console.warn("[VOICE_CLOSER] could not resolve collaborator_id:", e);
+  }
+
   // Salvar wa_conversation
   const { data: conversation, error: convError } = await supabase
     .from("wa_conversations")
@@ -134,6 +150,7 @@ Transcrição: ${transcriptText}`;
         lead_name: lead_name || null,
         company_id: company_id || null,
         call_id: call_id || null,
+        collaborator_id: resolvedCollaboratorId,
         status: "active",
         human_mode: false,
         analysis,

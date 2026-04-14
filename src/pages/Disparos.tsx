@@ -179,9 +179,10 @@ export default function Disparos() {
     if (!companyId) return;
     const { data } = await supabase
       .from("wa_templates")
-      .select("id, name, status, language")
+      .select("id, name, status, language, category")
       .eq("company_id", companyId)
       .eq("status", "approved")
+      .neq("category", "MARKETING")
       .order("name");
 
     if (data && data.length > 0) {
@@ -190,9 +191,10 @@ export default function Disparos() {
       // Fallback: whatsapp_meta_templates
       const { data: fallback } = await supabase
         .from("whatsapp_meta_templates")
-        .select("id, name, status, language")
+        .select("id, name, status, language, category")
         .eq("company_id", companyId)
         .eq("status", "APPROVED")
+        .neq("category", "MARKETING")
         .order("name");
       setTemplates((fallback || []) as WaTemplate[]);
     }
@@ -376,8 +378,10 @@ export default function Disparos() {
           })
           .eq("id", lead.id);
 
-        // Register in wa_conversations
-        supabase.from("wa_conversations").insert({
+        // Register in wa_conversations (smart-dispatcher agora cria a wa_conversation com human_mode correto)
+        // Frontend já não precisa duplicar — backend cuida
+        // Fallback: se backend não criou por algum motivo
+        supabase.from("wa_conversations").upsert({
           company_id: companyId,
           collaborator_id: collaborator.id,
           phone: displayPhone(lead),
@@ -385,9 +389,11 @@ export default function Disparos() {
           pool_id: lead.id,
           template_used: selectedTemplate,
           dispatched_by: mode,
-          status: "waiting_reply",
+          status: mode === "lucas" ? "active" : "waiting_reply",
+          human_mode: mode !== "lucas",
+          turn_count: 0,
           created_at: new Date().toISOString(),
-        }).then(() => {}).catch(() => {});
+        }, { onConflict: "phone" }).then(() => {}).catch(() => {});
 
         setEligibleLeads(prev => prev.filter(l => l.id !== lead.id));
         setSelectedLeads(prev => { const s = new Set(prev); s.delete(lead.id); return s; });
@@ -459,7 +465,7 @@ export default function Disparos() {
             .from("consultant_lead_pool")
             .update({ dispatch_available: false })
             .eq("id", lead.id);
-          supabase.from("wa_conversations").insert({
+          supabase.from("wa_conversations").upsert({
             company_id: companyId,
             collaborator_id: collaborator!.id,
             phone: displayPhone(lead),
@@ -467,9 +473,11 @@ export default function Disparos() {
             pool_id: lead.id,
             template_used: selectedTemplate,
             dispatched_by: mode,
-            status: "waiting_reply",
+            status: mode === "lucas" ? "active" : "waiting_reply",
+            human_mode: mode !== "lucas",
+            turn_count: 0,
             created_at: new Date().toISOString(),
-          }).then(() => {}).catch(() => {});
+          }, { onConflict: "phone" }).then(() => {}).catch(() => {});
           setEligibleLeads(prev => prev.filter(l => l.id !== lead.id));
         }
       } catch {

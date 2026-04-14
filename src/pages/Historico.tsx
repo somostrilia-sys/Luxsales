@@ -3,6 +3,23 @@ import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { supabase } from "@/lib/supabase";
+
+interface VoipCall {
+  id: string;
+  destination_number: string;
+  lead_name: string | null;
+  status: string;
+  duration_seconds: number | null;
+  talk_time_seconds: number | null;
+  transcript: string | null;
+  ai_summary: string | null;
+  sentiment: string | null;
+  interest_detected: boolean | null;
+  started_at: string;
+  ended_at: string | null;
+  hangup_cause: string | null;
+  company_id: string | null;
+}
 import { EDGE_BASE } from "@/lib/constants";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -213,6 +230,9 @@ function LigarButton({ phone, leadName }: { phone: string; leadName?: string | n
 
 function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collaboratorId }: { companyId: string; roleLevel: number; collaboratorCompanyId?: string; collaboratorId?: string }) {
   const [calls, setCalls] = useState<CallLog[]>([]);
+  const [voipCalls, setVoipCalls] = useState<VoipCall[]>([]);
+  const [activeTab, setActiveTab] = useState<"whatsapp" | "voip">("voip");
+  const [expandedVoip, setExpandedVoip] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("week");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -301,6 +321,17 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
       }
     } catch (err) {
       console.error("Error fetching calls:", err);
+    }
+
+    // Fetch VoIP calls from `calls` table
+    try {
+      let vq = supabase.from("calls")
+        .select("id, destination_number, lead_name, status, duration_seconds, talk_time_seconds, transcript, ai_summary, sentiment, interest_detected, started_at, ended_at, hangup_cause, company_id")
+        .order("started_at", { ascending: false })
+        .limit(100);
+      if (companyId) vq = vq.eq("company_id", companyId);
+      const { data: vData, error: vErr } = await vq;
+      if (!vErr && vData) setVoipCalls(vData);
       setCalls([]);
     } finally {
       setLoading(false);
@@ -455,7 +486,7 @@ function TabTranscricoes({ companyId, roleLevel, collaboratorCompanyId, collabor
           <RefreshCw className="h-3.5 w-3.5 mr-1" /> Atualizar
         </Button>
         <span className="text-xs text-muted-foreground ml-auto">
-          {calls.length} ligações
+{calls.length} ligações
         </span>
       </div>
 
@@ -708,9 +739,12 @@ function TabConversasEncerradas({
         .order("last_message_at", { ascending: false })
         .limit(100);
 
-      // wa_conversations não tem collaborator_id — filtrar apenas por company_id
+      // Filtrar wa_conversations por collaborator_id quando disponível
       if (roleLevel === 0) {
         if (companyId && companyId !== "all") query = query.eq("company_id", companyId);
+      } else if (roleLevel > 0 && collaboratorId) {
+        query = query.eq("collaborator_id", collaboratorId);
+        if (collaboratorCompanyId) query = query.eq("company_id", collaboratorCompanyId);
       } else if (collaboratorCompanyId) {
         query = query.eq("company_id", collaboratorCompanyId);
       } else if (companyId && companyId !== "all") {
@@ -1203,7 +1237,7 @@ export default function Historico() {
           subtitle="Transcrições de ligações, conversas encerradas e linha do tempo do lead"
         />
 
-        <Tabs defaultValue="transcricoes">
+        <Tabs defaultValue="voip">
           <TabsList className="w-full md:w-auto">
             <TabsTrigger value="transcricoes" className="flex items-center gap-1.5">
               <Phone className="h-3.5 w-3.5" /> Transcrições
@@ -1213,6 +1247,9 @@ export default function Historico() {
             </TabsTrigger>
             <TabsTrigger value="timeline" className="flex items-center gap-1.5">
               <Search className="h-3.5 w-3.5" /> Linha do Tempo
+            </TabsTrigger>
+            <TabsTrigger value="voip" className="flex items-center gap-1.5">
+              <Phone className="h-3.5 w-3.5" /> VoIP ({voipCalls.length})
             </TabsTrigger>
           </TabsList>
 
@@ -1236,6 +1273,98 @@ export default function Historico() {
 
           <TabsContent value="timeline" className="mt-4">
             <TabLinhaDoTempo companyId={companyId} roleLevel={roleLevel} collaboratorId={collaborator?.id} />
+          </TabsContent>
+
+          <TabsContent value="voip" className="mt-4">
+            <div className="space-y-2">
+              {voipCalls.length === 0 ? (
+                <Card>
+                  <CardContent className="py-10 text-center text-muted-foreground">
+                    <Phone className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                    <p>Nenhuma ligação VoIP encontrada</p>
+                  </CardContent>
+                </Card>
+              ) : voipCalls.map((vc) => {
+                const isExpanded = expandedVoip === vc.id;
+                const talkSec = vc.talk_time_seconds || 0;
+                const dur = talkSec > 0 ? `${Math.floor(talkSec / 60)}:${String(talkSec % 60).padStart(2, "0")}` : "0:00";
+                const answered = vc.status === "completed" && talkSec > 5;
+                const phone = vc.destination_number?.replace(/^\+55(\d{2})(\d{4,5})(\d{4})$/, "($1) $2-$3") || vc.destination_number || "—";
+                let transcript: Array<{role: string; text: string}> = [];
+                try { transcript = typeof vc.transcript === "string" ? JSON.parse(vc.transcript) : (vc.transcript as any) || []; } catch {}
+                return (
+                  <Card key={vc.id} className="border-border/60 overflow-hidden">
+                    <button onClick={() => setExpandedVoip(isExpanded ? null : vc.id)} className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/30 transition-colors text-left">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${answered ? "bg-emerald-500/20" : "bg-red-500/20"}`}>
+                          {answered ? "\u2705" : "\u274C"}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{vc.lead_name || phone}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {vc.lead_name ? phone + " · " : ""}
+                            {new Date(vc.started_at).toLocaleString("pt-BR", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"})}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {vc.interest_detected && (
+                          <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded font-medium">Interesse</span>
+                        )}
+                        {vc.sentiment && (
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            vc.sentiment === "positive" ? "bg-emerald-500/20 text-emerald-400" :
+                            vc.sentiment === "negative" ? "bg-red-500/20 text-red-400" :
+                            "bg-yellow-500/20 text-yellow-400"
+                          }`}>{vc.sentiment === "positive" ? "Positivo" : vc.sentiment === "negative" ? "Negativo" : "Neutro"}</span>
+                        )}
+                        <div className="text-right min-w-[80px]">
+                          <p className={`text-sm font-bold ${answered ? "text-emerald-400" : "text-red-400"}`}>
+                            {answered ? "Atendeu" : "N\u00E3o atendeu"}
+                          </p>
+                          <p className="text-xs text-muted-foreground font-mono">{dur}</p>
+                        </div>
+                        <span className="text-muted-foreground/50 text-xs ml-1">{isExpanded ? "\u25B2" : "\u25BC"}</span>
+                      </div>
+                    </button>
+                    {isExpanded && (
+                      <CardContent className="pt-0 pb-4 space-y-3 border-t border-border/40">
+                        {vc.ai_summary && (
+                          <div className="bg-muted/30 rounded-md p-3 mt-3">
+                            <p className="text-xs font-semibold text-muted-foreground mb-1">Resumo IA</p>
+                            <p className="text-sm">{vc.ai_summary}</p>
+                          </div>
+                        )}
+                        {transcript.length > 0 ? (
+                          <div className="space-y-1.5 mt-3">
+                            <p className="text-xs font-semibold text-muted-foreground">Transcri\u00E7\u00E3o</p>
+                            <div className="max-h-[400px] overflow-y-auto space-y-1.5">
+                              {transcript.map((t: any, i: number) => (
+                                <div key={i} className={`text-xs px-3 py-2 rounded-lg ${
+                                  t.role === "assistant"
+                                    ? "bg-primary/10 text-primary ml-8 border-l-2 border-primary/30"
+                                    : "bg-muted/50 mr-8 border-l-2 border-muted-foreground/20"
+                                }`}>
+                                  <span className="font-bold">{t.role === "assistant" ? "Lucas" : "Lead"}:</span> {t.text}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground text-center py-4 mt-3">Sem transcri\u00E7\u00E3o dispon\u00EDvel</p>
+                        )}
+                        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground pt-2 border-t border-border/20 mt-2">
+                          <span>Status: <strong>{vc.status}</strong></span>
+                          <span>Hangup: {vc.hangup_cause || "\u2014"}</span>
+                          <span>Dura\u00E7\u00E3o: {vc.duration_seconds || 0}s</span>
+                          <span>Conversa: {talkSec}s</span>
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
           </TabsContent>
         </Tabs>
       </div>

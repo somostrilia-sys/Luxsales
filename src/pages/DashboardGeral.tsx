@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useCompany } from "@/contexts/CompanyContext";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
+import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -160,6 +161,7 @@ export default function DashboardGeral() {
   const { company_id: baseCompanyId, user_role } = useCompany();
   const { roleLevel } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
+  const { collaborator, isCEO, isColaborador } = useCollaborator();
   const company_id = selectedCompanyId !== "all" ? selectedCompanyId : baseCompanyId;
   const navigate = useNavigate();
 
@@ -257,10 +259,11 @@ export default function DashboardGeral() {
   }, [company_id, user_role]);
 
   useEffect(() => {
+    if (!isCEO) { setLoading(false); return; }
     fetchDashboard();
     const interval = setInterval(() => fetchDashboard(true), 60000);
     return () => clearInterval(interval);
-  }, [fetchDashboard]);
+  }, [fetchDashboard, isCEO]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // KPI modal
@@ -294,11 +297,13 @@ export default function DashboardGeral() {
       (() => {
         let q = supabase.from("leads_master").select("id", { count: "exact", head: true });
         if (filter) q = q.eq("company_id", filter);
+        if (!isCEO && collaborator?.id) q = (q as any).eq("collaborator_id", collaborator.id);
         return q;
       })(),
       (() => {
         let q = supabase.from("consultant_lead_pool").select("id", { count: "exact", head: true });
         if (filter) q = q.eq("company_id", filter);
+        if (!isCEO && collaborator?.id) q = q.eq("collaborator_id", collaborator.id);
         return q;
       })(),
       (() => {
@@ -317,7 +322,7 @@ export default function DashboardGeral() {
       consultoresAtivos: collabRes.count ?? 0,
     });
     setOpLoading(false);
-  }, [selectedCompanyId]);
+  }, [selectedCompanyId, isCEO, collaborator]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // LINHA 2 — Pipeline de Ligações
@@ -336,6 +341,7 @@ export default function DashboardGeral() {
           let q = supabase.from("calls").select("id", { count: "exact", head: true })
             .gte("created_at", todayStart.toISOString());
           if (filter) q = q.eq("company_id", filter);
+          if (!isCEO && collaborator?.id) q = (q as any).eq("collaborator_id", collaborator.id);
           return q;
         })(),
         (() => {
@@ -343,6 +349,7 @@ export default function DashboardGeral() {
             .gte("created_at", todayStart.toISOString())
             .in("status", ["completed", "answered"]);
           if (filter) q = q.eq("company_id", filter);
+          if (!isCEO && collaborator?.id) q = (q as any).eq("collaborator_id", collaborator.id);
           return q;
         })(),
       ]);
@@ -352,16 +359,17 @@ export default function DashboardGeral() {
 
     const [interRes, discRes] = await Promise.all([
       (() => {
-        let q = supabase.from("leads_master").select("id", { count: "exact", head: true })
-          .eq("status", "interested");
+        let q = supabase.from("consultant_lead_pool").select("id", { count: "exact", head: true })
+          .eq("interest_status", "interested");
         if (filter) q = q.eq("company_id", filter);
+        if (!isCEO && collaborator?.id) q = q.eq("collaborator_id", collaborator.id);
         return q;
       })(),
       (() => {
-        let q = supabase.from("leads_master").select("id", { count: "exact", head: true })
-          .gte("total_call_attempts", 2)
-          .in("status", ["lost", "dnc", "invalid", "discarded"]);
+        let q = supabase.from("consultant_lead_pool").select("id", { count: "exact", head: true })
+          .in("interest_status", ["lost", "dnc", "invalid", "discarded"]);
         if (filter) q = q.eq("company_id", filter);
+        if (!isCEO && collaborator?.id) q = q.eq("collaborator_id", collaborator.id);
         return q;
       })(),
     ]);
@@ -373,7 +381,7 @@ export default function DashboardGeral() {
       leadsDescartados: discRes.count ?? 0,
     });
     setCallKpisLoading(false);
-  }, [selectedCompanyId]);
+  }, [selectedCompanyId, isCEO, collaborator]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // LINHA 3 — Disparos WhatsApp
@@ -389,6 +397,7 @@ export default function DashboardGeral() {
         let q = supabase.from("smart_dispatches").select("id", { count: "exact", head: true })
           .gte("created_at", todayStart.toISOString());
         if (filter) q = q.eq("company_id", filter);
+        if (!isCEO && collaborator?.id) q = (q as any).eq("collaborator_id", collaborator.id);
         return q;
       })(),
       (() => {
@@ -396,18 +405,21 @@ export default function DashboardGeral() {
           .gte("created_at", todayStart.toISOString())
           .not("replied_at", "is", null);
         if (filter) q = q.eq("company_id", filter);
+        if (!isCEO && collaborator?.id) q = (q as any).eq("collaborator_id", collaborator.id);
         return q;
       })(),
       (() => {
         let q = supabase.from("wa_conversations").select("id", { count: "exact", head: true })
           .neq("status", "closed");
         if (filter) q = q.eq("company_id", filter);
+        if (!isCEO && collaborator?.id) q = q.eq("collaborator_id", collaborator.id);
         return q;
       })(),
       (() => {
-        let q = supabase.from("leads_master").select("id", { count: "exact", head: true })
-          .eq("status", "converted");
+        let q = supabase.from("consultant_lead_pool").select("id", { count: "exact", head: true })
+          .eq("interest_status", "converted");
         if (filter) q = q.eq("company_id", filter);
+        if (!isCEO && collaborator?.id) q = q.eq("collaborator_id", collaborator.id);
         return q;
       })(),
     ]);
@@ -421,7 +433,7 @@ export default function DashboardGeral() {
       convertidos: convRes.count ?? 0,
     });
     setWaKpisLoading(false);
-  }, [selectedCompanyId]);
+  }, [selectedCompanyId, isCEO, collaborator]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // LINHA 4 — TIER Meta
@@ -476,7 +488,7 @@ export default function DashboardGeral() {
 
     setTierKpis({ tierAtual: tierLimit, disponiveisHoje, limitePorConsultor, previsaoAumento: previsao });
     setTierLoading(false);
-  }, [selectedCompanyId]);
+  }, [selectedCompanyId, isCEO, collaborator]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Distribuição de leads por consultor
@@ -506,7 +518,7 @@ export default function DashboardGeral() {
       setLeadsPerConsultor([]);
     }
     setLeadsConsultorLoading(false);
-  }, [selectedCompanyId]);
+  }, [selectedCompanyId, isCEO, collaborator]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Charts
@@ -608,7 +620,7 @@ export default function DashboardGeral() {
     } catch { setTopConsultores([]); }
 
     setChartsLoading(false);
-  }, [selectedCompanyId]);
+  }, [selectedCompanyId, isCEO, collaborator]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Mount & auto-refresh
@@ -1021,7 +1033,7 @@ export default function DashboardGeral() {
         </Card>
 
         {/* ── Distribuição de Leads por Consultor ──────────────────────── */}
-        <Card>
+        {isCEO && <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <Users className="h-4 w-4 text-blue-400" /> Distribuição de Leads por Consultor
@@ -1050,7 +1062,7 @@ export default function DashboardGeral() {
               </ResponsiveContainer>
             )}
           </CardContent>
-        </Card>
+        </Card>}
 
         {/* ── SEÇÕES EXISTENTES — Calls / WhatsApp / Meta Quality ─────── */}
         {loading ? (
