@@ -26,7 +26,10 @@ interface VoiceSelectorProps {
   className?: string;
   label?: string;
   showLabel?: boolean;
+  /** "cartesia" | "elevenlabs" | undefined (ambos) */
   provider?: string;
+  /** companyId pra filtrar só vozes com amostra renderizada pra essa empresa (opcional) */
+  companyId?: string | null;
 }
 
 const LOCAL_KEY = "luxsales_selected_voice_id";
@@ -37,7 +40,8 @@ export function VoiceSelector({
   className,
   label = "Voz do Agente",
   showLabel = true,
-  provider = "cartesia",
+  provider,
+  companyId,
 }: VoiceSelectorProps) {
   const [voices, setVoices] = useState<VoiceProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,25 +49,43 @@ export function VoiceSelector({
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("voice_profiles")
         .select("id, voice_key, voice_name, voice_id, provider, gender, accent, description, is_default")
         .eq("active", true)
-        .eq("provider", provider)
         .order("is_default", { ascending: false })
         .order("voice_name");
+      if (provider) q = q.eq("provider", provider);
+      const { data, error } = await q;
 
       if (!mounted) return;
       if (error) {
         console.error("Erro ao carregar vozes:", error);
       } else {
-        setVoices((data ?? []) as VoiceProfile[]);
+        let list = (data ?? []) as VoiceProfile[];
+
+        // Quando companyId for passado, limita às vozes que têm áudio renderizado
+        // (opening_*) pra aquela empresa — evita oferecer voz sem amostra.
+        if (companyId && list.length) {
+          const ids = list.map(v => v.id);
+          const { data: covered } = await supabase
+            .from("ivr_audio_scripts")
+            .select("voice_profile_id")
+            .in("voice_profile_id", ids)
+            .eq("company_id", companyId)
+            .like("intent", "opening_%")
+            .not("audio_url", "is", null);
+          const coveredIds = new Set((covered ?? []).map(r => r.voice_profile_id));
+          if (coveredIds.size) list = list.filter(v => coveredIds.has(v.id));
+        }
+
+        setVoices(list);
 
         // Se não tem valor selecionado, usa localStorage ou default
-        if (!value && data && data.length > 0) {
+        if (!value && list.length > 0) {
           const stored = localStorage.getItem(LOCAL_KEY);
-          const fromStorage = stored ? data.find((v) => v.id === stored) : null;
-          const defaultVoice = data.find((v) => v.is_default) || data[0];
+          const fromStorage = stored ? list.find((v) => v.id === stored) : null;
+          const defaultVoice = list.find((v) => v.is_default) || list[0];
           const pick = fromStorage || defaultVoice;
           onChange(pick as VoiceProfile);
         }
@@ -73,7 +95,7 @@ export function VoiceSelector({
     return () => {
       mounted = false;
     };
-  }, [provider]);
+  }, [provider, companyId]);
 
   // Sincroniza quando outro componente (VoiceGallery) seleciona uma voz
   useEffect(() => {

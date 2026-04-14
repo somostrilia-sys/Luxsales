@@ -27,8 +27,9 @@ import { VoiceSelector, type VoiceProfile } from "@/components/VoiceSelector";
 import { VoiceGallery } from "@/components/VoiceGallery";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 
-// Wrapper da galeria que persiste escolha no localStorage
+// Wrapper da galeria que persiste escolha no localStorage e respeita a empresa acessada
 function LigacoesVoiceGallery() {
+  const { selectedCompanyId } = useCompanyFilter();
   const [selected, setSelected] = useState<VoiceProfile | null>(() => {
     const stored = localStorage.getItem("luxsales_selected_voice_id");
     return stored ? ({ id: stored } as VoiceProfile) : null;
@@ -42,6 +43,8 @@ function LigacoesVoiceGallery() {
         // Dispatch evento pra outros componentes escutarem
         window.dispatchEvent(new CustomEvent("voice-selected", { detail: v }));
       }}
+      companyId={selectedCompanyId}
+      provider="elevenlabs"
     />
   );
 }
@@ -1040,6 +1043,8 @@ function TabLigacoes({
               <VoiceSelector
                 value={selectedVoice?.id ?? null}
                 onChange={setSelectedVoice}
+                companyId={companyId}
+                provider="elevenlabs"
               />
             </div>
           )}

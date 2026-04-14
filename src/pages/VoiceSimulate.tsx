@@ -328,6 +328,8 @@ export default function VoiceSimulate() {
                 <VoiceSelector
                   value={selectedVoice?.id ?? null}
                   onChange={setSelectedVoice}
+                  companyId={testCompanyId || companyId}
+                  provider={route === "ivr" ? "elevenlabs" : "cartesia"}
                 />
 
                 <div>
@@ -540,6 +542,8 @@ export default function VoiceSimulate() {
                     localStorage.setItem("luxsales_selected_voice_id", v.id);
                     window.dispatchEvent(new CustomEvent("voice-selected", { detail: v }));
                   }}
+                  companyId={testCompanyId || companyId}
+                  provider={route === "ivr" ? "elevenlabs" : "cartesia"}
                 />
               </CardContent>
             </Card>

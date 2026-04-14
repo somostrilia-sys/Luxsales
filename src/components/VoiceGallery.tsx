@@ -15,12 +15,16 @@ import type { VoiceProfile } from "./VoiceSelector";
 interface VoiceGalleryProps {
   selectedId: string | null;
   onSelect: (voice: VoiceProfile) => void;
+  /** "cartesia" | "elevenlabs" | undefined (ambos). Define qual provider filtrar. */
   provider?: string;
+  /** Quando informado, substitui voice.sample_url pelo áudio de opening da empresa
+   *  (Lucas falando "da Objetivo" vs "da Trilia"). Usa bucket ivr-audios. */
+  companyId?: string | null;
 }
 
 const LOCAL_KEY = "luxsales_selected_voice_id";
 
-export function VoiceGallery({ selectedId, onSelect, provider = "cartesia" }: VoiceGalleryProps) {
+export function VoiceGallery({ selectedId, onSelect, provider, companyId }: VoiceGalleryProps) {
   const [voices, setVoices] = useState<(VoiceProfile & { sample_url?: string | null })[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -32,21 +36,48 @@ export function VoiceGallery({ selectedId, onSelect, provider = "cartesia" }: Vo
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("voice_profiles")
         .select("id, voice_key, voice_name, voice_id, provider, gender, accent, description, is_default, sample_url")
         .eq("active", true)
-        .eq("provider", provider)
         .order("is_default", { ascending: false })
         .order("voice_name");
+      if (provider) q = q.eq("provider", provider);
+      const { data, error } = await q;
       if (!mounted) return;
-      if (!error && data) setVoices(data as any);
+      if (error || !data) { setLoading(false); return; }
+
+      // Override sample_url com opening específico da empresa, quando companyId presente
+      const profiles = data as (VoiceProfile & { sample_url?: string | null })[];
+      if (companyId && profiles.length) {
+        const ids = profiles.map(p => p.id);
+        const { data: samples } = await supabase
+          .from("ivr_audio_scripts")
+          .select("voice_profile_id, intent, audio_url")
+          .in("voice_profile_id", ids)
+          .eq("company_id", companyId)
+          .like("intent", "opening_%")
+          .not("audio_url", "is", null);
+        if (samples?.length) {
+          for (const p of profiles) {
+            const matches = samples.filter(s => s.voice_profile_id === p.id);
+            if (!matches.length) continue;
+            // Prioridade: opening_qualificacao (Objetivo) > opening_generico (Trilia) > qualquer opening
+            const preferred =
+              matches.find(s => s.intent === "opening_qualificacao") ??
+              matches.find(s => s.intent === "opening_generico") ??
+              matches[0];
+            p.sample_url = preferred.audio_url as string;
+          }
+        }
+      }
+      setVoices(profiles);
       setLoading(false);
     })();
     return () => {
       mounted = false;
     };
-  }, [provider]);
+  }, [provider, companyId]);
 
   useEffect(() => {
     return () => {
