@@ -35,15 +35,10 @@ interface VoiceSelectorProps {
 
 const LOCAL_KEY = "luxsales_selected_voice_id";
 
-/** Converte "Cléo (fem, voz Rayanne expressiva)" → "Cléo · Rayanne expressiva" pra caber. */
+/** Mantém só o nome da persona (Lucas/Cléo), descartando descrições entre parênteses. */
 function shortName(full: string): string {
   if (!full) return "";
-  // Pega palavra antes do "(" + parte interna mais relevante (depois de "voz" ou após vírgula)
-  const m = full.match(/^([^\s(]+)\s*(?:\(([^)]+)\))?/);
-  if (!m) return full;
-  const head = m[1];
-  const inner = (m[2] || "").replace(/\b(masc|fem|voz)\b/gi, "").replace(/,\s*/g, " · ").replace(/\s+/g, " ").trim();
-  return inner ? `${head} · ${inner}` : head;
+  return full.replace(/\s*\(.*?\)\s*/g, "").trim();
 }
 
 export function VoiceSelector({
