@@ -35,6 +35,17 @@ interface VoiceSelectorProps {
 
 const LOCAL_KEY = "luxsales_selected_voice_id";
 
+/** Converte "Cléo (fem, voz Rayanne expressiva)" → "Cléo · Rayanne expressiva" pra caber. */
+function shortName(full: string): string {
+  if (!full) return "";
+  // Pega palavra antes do "(" + parte interna mais relevante (depois de "voz" ou após vírgula)
+  const m = full.match(/^([^\s(]+)\s*(?:\(([^)]+)\))?/);
+  if (!m) return full;
+  const head = m[1];
+  const inner = (m[2] || "").replace(/\b(masc|fem|voz)\b/gi, "").replace(/,\s*/g, " · ").replace(/\s+/g, " ").trim();
+  return inner ? `${head} · ${inner}` : head;
+}
+
 export function VoiceSelector({
   value,
   onChange,
@@ -168,10 +179,19 @@ export function VoiceSelector({
           {label}
         </Label>
       )}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 min-w-0">
         <Select value={value ?? ""} onValueChange={handleChange} disabled={loading}>
-          <SelectTrigger className="bg-slate-900/60 border-slate-700 flex-1">
-            <SelectValue placeholder={loading ? "Carregando vozes..." : "Selecione uma voz"} />
+          <SelectTrigger className="bg-slate-900/60 border-slate-700 flex-1 min-w-0 max-w-full">
+            <SelectValue placeholder={loading ? "Carregando vozes..." : "Selecione uma voz"}>
+              {selected ? (
+                <span className="flex items-center gap-1.5 min-w-0 truncate">
+                  <span className="text-slate-400 shrink-0">
+                    {selected.gender === "female" ? "♀" : selected.gender === "male" ? "♂" : "◈"}
+                  </span>
+                  <span className="font-medium truncate">{shortName(selected.voice_name)}</span>
+                </span>
+              ) : null}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {voices.map((v) => {
@@ -204,7 +224,7 @@ export function VoiceSelector({
         )}
       </div>
       {selected?.description && (
-        <p className="mt-1 text-xs text-slate-500 line-clamp-2">{selected.description}</p>
+        <p className="mt-1 text-xs text-slate-500 line-clamp-2 break-words">{selected.description}</p>
       )}
     </div>
   );
