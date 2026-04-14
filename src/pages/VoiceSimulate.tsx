@@ -37,6 +37,7 @@ export default function VoiceSimulate() {
   const [activeCallRoom, setActiveCallRoom] = useState<string | null>(null);
   const [liveTranscript, setLiveTranscript] = useState<{ role: string; text: string }[]>([]);
   const [selectedVoice, setSelectedVoice] = useState<VoiceProfile | null>(null);
+  const [route, setRoute] = useState<"ivr" | "default">("ivr");
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   // Pipeline health check
@@ -184,6 +185,7 @@ export default function VoiceSimulate() {
           company_id: testCompanyId || companyId,
           voice_profile_id: selectedVoice?.id ?? null,
           voice_id: selectedVoice?.voice_id ?? null,
+          route,
         }),
       });
       const data = await res.json();
@@ -327,6 +329,37 @@ export default function VoiceSimulate() {
                   value={selectedVoice?.id ?? null}
                   onChange={setSelectedVoice}
                 />
+
+                <div>
+                  <Label className="text-xs">Fluxo da chamada</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={route === "ivr" ? "default" : "outline"}
+                      className="flex-1"
+                      disabled={calling}
+                      onClick={() => setRoute("ivr")}
+                    >
+                      IVR v3 cacheado
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={route === "default" ? "default" : "outline"}
+                      className="flex-1"
+                      disabled={calling}
+                      onClick={() => setRoute("default")}
+                    >
+                      LLM livre
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {route === "ivr"
+                      ? "Áudios v3 ElevenLabs pré-renderizados + classificador semântico (idêntico ao produção)."
+                      : "TTS Cartesia streaming com LLM livre (fluxo legado)."}
+                  </p>
+                </div>
 
                 <Button
                   className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"

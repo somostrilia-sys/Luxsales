@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Phone, MessageSquare, LogOut, Settings,
   FileText, Send, UserCog, Users, ShieldCheck, Sparkles, Brain,
-  ClipboardList, PhoneCall, Upload, Loader2, Mic, FlaskConical, History, Users2, BarChart2, GitBranch,
+  ClipboardList, PhoneCall, Upload, Loader2, Mic, FlaskConical, History, Users2, BarChart2, GitBranch, Library,
   Building2, Rocket,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
@@ -49,6 +49,7 @@ const sections: { label: string; items: MenuItem[]; ceoOnly?: boolean }[] = [
       { title: "Ligações", url: "/ligacoes", icon: Phone, levels: [0, 1, 2, 3] },
       { title: "Simulação", url: "/voice/simulate", icon: FlaskConical, levels: [0] },
       { title: "IVR Studio", url: "/voice/ivr-studio", icon: GitBranch, levels: [0] },
+      { title: "Biblioteca de Vozes", url: "/voice/library", icon: Library, levels: [0] },
     ],
   },
   {

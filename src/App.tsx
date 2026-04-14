@@ -83,6 +83,7 @@ const VoiceAI = lazy(() => import("./pages/VoiceAI"));
 const VoiceDialer = lazy(() => import("./pages/VoiceDialer"));
 const VoiceSimulate = lazy(() => import("./pages/VoiceSimulate"));
 const IvrStudio = lazy(() => import("./pages/IvrStudio"));
+const VoiceLibrary = lazy(() => import("./pages/VoiceLibrary"));
 const VoiceCalls = lazy(() => import("./pages/VoiceCalls"));
 const RelatoriosVoz = lazy(() => import("./pages/RelatoriosVoz"));
 const ComplianceVoz = lazy(() => import("./pages/ComplianceVoz"));
@@ -176,6 +177,7 @@ const App = () => (
           <Route path="/voice/dialer" element={<Navigate to="/ligacoes" replace />} />
           <Route path="/voice/simulate" element={<ProtectedRoute minLevel={0}><VoiceSimulate /></ProtectedRoute>} />
           <Route path="/voice/ivr-studio" element={<ProtectedRoute minLevel={0}><IvrStudio /></ProtectedRoute>} />
+          <Route path="/voice/library" element={<ProtectedRoute minLevel={0}><VoiceLibrary /></ProtectedRoute>} />
           <Route path="/voice/calls" element={<ProtectedRoute minLevel={0}><VoiceCalls /></ProtectedRoute>} />
 
           {/* Plataforma — CEO grupo only */}

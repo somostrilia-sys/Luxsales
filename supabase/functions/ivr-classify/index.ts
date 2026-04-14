@@ -108,8 +108,44 @@ Deno.serve(async (req) => {
     if (error) return json({ error: error.message }, 500);
     if (!intents?.length) return json({ error: "nenhum intent encontrado" }, 404);
 
-    // 1) Fast-path: match exato por palavra em training_examples
-    const fastMatch = fastKeywordMatch(transcript, intents as IntentRow[]);
+    const intentsArr = intents as IntentRow[];
+
+    // 1) Consecutive-objection dedup: lead em modo negativo após obj_* → escalar pra goodbye
+    //    (roda antes pra não ser pego pelo fast-match de outra objection).
+    const objDedup = objectionDedup(transcript, current_intent, intentsArr, objection_count);
+    if (objDedup) {
+      return json({
+        intent_id: objDedup.intent,
+        category: objDedup.category,
+        confidence: 0.9,
+        fallback_to_llm: false,
+        audio_url: objDedup.audio_url,
+        text_raw: objDedup.text_raw,
+        branch_hints: objDedup.branch_hints,
+        reason: "objection_dedup",
+      });
+    }
+
+    // 2) Short-response branching (PRIORIDADE): confirmações/negações curtas seguem
+    //    branch_hints do current_intent. O blocklist interno evita capturar "é caro", "tá ocupado" etc.
+    //    Roda ANTES do fast-match pra não ficar preso em loops de opening (opening_qualificacao ↔ opening_reativacao).
+    const branchHit = shortResponseBranch(transcript, current_intent, intentsArr);
+    if (branchHit) {
+      return json({
+        intent_id: branchHit.intent,
+        category: branchHit.category,
+        confidence: 0.88,
+        fallback_to_llm: false,
+        audio_url: branchHit.audio_url,
+        text_raw: branchHit.text_raw,
+        branch_hints: branchHit.branch_hints,
+        reason: "short_response_branch",
+      });
+    }
+
+    // 3) Fast-path: match exato por palavra em training_examples
+    //    current_intent é excluído pra evitar loop.
+    const fastMatch = fastKeywordMatch(transcript, intentsArr, current_intent);
     if (fastMatch) {
       const audio_url = fastMatch.audio_url;
       return json({
@@ -124,11 +160,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 2) LLM classifier (via provider configurado)
-    const prompt = buildPrompt(transcript, intents as IntentRow[], current_intent, turn_index);
+    // 4) LLM classifier (via provider configurado)
+    const prompt = buildPrompt(transcript, intentsArr, current_intent, turn_index);
     const classified = await classifyWithLLM(prompt);
 
-    const picked = (intents as IntentRow[]).find(i => i.intent === classified.intent_id);
+    const picked = intentsArr.find(i => i.intent === classified.intent_id);
     if (!picked || classified.confidence < CONF_THRESHOLD) {
       return json({
         intent_id: classified.intent_id,
@@ -168,14 +204,103 @@ function norm(s: string): string {
     .trim();
 }
 
-/** Fast-path conservador: só dispara se match é inequívoco (>=8 chars + word-boundary). */
-function fastKeywordMatch(transcript: string, intents: IntentRow[]): IntentRow | null {
+/** Resposta curta tipo "sim"/"não"/"pode" segue branch_hints do intent atual.
+ *  Evita loops e respeita o fluxo narrativo da árvore IVR.
+ *  Ativa só quando: (1) há current_intent, (2) transcript tem ≤4 tokens, (3) match claro com um dos buckets. */
+function shortResponseBranch(
+  transcript: string,
+  currentIntent: string | undefined | null,
+  intents: IntentRow[],
+): IntentRow | null {
+  if (!currentIntent) return null;
+  const t = norm(transcript);
+  if (!t) return null;
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > 4) return null;
+
+  const POSITIVE = new Set([
+    "sim","s","positivo","pode","claro","fechou","beleza","blz","manda","bora","tá","ta","tudo bem","tudo","vamo","vamos","certo","ok","okay","isso","exato","exatamente","uhum","aham","perfeito","show","dale","firmeza","tranquilo","com certeza","ótimo","otimo","legal","massa","afirmativo","combinado","concordo","dito","pode sim","pode mandar","pode falar","fala","diz","diga","continua","continue","manda bala","manda ver","manda a real","confirmado","oi","ei","eae","e ae","opa","ola","olá","alô","alo","bom dia","boa tarde","boa noite",
+  ]);
+  const NEGATIVE = new Set([
+    "não","nao","n","nada","nem","nop","não quero","nao quero","agora não","agora nao","outro dia","depois","mais tarde","só depois","so depois","pra frente","deixa","dispenso","dispensa","recuso","negativo","nega","jamais","nunca","esquece","deixa pra lá","deixa la","de jeito nenhum","sem chance","passa","não obrigado","nao obrigado","valeu mas não","valeu mas nao","não curti","nao curti","não tenho","nao tenho",
+  ]);
+  const HESITANT = new Set([
+    "talvez","sei lá","sei la","pode ser","não sei","nao sei","acho que","meio","mais ou menos","depende","hmm","ahn","quem sabe",
+  ]);
+  const DETAILS = new Set([
+    "como","como assim","me explica","explica","detalhes","mais info","fala mais","conta mais","quanto","qual","onde","quando","como funciona","detalha","me conta",
+  ]);
+
+  // Blocklist: se a fala contém claim/objeção ("caro", "problema", etc), NÃO tratar como resposta
+  // curta — deixa fast-match ou LLM resolver a intent correta.
+  const OBJECTION_SIGNALS = /\b(car[oa]|difícil|dificil|problema|complicado|apertad|pesado|desconfi|golpe|outro\s?seguro|ja\s?tenho|muito\s?caro|muito\s?dinheiro|precinh|inflaciona|roubou|mentira|fraud|propagand|boleto|sem\s?dinheiro|nao\s?dá|não\s?dá|ja\s?tenho|ocupad|tempo\s?ruim)/i;
+  if (OBJECTION_SIGNALS.test(t)) return null;
+
+  const hitAll = (set: Set<string>) => words.some(w => set.has(w)) || set.has(t);
+  const isPositive = hitAll(POSITIVE);
+  const isNegative = hitAll(NEGATIVE);
+  const isHesitant = hitAll(HESITANT);
+  const isDetails  = hitAll(DETAILS);
+
+  if (!(isPositive || isNegative || isHesitant || isDetails)) return null;
+
+  const current = intents.find(i => i.intent === currentIntent);
+  if (!current?.branch_hints) return null;
+  const bh = current.branch_hints as Record<string, string | boolean>;
+
+  // Prioridade: details > positive > hesitant > negative
+  const pickKey = (): string | null => {
+    if (isDetails  && typeof bh.on_details  === "string") return bh.on_details;
+    if (isPositive && typeof bh.on_positive === "string") return bh.on_positive;
+    if (isHesitant && typeof bh.on_hesitant === "string") return bh.on_hesitant;
+    if (isNegative && typeof bh.on_negative === "string") return bh.on_negative;
+    return null;
+  };
+  const targetIntent = pickKey();
+  if (!targetIntent) return null;
+
+  const picked = intents.find(i => i.intent === targetIntent);
+  return picked ?? null;
+}
+
+/** Após uma objection, se o lead continuar negativo/resistente, não re-aplicar obj_*:
+ *  escalar pra `goodbye_after_2_no` / `close_after_3_objections` baseado no contador. */
+function objectionDedup(
+  transcript: string,
+  currentIntent: string | undefined | null,
+  intents: IntentRow[],
+  objectionCount: number,
+): IntentRow | null {
+  if (!currentIntent?.startsWith("obj_")) return null;
+  const t = norm(transcript);
+  if (!t) return null;
+  const NEG_TOKENS = /\b(n[ãa]o|nada|nem|sem|negativ|depois|agora n[ãa]o|desist|deixa|dispens|pass)/;
+  if (!NEG_TOKENS.test(t)) return null;
+
+  // 2ª negativa → goodbye_after_2_no (se existir), senão deixa fluxo normal
+  if (objectionCount >= 2) {
+    const esc = intents.find(i => i.intent === "close_after_3_objections")
+             ?? intents.find(i => i.intent === "goodbye_after_2_no")
+             ?? intents.find(i => i.intent === "goodbye_deixa_proxima")
+             ?? intents.find(i => i.intent === "goodbye_whats_no");
+    return esc ?? null;
+  }
+  return null;
+}
+
+/** Fast-path conservador: só dispara se match é inequívoco (>=8 chars + word-boundary).
+ *  currentIntent, se fornecido, é ignorado como candidato pra evitar que o lead fique
+ *  preso no mesmo nó quando responde confirmações tipo "sim"/"pode falar" (training_examples
+ *  compartilhados por múltiplos intents).
+ */
+function fastKeywordMatch(transcript: string, intents: IntentRow[], currentIntent?: string | null): IntentRow | null {
   const FAST_MIN_LEN = 8;
   const t = norm(transcript);
   if (!t) return null;
   let best: { row: IntentRow; score: number } | null = null;
 
   for (const row of intents) {
+    if (currentIntent && row.intent === currentIntent) continue;
     const examples = Array.isArray(row.training_examples) ? row.training_examples : [];
     for (const ex of examples) {
       const n = norm(ex);
