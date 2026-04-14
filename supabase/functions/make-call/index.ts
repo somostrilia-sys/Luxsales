@@ -83,6 +83,30 @@ serve(async (req) => {
       if (vp) voiceGender = vp.gender;
     }
 
+    // Se voice_profile escolhido for ElevenLabs (rota IVR), o voice_id que vai
+    // pra LiveKit Call API deve ser o Cartesia equivalente (fallback quando LLM-livre).
+    // O voice_profile_id sozinho resolve o mp3 cacheado IVR; voice_id Cartesia é pro fallback Cartesia HTTP.
+    if (voiceProfileId) {
+      const { data: chosen } = await supabase
+        .from("voice_profiles")
+        .select("provider, gender")
+        .eq("id", voiceProfileId)
+        .maybeSingle();
+      if (chosen?.provider === "elevenlabs") {
+        const cartKey = chosen.gender === "female" ? "cart-rayanne-v3" : "cart-alex-walk-v2";
+        const { data: cart } = await supabase
+          .from("voice_profiles")
+          .select("voice_id, gender")
+          .eq("voice_key", cartKey)
+          .eq("active", true)
+          .maybeSingle();
+        if (cart?.voice_id) {
+          voiceId = cart.voice_id;
+          if (!voiceGender) voiceGender = cart.gender;
+        }
+      }
+    }
+
     // Fallback: voz default global (qualquer provider)
     if (!voiceId) {
       const { data: defaultVoice } = await supabase

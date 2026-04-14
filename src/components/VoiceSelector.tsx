@@ -2,11 +2,12 @@
  * VoiceSelector — dropdown de vozes ElevenLabs pro consultor escolher
  * Usa tabela voice_profiles (Supabase), filtrada por active+provider.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Mic } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Mic, Play, Pause, Loader2 } from "lucide-react";
 
 export interface VoiceProfile {
   id: string;
@@ -45,6 +46,9 @@ export function VoiceSelector({
 }: VoiceSelectorProps) {
   const [voices, setVoices] = useState<VoiceProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sampleUrls, setSampleUrls] = useState<Record<string, string>>({});
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -65,18 +69,30 @@ export function VoiceSelector({
         let list = (data ?? []) as VoiceProfile[];
 
         // Quando companyId for passado, limita às vozes que têm áudio renderizado
-        // (opening_*) pra aquela empresa — evita oferecer voz sem amostra.
+        // (opening_*) pra aquela empresa — e coleta as URLs dos openings pra preview.
         if (companyId && list.length) {
           const ids = list.map(v => v.id);
           const { data: covered } = await supabase
             .from("ivr_audio_scripts")
-            .select("voice_profile_id")
+            .select("voice_profile_id, intent, audio_url")
             .in("voice_profile_id", ids)
             .eq("company_id", companyId)
             .like("intent", "opening_%")
             .not("audio_url", "is", null);
-          const coveredIds = new Set((covered ?? []).map(r => r.voice_profile_id));
+          const samples: Record<string, string> = {};
+          const coveredIds = new Set<string>();
+          for (const row of covered ?? []) {
+            coveredIds.add(row.voice_profile_id);
+            // Prefere opening_qualificacao > opening_generico > qualquer opening
+            const prev = samples[row.voice_profile_id];
+            if (!prev || row.intent === "opening_qualificacao" || (row.intent === "opening_generico" && !prev.includes("opening_qualificacao"))) {
+              samples[row.voice_profile_id] = row.audio_url as string;
+            }
+          }
           if (coveredIds.size) list = list.filter(v => coveredIds.has(v.id));
+          setSampleUrls(samples);
+        } else {
+          setSampleUrls({});
         }
 
         setVoices(list);
@@ -119,6 +135,31 @@ export function VoiceSelector({
 
   const selected = voices.find((v) => v.id === value);
 
+  const playSample = () => {
+    if (!selected) return;
+    const url = sampleUrls[selected.id];
+    if (!url) return;
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (playingId === selected.id) {
+      setPlayingId(null);
+      return;
+    }
+
+    const audio = new Audio(url);
+    audio.onended = () => { setPlayingId(null); audioRef.current = null; };
+    audio.onerror = () => { setPlayingId(null); audioRef.current = null; };
+    audio.play().catch(() => setPlayingId(null));
+    audioRef.current = audio;
+    setPlayingId(selected.id);
+  };
+
+  // Limpa áudio ao desmontar
+  useEffect(() => () => { if (audioRef.current) audioRef.current.pause(); }, []);
+
   return (
     <div className={className}>
       {showLabel && (
@@ -127,26 +168,41 @@ export function VoiceSelector({
           {label}
         </Label>
       )}
-      <Select value={value ?? ""} onValueChange={handleChange} disabled={loading}>
-        <SelectTrigger className="bg-slate-900/60 border-slate-700">
-          <SelectValue placeholder={loading ? "Carregando vozes..." : "Selecione uma voz"} />
-        </SelectTrigger>
-        <SelectContent>
-          {voices.map((v) => {
-            const genderIcon = v.gender === "female" ? "♀" : v.gender === "male" ? "♂" : "◈";
-            return (
-              <SelectItem key={v.id} value={v.id}>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-400">{genderIcon}</span>
-                  <span className="font-medium">{v.voice_name}</span>
-                  {v.accent && <span className="text-xs text-slate-500">· {v.accent}</span>}
-                  {v.is_default && <span className="text-xs text-emerald-400">· default</span>}
-                </div>
-              </SelectItem>
-            );
-          })}
-        </SelectContent>
-      </Select>
+      <div className="flex items-center gap-2">
+        <Select value={value ?? ""} onValueChange={handleChange} disabled={loading}>
+          <SelectTrigger className="bg-slate-900/60 border-slate-700 flex-1">
+            <SelectValue placeholder={loading ? "Carregando vozes..." : "Selecione uma voz"} />
+          </SelectTrigger>
+          <SelectContent>
+            {voices.map((v) => {
+              const genderIcon = v.gender === "female" ? "♀" : v.gender === "male" ? "♂" : "◈";
+              return (
+                <SelectItem key={v.id} value={v.id}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-400">{genderIcon}</span>
+                    <span className="font-medium">{v.voice_name}</span>
+                    {v.accent && <span className="text-xs text-slate-500">· {v.accent}</span>}
+                    {v.is_default && <span className="text-xs text-emerald-400">· default</span>}
+                  </div>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        {selected && sampleUrls[selected.id] && (
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-9 w-9 shrink-0"
+            onClick={playSample}
+            title="Ouvir amostra"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> :
+             playingId === selected.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          </Button>
+        )}
+      </div>
       {selected?.description && (
         <p className="mt-1 text-xs text-slate-500 line-clamp-2">{selected.description}</p>
       )}

@@ -27,6 +27,11 @@ export default function VoiceSimulate() {
 
   const [testPhone, setTestPhone] = useState("");
   const [testCompanyId, setTestCompanyId] = useState(companyId || "");
+
+  // Re-sincroniza quando o filtro global de empresa mudar
+  useEffect(() => {
+    if (companyId && companyId !== testCompanyId) setTestCompanyId(companyId);
+  }, [companyId]);
   const [calling, setCalling] = useState(false);
   const [callResult, setCallResult] = useState<any>(null);
   const [callHistory, setCallHistory] = useState<any[]>([]);
