@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { VoiceSelector, type VoiceProfile } from "@/components/VoiceSelector";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -147,11 +148,14 @@ function useVoipStatus() {
   const [online, setOnline] = useState<boolean | null>(null);
   const check = useCallback(async () => {
     try {
-      const res = await fetch(
-        `${EDGE_BASE}/orchestrator-proxy?path=${encodeURIComponent("/health")}`,
-        { headers: voipProxyHeaders, signal: AbortSignal.timeout(5000) }
-      );
-      setOnline(res.ok);
+      const res = await fetch(`${EDGE_BASE}/make-call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...voipProxyHeaders },
+        body: JSON.stringify({ action: "pipeline-status" }),
+        signal: AbortSignal.timeout(5000),
+      });
+      const data = await res.json().catch(() => null);
+      setOnline(res.ok && (data?.status === "online" || data?.ok === true));
     } catch {
       setOnline(false);
     }
@@ -201,6 +205,7 @@ function TabLigacoes({
   const [dialingLeadIds, setDialingLeadIds] = useState<Set<string>>(new Set());
   const [liveCallStatuses, setLiveCallStatuses] = useState<Record<string, { leadId: string; status: string; name: string; phone: string; startedAt: number }>>({});
   const [stats, setStats] = useState({ total: 0, answered: 0, noAnswer: 0, interested: 0, avgTalkSec: 0 });
+  const [selectedVoice, setSelectedVoice] = useState<VoiceProfile | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Refs for stable access inside timeouts
   const queueRef = useRef<PoolLead[]>([]);
@@ -439,25 +444,26 @@ function TabLigacoes({
         .update({ last_call_at: new Date().toISOString() })
         .eq("id", lead.id);
 
-      const res = await fetch(`${EDGE_BASE}/orchestrator-proxy`, {
+      const res = await fetch(`${EDGE_BASE}/make-call`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...voipProxyHeaders },
         body: JSON.stringify({
-          _path: "/call",
+          action: "dial",
           to: phoneToCall,
           company_id: companyId,
-          collaborator_id: collaboratorId,
-          lead_name: lead.lead_name ?? null,
-          pool_id: lead.id,
+          consultor_id: collaboratorId,
+          lead_id: lead.id,
+          voice_profile_id: selectedVoice?.id ?? null,
+          voice_id: selectedVoice?.voice_id ?? null,
+          route: "ivr",
         }),
       });
 
       if (!res.ok) throw new Error("HTTP " + res.status);
 
       const data = await res.json();
-      if (!data.uuid) throw new Error("No UUID");
-
-      const callUuid = data.uuid;
+      const callUuid = data.room || data.uuid || data.participant_id;
+      if (!callUuid) throw new Error("No call UUID/room");
 
       // Replace temp UUID with real one
       activeCallsRef.current.delete(tempUuid);
@@ -586,19 +592,21 @@ function TabLigacoes({
         .update({ last_call_at: new Date().toISOString() })
         .eq("id", lead.id);
 
-      const res = await fetch(`${EDGE_BASE}/orchestrator-proxy`, {
+      const res = await fetch(`${EDGE_BASE}/make-call`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...voipProxyHeaders,
         },
         body: JSON.stringify({
-          _path: "/call",
+          action: "dial",
           to: phoneToCall,
           company_id: companyId,
-          collaborator_id: collaboratorId,
-          lead_name: lead.lead_name ?? null,
-          pool_id: lead.id,
+          consultor_id: collaboratorId,
+          lead_id: lead.id,
+          voice_profile_id: selectedVoice?.id ?? null,
+          voice_id: selectedVoice?.voice_id ?? null,
+          route: "ivr",
         }),
       });
 
@@ -610,9 +618,10 @@ function TabLigacoes({
       const data = await res.json();
       setCallStartTime(new Date());
 
-      if (data.uuid) {
+      const dialUuid = data.room || data.uuid || data.participant_id;
+      if (dialUuid) {
         // Subscribe to real-time call status
-        subscribeCallStatus(data.uuid);
+        subscribeCallStatus(dialUuid);
         // Fallback: if no CHANNEL_ANSWER in 30s, mark as no_answer
         // Fallback: 30s timeout for dialing, 120s max call duration
         setTimeout(() => {
@@ -1033,6 +1042,18 @@ function TabLigacoes({
               }
               <span className="ml-2">Carregar</span>
             </Button>
+          </div>
+
+          {/* Voice selector — Lucas/Cléo com preview específico da empresa */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">Voz do agente</p>
+            <VoiceSelector
+              value={selectedVoice?.id ?? null}
+              onChange={setSelectedVoice}
+              companyId={companyId}
+              provider="elevenlabs"
+              showLabel={false}
+            />
           </div>
 
           {/* Queue progress */}
