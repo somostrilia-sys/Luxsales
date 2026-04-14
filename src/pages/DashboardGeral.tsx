@@ -12,7 +12,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useCompany } from "@/contexts/CompanyContext";
 import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
-import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -159,9 +158,8 @@ function KpiRowSkeleton() {
 
 export default function DashboardGeral() {
   const { company_id: baseCompanyId, user_role } = useCompany();
-  const { roleLevel } = useCollaborator();
   const { selectedCompanyId } = useCompanyFilter();
-  const { collaborator, isCEO, isColaborador } = useCollaborator();
+  const { roleLevel, collaborator, isCEO, isColaborador } = useCollaborator();
   const company_id = selectedCompanyId !== "all" ? selectedCompanyId : baseCompanyId;
   const navigate = useNavigate();
 
