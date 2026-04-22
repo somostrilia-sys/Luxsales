@@ -9,7 +9,7 @@ import { useCollaborator } from "@/contexts/CollaboratorContext";
 import { useCompanyFilter } from "@/contexts/CompanyFilterContext";
 import { resolveCompanyFilter } from "@/lib/companyFilter";
 import { supabase } from "@/lib/supabase";
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/constants";
+import { EDGE_BASE, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -137,7 +137,10 @@ const displayPhone = (lead: PoolLead) => {
   return `+${withCountry}`;
 };
 
-// ── VoIP Health (via orchestrator-proxy) ──────────────────────────────────────
+// ── VoIP Health ──────────────────────────────────────────────────────────────
+// Confere reachability do backend (Supabase REST). O health antigo batia num
+// VPS aposentado (134.122.17.106:3099) e ficava offline mesmo com a plataforma
+// funcional, travando o discador do colaborador com banner vermelho falso.
 const voipProxyHeaders = {
   "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
   "apikey": SUPABASE_ANON_KEY,
@@ -148,7 +151,7 @@ function useVoipStatus() {
   const check = useCallback(async () => {
     try {
       const res = await fetch(
-        `${EDGE_BASE}/orchestrator-proxy?path=${encodeURIComponent("/health")}`,
+        `${SUPABASE_URL}/rest/v1/system_configs?select=key&limit=1`,
         { headers: voipProxyHeaders, signal: AbortSignal.timeout(5000) }
       );
       setOnline(res.ok);
